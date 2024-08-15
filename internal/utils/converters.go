@@ -1,6 +1,9 @@
 package utils
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 func ConvertInt32ArrayToString(a []int32) string {
 	str := ""
@@ -21,5 +24,5 @@ func ConvertBytesToUnits(size uint64) string {
 	if size/1_000_000_000_000 >= 1000 {
 		units = fmt.Sprintf("%d PB", size/1_000_000_000_000)
 	}
-	return units
+	return strings.TrimSpace(units)
 }

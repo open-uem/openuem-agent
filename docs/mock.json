@@ -1,0 +1,544 @@
+{
+  "id": "312e42ce-d8e8-4c99-8d65-89ea6c955d8c",
+  "os": "windows",
+  "hostname": "LOTHLORIEN",
+  "version": "0.0.1-alpha",
+  "initial_contact": "0001-01-01T00:00:00Z",
+  "last_contact": "2024-08-15T10:23:31.1637721+02:00",
+  "edges": {
+    "computer": {
+      "manufacturer": "ASUS",
+      "model": "Unknown",
+      "serial": "Unknown",
+      "processor": "AMD Ryzen 3 4100 4-Core Processor",
+      "processor_arch": "x64",
+      "processor_cores": 4,
+      "memory": 24360
+    },
+    "antivirus": {
+      "name": "Bitdefender Antivirus",
+      "is_active": true,
+      "is_updated": true
+    },
+    "operatingsystem": {
+      "version": "Windows 11 23H2",
+      "description": "Microsoft Windows 11 Pro",
+      "install_date": "2022-12-05T20:20:14+01:00",
+      "edition": "Professional",
+      "arch": "64 bits",
+      "username": "Miguel Angel Alvarez",
+      "last_bootup_time": "2024-08-15T10:16:17.5+02:00"
+    },
+    "logicaldisks": [
+      {
+        "label": "C:",
+        "usage": 62,
+        "filesystem": "NTFS",
+        "size_in_units": "118 GB",
+        "remaining_space_in_units": "46 GB"
+      },
+      {
+        "label": "D:",
+        "usage": 59,
+        "filesystem": "NTFS",
+        "size_in_units": "1 TB",
+        "remaining_space_in_units": "416 GB",
+        "volume_name": "Datos"
+      }
+    ],
+    "monitors": [
+      {
+        "manufacturer": "AOC\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+        "model": "27B3HA2\u0000\u0000\u0000\u0000\u0000\u0000",
+        "serial": "AUEQ29A001319\u0000\u0000\u0000"
+      }
+    ],
+    "printers": [
+      {
+        "name": "OneNote (Desktop)",
+        "port": "nul:"
+      },
+      {
+        "name": "Microsoft XPS Document Writer",
+        "port": "PORTPROMPT:"
+      },
+      {
+        "name": "Microsoft Print to PDF",
+        "port": "PORTPROMPT:",
+        "is_default": true
+      },
+      {
+        "name": "hp psc 1100 series",
+        "port": "USB001"
+      },
+      {
+        "name": "Fax",
+        "port": "SHRFAX:"
+      },
+      {
+        "name": "Brother HL-2130 series",
+        "port": "USB002"
+      }
+    ],
+    "shares": [
+      {
+        "name": "ADMIN$",
+        "description": "Admin remota",
+        "path": "C:\\WINDOWS"
+      },
+      {
+        "name": "C$",
+        "description": "Recurso predeterminado",
+        "path": "C:\\"
+      },
+      {
+        "name": "D$",
+        "description": "Recurso predeterminado",
+        "path": "D:\\"
+      },
+      {
+        "name": "IPC$",
+        "description": "IPC remota"
+      }
+    ],
+    "systemupdate": {
+      "status": "Updates are installed automatically ",
+      "last_install": "2024-08-15T09:11:32+02:00",
+      "last_search": "2024-08-15T08:00:24+02:00"
+    },
+    "networkadapters": [
+      {
+        "name": "Realtek PCIe GBE Family Controller #2",
+        "mac_address": "FC:34:97:BA:AD:AA",
+        "addresses": "192.168.1.137",
+        "subnet": "255.255.255.0",
+        "default_gateway": "192.168.1.1",
+        "dns_servers": "212.230.135.1, 212.230.135.2",
+        "dns_domain": "Home",
+        "dhcp_enabled": true,
+        "dhcp_lease_obtained": "2024-08-15T10:17:04+02:00",
+        "dhcp_lease_expired": "2024-08-16T10:17:04+02:00",
+        "speed": "100 Mbps"
+      }
+    ],
+    "applications": [
+      {
+        "name": "AURA lighting effect add-on",
+        "version": "0.0.24",
+        "install_date": "20221205",
+        "publisher": "ASUS"
+      },
+      {
+        "name": "Bitdefender Antivirus Free",
+        "version": "27.0.40.173",
+        "publisher": "Bitdefender"
+      },
+      {
+        "name": "Windows Subsystem for Linux",
+        "version": "2.2.4.0",
+        "install_date": "20240808",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "ENE RGB HAL",
+        "version": "1.1.40.3",
+        "install_date": "20221205",
+        "publisher": "Ene Tech."
+      },
+      {
+        "name": "WebView2 Runtime de Microsoft Edge",
+        "version": "127.0.2651.98",
+        "install_date": "20240813",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "AURA Service",
+        "version": "3.07.25",
+        "publisher": "ASUSTeK Computer Inc."
+      },
+      {
+        "name": "WD_BLACK AN1500",
+        "version": "1.0.14.0",
+        "install_date": "20221205",
+        "publisher": "ENE TECHNOLOGY INC."
+      },
+      {
+        "name": "AURA DRAM Component",
+        "version": "1.1.23",
+        "install_date": "20221205",
+        "publisher": "ASUS"
+      },
+      {
+        "name": "Office 16 Click-to-Run Localization Component",
+        "version": "16.0.17628.20110",
+        "install_date": "20240707",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "ASUS Aura SDK",
+        "version": "3.04.39",
+        "install_date": "20231219",
+        "publisher": "ASUSTek COMPUTER INC."
+      },
+      {
+        "name": "Bitdefender Agent",
+        "version": "27.0.1.281",
+        "publisher": "Bitdefender"
+      },
+      {
+        "name": "NVIDIA Controlador de gráficos 456.71",
+        "version": "456.71",
+        "install_date": "20221207",
+        "publisher": "NVIDIA Corporation"
+      },
+      {
+        "name": "NVIDIA Display MessageBus",
+        "version": "456.71",
+        "install_date": "20221207",
+        "publisher": "NVIDIA Corporation"
+      },
+      {
+        "name": "NVIDIA Display Watchdog Plugin",
+        "version": "1.28",
+        "install_date": "20221207",
+        "publisher": "NVIDIA Corporation"
+      },
+      {
+        "name": "Microsoft Windows Desktop Runtime - 6.0.20 (x86)",
+        "version": "6.0.20.32621",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "Configurador FNMT",
+        "version": "4.0.4",
+        "publisher": "FNMT-RCM"
+      },
+      {
+        "name": "Universal Holtek RGB DRAM",
+        "version": "1.0.0.4",
+        "install_date": "20221205",
+        "publisher": "PD"
+      },
+      {
+        "name": "NVIDIA Install Application",
+        "version": "2.1002.346.0",
+        "install_date": "20221207",
+        "publisher": "NVIDIA Corporation"
+      },
+      { "name": "Microsoft Edge Update", "version": "1.3.195.15" },
+      {
+        "name": "Docker Desktop",
+        "version": "4.33.1",
+        "publisher": "Docker Inc."
+      },
+      {
+        "name": "Microsoft OneDrive",
+        "version": "24.146.0721.0003",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "ASUS AURA Extension Card HAL",
+        "version": "1.1.0.18",
+        "install_date": "20221205",
+        "publisher": "ASUSTeK COMPUTER INC."
+      },
+      {
+        "name": "NVIDIA Display Container LS",
+        "version": "1.28",
+        "install_date": "20221207",
+        "publisher": "NVIDIA Corporation"
+      },
+      {
+        "name": "Git",
+        "version": "2.46.0",
+        "install_date": "20240730",
+        "publisher": "The Git Development Community"
+      },
+      {
+        "name": "Microsoft Update Health Tools",
+        "version": "5.72.0.0",
+        "install_date": "20240131",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "ASUS Framework Service",
+        "version": "3.1.2.4",
+        "install_date": "20221205",
+        "publisher": "ASUSTeK Computer Inc."
+      },
+      {
+        "name": "Microsoft Visual Studio Code (User)",
+        "version": "1.92.1",
+        "install_date": "20240808",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "ROG Live Service",
+        "version": "2.1.5.0",
+        "install_date": "20231015",
+        "publisher": "ASUSTek COMPUTER INC."
+      },
+      {
+        "name": "Update for Windows 10 for x64-based Systems (KB5001716)",
+        "version": "4.91.0.0",
+        "install_date": "20221205",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "Microsoft Teams Meeting Add-in for Microsoft Office",
+        "version": "1.24.14501",
+        "install_date": "20240707",
+        "publisher": "Microsoft"
+      },
+      {
+        "name": "NVIDIA Display Container",
+        "version": "1.28",
+        "install_date": "20221207",
+        "publisher": "NVIDIA Corporation"
+      },
+      {
+        "name": "Microsoft Visual C++ 2022 X86 Minimum Runtime - 14.30.30704",
+        "version": "14.30.30704",
+        "install_date": "20221205",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "ENE_EHD_M2_HAL",
+        "version": "1.0.9.12",
+        "install_date": "20221205",
+        "publisher": "ENE TECHNOLOGY INC."
+      },
+      {
+        "name": "Go Programming Language amd64 go1.22.5",
+        "version": "1.22.5",
+        "install_date": "20240713",
+        "publisher": "https://go.dev"
+      },
+      {
+        "name": "Microsoft Visual C++ 2022 X64 Additional Runtime - 14.30.30704",
+        "version": "14.30.30704",
+        "install_date": "20221205",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "ASUS Update Helper",
+        "version": "1.3.107.113",
+        "install_date": "20240707",
+        "publisher": "ASUSTeK Computer Inc."
+      },
+      {
+        "name": "NVIDIA Display Session Container",
+        "version": "1.28",
+        "install_date": "20221207",
+        "publisher": "NVIDIA Corporation"
+      },
+      {
+        "name": "Microsoft Edge",
+        "version": "127.0.2651.98",
+        "install_date": "20240811",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "Steam",
+        "version": "2.10.91.91",
+        "publisher": "Valve Corporation"
+      },
+      {
+        "name": "AURA lighting effect add-on x64",
+        "version": "0.0.24",
+        "install_date": "20221205",
+        "publisher": "ASUS"
+      },
+      {
+        "name": "Microsoft .NET Host - 6.0.20 (x86)",
+        "version": "48.83.63169",
+        "install_date": "20231219",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "Aplicaciones de Microsoft 365 para empresas - es-es",
+        "version": "16.0.17830.20138",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "DB Browser for SQLite",
+        "version": "3.13.99",
+        "install_date": "20240808",
+        "publisher": "DB Browser for SQLite Team"
+      },
+      {
+        "name": "Panel de control de NVIDIA 456.71",
+        "version": "456.71",
+        "install_date": "20221207",
+        "publisher": "NVIDIA Corporation"
+      },
+      {
+        "name": "Actualización de NVIDIA 10.4.0",
+        "version": "10.4.0",
+        "install_date": "20221205",
+        "publisher": "NVIDIA Corporation"
+      },
+      {
+        "name": "KeePass Password Safe 2.47",
+        "version": "2.47",
+        "install_date": "20210423",
+        "publisher": "Dominik Reichl"
+      },
+      {
+        "name": "Office 16 Click-to-Run Extensibility Component",
+        "version": "16.0.17830.20138",
+        "install_date": "20240803",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "NVIDIA Update Core",
+        "version": "10.4.0",
+        "install_date": "20221205",
+        "publisher": "NVIDIA Corporation"
+      },
+      {
+        "name": "NVIDIA Controlador de audio HD 1.3.30.1",
+        "version": "1.3.30.1",
+        "install_date": "20221207",
+        "publisher": "NVIDIA Corporation"
+      },
+      {
+        "name": "OpenVPN 2.5.8-I604 amd64",
+        "version": "2.5.040",
+        "install_date": "20221210",
+        "publisher": "OpenVPN, Inc."
+      },
+      {
+        "name": "Microsoft Visual C++ 2015-2022 Redistributable (x86) - 14.30.30704",
+        "version": "14.30.30704.0",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "Microsoft Visual C++ 2015-2022 Redistributable (x64) - 14.30.30704",
+        "version": "14.30.30704.0",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "7-Zip 22.01 (x64)",
+        "version": "22.01",
+        "publisher": "Igor Pavlov"
+      },
+      {
+        "name": "VLC media player",
+        "version": "3.0.7.1",
+        "publisher": "VideoLAN"
+      },
+      {
+        "name": "Patriot Viper DRAM RGB",
+        "version": "1.0.9.5",
+        "install_date": "20221205",
+        "publisher": "Patriot Memory"
+      },
+      {
+        "name": "PHISON HAL",
+        "version": "1.0.9.0",
+        "install_date": "20221205",
+        "publisher": "PHISON Electronics Corp."
+      },
+      {
+        "name": "Discord",
+        "version": "1.0.9157",
+        "install_date": "20245714",
+        "publisher": "Discord Inc."
+      },
+      {
+        "name": "GameSDK Service",
+        "version": "1.0.5.0",
+        "publisher": "ASUSTek COMPUTER INC."
+      },
+      {
+        "name": "Microsoft .NET Host FX Resolver - 6.0.20 (x86)",
+        "version": "48.83.63169",
+        "install_date": "20231219",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "Microsoft Visual C++ 2008 Redistributable - x86 9.0.30729.17",
+        "version": "9.0.30729",
+        "install_date": "20231015",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "ASUS AURA VGA Component",
+        "version": "0.0.4.3",
+        "install_date": "20221205",
+        "publisher": "ASUSTek COMPUTER INC. "
+      },
+      {
+        "name": "Office 16 Click-to-Run Licensing Component",
+        "version": "16.0.17830.20138",
+        "install_date": "20240803",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "Kingston AURA DRAM Component",
+        "version": "1.1.16",
+        "install_date": "20221205",
+        "publisher": "KINGSTON COMPONENTS INC."
+      },
+      {
+        "name": "AutoFirma",
+        "version": "1.6.5",
+        "publisher": "Gobierno de España"
+      },
+      {
+        "name": "Microsoft .NET Runtime - 6.0.20 (x86)",
+        "version": "48.83.63169",
+        "install_date": "20231219",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "Microsoft Visual C++ 2022 X86 Additional Runtime - 14.30.30704",
+        "version": "14.30.30704",
+        "install_date": "20221205",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "Realtek High Definition Audio Driver",
+        "version": "6.0.1.7841",
+        "publisher": "Realtek Semiconductor Corp."
+      },
+      {
+        "name": "Microsoft Visual C++ 2022 X64 Minimum Runtime - 14.30.30704",
+        "version": "14.30.30704",
+        "install_date": "20221205",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "Comprobación de estado de PC Windows",
+        "version": "3.6.2204.08001",
+        "install_date": "20221205",
+        "publisher": "Microsoft Corporation"
+      },
+      {
+        "name": "Patriot Viper M2 SSD RGB",
+        "version": "1.1.0.2",
+        "install_date": "20221205",
+        "publisher": "Patriot Memory"
+      },
+      {
+        "name": "ARMOURY CRATE Lite Service",
+        "version": "5.3.3",
+        "install_date": "20221205",
+        "publisher": "ASUS"
+      },
+      {
+        "name": "PuTTY release 0.74 (64-bit)",
+        "version": "0.74.0.0",
+        "install_date": "20210424",
+        "publisher": "Simon Tatham"
+      },
+      {
+        "name": "NVIDIA Ansel",
+        "version": "7.0.636.0",
+        "install_date": "20221207",
+        "publisher": "NVIDIA Corporation"
+      }
+    ]
+  }
+}

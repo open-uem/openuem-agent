@@ -22,9 +22,75 @@ Agent is started reads the OpenUEM json file and check if a report has been sent
 
 ## More information to add
 
-- Disk type (SSD/HDD)
-- Disk has bitlocker? -> https://4sysops.com/archives/check-the-bitlocker-status-of-all-pcs-in-the-network/#rtoc-3
-- Disk manufacturer e.g Toshiba, Seagate?
+- Disk type (SSD/HDD) -> MediaType (3 HDD, 4 SSD), Model,
+
+Get-WmiObject -Namespace ROOT\Microsoft\Windows\Storage -Class MSFT_PhysicalDisk
+
+Reference: https://learn.microsoft.com/en-us/answers/questions/350272/detect-if-system-(windows)-drive-is-ssd-or-hdd
+
+Win32_DiskDrive may help searching SSD in Model / Caption https://www.reddit.com/r/PowerShell/comments/8q4tbr/
+
+- Disk has bitlocker? -> https://4sysops.com/archives/check-the-bitlocker-status-of-all-pcs-in-the-network/#rtoc-3. The query would be `Get-WmiObject -Namespace root\CIMV2\Security\MicrosoftVolumeEncryption -Class Win32_EncryptableVolume` and this would be the response
+
+```
+__GENUS                          : 2
+__CLASS                          : Win32_EncryptableVolume
+__SUPERCLASS                     :
+__DYNASTY                        : Win32_EncryptableVolume
+__RELPATH                        : Win32_EncryptableVolume.DeviceID="\\\\?\\Volume{90dc9ab6-791d-46f6-ade8-e6d3201baf52
+                                   }\\"
+__PROPERTY_COUNT                 : 8
+__DERIVATION                     : {}
+__SERVER                         : LOTHLORIEN
+__NAMESPACE                      : root\CIMV2\Security\MicrosoftVolumeEncryption
+__PATH                           : \\LOTHLORIEN\root\CIMV2\Security\MicrosoftVolumeEncryption:Win32_EncryptableVolume.D
+                                   eviceID="\\\\?\\Volume{90dc9ab6-791d-46f6-ade8-e6d3201baf52}\\"
+ConversionStatus                 : 0
+DeviceID                         : \\?\Volume{90dc9ab6-791d-46f6-ade8-e6d3201baf52}\
+DriveLetter                      : C:
+EncryptionMethod                 : 0
+IsVolumeInitializedForProtection : False
+PersistentVolumeID               :
+ProtectionStatus                 : 0
+VolumeType                       : 0
+PSComputerName                   : LOTHLORIEN
+
+__GENUS                          : 2
+__CLASS                          : Win32_EncryptableVolume
+__SUPERCLASS                     :
+__DYNASTY                        : Win32_EncryptableVolume
+__RELPATH                        : Win32_EncryptableVolume.DeviceID="\\\\?\\Volume{0005a690-0000-0000-0000-100000000000
+                                   }\\"
+__PROPERTY_COUNT                 : 8
+__DERIVATION                     : {}
+__SERVER                         : LOTHLORIEN
+__NAMESPACE                      : root\CIMV2\Security\MicrosoftVolumeEncryption
+__PATH                           : \\LOTHLORIEN\root\CIMV2\Security\MicrosoftVolumeEncryption:Win32_EncryptableVolume.D
+                                   eviceID="\\\\?\\Volume{0005a690-0000-0000-0000-100000000000}\\"
+ConversionStatus                 : 0
+DeviceID                         : \\?\Volume{0005a690-0000-0000-0000-100000000000}\
+DriveLetter                      : D:
+EncryptionMethod                 : 0
+IsVolumeInitializedForProtection : False
+PersistentVolumeID               :
+ProtectionStatus                 : 0
+VolumeType                       : 1
+PSComputerName                   : LOTHLORIEN
+```
+
+but the problem is that we required administrator privileges to do this query
+
+However doing this: `(New-Object -ComObject Shell.Application).NameSpace('C:').Self.ExtendedProperty('System.Volume.BitLockerProtection')` specifying the drive letter if works
+
+Reference: https://www.reddit.com/r/PowerShell/comments/jl12ux/get_bitlocker_status_without_admin_elevation/
+
+But we've to know how to do the query and discard that if we ran a service it still works:
+
+https://stackoverflow.com/questions/73655353/detect-bitlocker-status-without-admin-from-a-service
+
+Other: https://stackoverflow.com/questions/41308245/detect-bitlocker-programmatically-from-c-sharp-without-admin
+
+- Disk manufacturer e.g Toshiba, Seagate? -> We get some information (model, not vendor) from Win32_DiskDrive
 - Last logged in time
 - USB devices like mouse, keyboard, scanners?
 
@@ -57,3 +123,7 @@ The JSON may change to something different. The agent may track things that have
 The agent may create a list of new or updated items like monitors with a UUID for each of the item, that way we can refer to it. Then in JSON a list of removed UUIDs can be added so they can be deleted one by one. Then, how we track new or updated items? We may add a property to each item like action that have values like new, updated and deleted. If item is new, the worker will create it. If item is updated we update it. It item is deleted we delete it.
 
 The agent may create a UUID for each app, software, and item that is new for the agent....
+
+## Useful things found
+
+https://github.com/iamacarpet/go-win64api

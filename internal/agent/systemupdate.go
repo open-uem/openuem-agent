@@ -129,11 +129,11 @@ func getAutomaticUpdatesStatus(notificationLevel int32) string {
 	case int32(NOTIFICATION_LEVEL_DISABLED):
 		return "Automatic updates are disabled"
 	case int32(NOTIFICATION_LEVEL_NOTIFY_BEFORE_DOWNLOAD):
-		return "Updates are downloaded and installed by user intervention "
+		return "Updates are downloaded and installed by user intervention"
 	case int32(NOTIFICATION_LEVEL_NOTIFY_BEFORE_INSTALLATION):
-		return "Updates are installed by user intervention "
+		return "Updates are installed by user intervention"
 	case int32(NOTIFICATION_LEVEL_SCHEDULED_INSTALLATION):
-		return "Updates are installed automatically "
+		return "Updates are installed automatically"
 	}
 	return "Unknown"
 }
