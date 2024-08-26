@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/doncicuto/openuem-agent/internal/log"
 	"golang.org/x/sys/windows/registry"
@@ -24,10 +25,10 @@ func (a *Agent) getApplicationsInfo() {
 	myApps := getApplications()
 	for k, v := range myApps {
 		app := Application{}
-		app.Name = k
-		app.Version = v.Version
-		app.InstallDate = v.InstallDate
-		app.Publisher = v.Publisher
+		app.Name = strings.TrimSpace(k)
+		app.Version = strings.TrimSpace(v.Version)
+		app.InstallDate = strings.TrimSpace(v.InstallDate)
+		app.Publisher = strings.TrimSpace(v.Publisher)
 		a.Edges.Applications = append(a.Edges.Applications, app)
 	}
 

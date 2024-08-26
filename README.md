@@ -127,3 +127,9 @@ The agent may create a UUID for each app, software, and item that is new for the
 ## Useful things found
 
 https://github.com/iamacarpet/go-win64api
+
+## Projects that we should use in or with the Agent
+
+- WIX (go-msi) to create an installer for the agent
+- WebRTC (pion.ly) to try to use a remote control from the console
+- NuGet (chocolatey) to try to offer a store to download apps from the agent either by the user or automatically

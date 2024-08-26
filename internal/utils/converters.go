@@ -10,7 +10,7 @@ func ConvertInt32ArrayToString(a []int32) string {
 	for _, code := range a {
 		str += string(rune(code))
 	}
-	return str
+	return strings.Trim(str, "\x00")
 }
 
 func ConvertBytesToUnits(size uint64) string {
@@ -24,5 +24,5 @@ func ConvertBytesToUnits(size uint64) string {
 	if size/1_000_000_000_000 >= 1000 {
 		units = fmt.Sprintf("%d PB", size/1_000_000_000_000)
 	}
-	return strings.TrimSpace(units)
+	return units
 }

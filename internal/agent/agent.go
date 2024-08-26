@@ -10,6 +10,7 @@ import (
 
 	"github.com/doncicuto/openuem-agent/assets/icons"
 	"github.com/doncicuto/openuem-agent/internal/log"
+	"github.com/doncicuto/openuem-agent/internal/messages"
 	"github.com/getlantern/systray"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/google/uuid"
@@ -19,13 +20,13 @@ import (
 )
 
 type Report struct {
-	ID             string    `json:"id,omitempty"`
-	OS             string    `json:"os,omitempty"`
-	Hostname       string    `json:"hostname,omitempty"`
-	Version        string    `json:"version,omitempty"`
-	InitialContact time.Time `json:"initial_contact,omitempty"`
-	LastContact    time.Time `json:"last_contact,omitempty"`
-	Edges          Edges     `json:"edges"`
+	ID           string    `json:"id,omitempty"`
+	OS           string    `json:"os,omitempty"`
+	Hostname     string    `json:"hostname,omitempty"`
+	Version      string    `json:"version,omitempty"`
+	FirstContact time.Time `json:"first_contact,omitempty"`
+	LastContact  time.Time `json:"last_contact,omitempty"`
+	Edges        Edges     `json:"edges"`
 }
 
 type Agent struct {
@@ -45,41 +46,57 @@ type Edges struct {
 	Shares          []Share          `json:"shares,omitempty"`
 	SystemUpdate    SystemUpdate     `json:"systemupdate,omitempty"`
 	NetworkAdapters []NetworkAdapter `json:"networkadapters,omitempty"`
-	Applications    []Application    `json:"applications,omitempty"`
+	Applications    []Application    `json:"apps,omitempty"`
 	LoggedOnUsers   []LoggedOnUser   `json:"loggedonusers,omitempty"`
 }
 
 func (a *Agent) Run(force bool) {
+	var err error
 	start := time.Now()
 
-	if !a.Config.didIReportToday() || force {
-		log.Logger.Println("[INFO]: agent is running...")
+	log.Logger.Println("[INFO]: agent is running...")
 
-		// Get the information
-		a.getInfoFromOS()
+	// Get the information
+	a.getInfoFromOS()
 
-		now := time.Now()
-		a.LastContact = now
+	a.LastContact = start
 
-		// Create JSON
-		data, err := json.Marshal(a.Report)
+	// Create JSON
+	data, err := json.Marshal(a.Report)
+	if err != nil {
+		log.Logger.Printf("[ERROR]: could not marshal report data %v\n", err)
+	}
+
+	// Print the information to stdout
+	a.printAgent()
+
+	// Try to connect to NATS server if no connection is ready
+	if a.NatsConnection == nil {
+		a.NatsConnection, err = messages.Connect()
 		if err != nil {
-			log.Logger.Printf("[ERROR]: could not marshal report data %v\n", err)
-		}
-
-		// Send NATS information
-		if err := a.NatsConnection.Publish("update", data); err != nil {
-			log.Logger.Printf("[ERROR]: could not sent report to server %v\n", err)
+			log.Logger.Printf("[ERROR]: could not connect with message broker: %v\n", err)
 		} else {
-			// TODO - What happens if there's no subscribers for that subject
-			a.Config.LastReportDate = now
-			log.Logger.Println("[INFO]: report was sent to server!")
+			log.Logger.Println("[INFO]: connection established with NATS server")
+			a.subscribeToReportTrigger()
 		}
+	}
 
-		// Print the information to stdout
-		a.printAgent()
-	} else {
-		log.Logger.Println("[SKIP]: agent has already reported today")
+	// Decide if we've to sent the report to the server
+	if a.NatsConnection != nil {
+		// TODO - maybe send report if some important properties have changed (like antivirus, windows update..)
+		if !a.Config.didIReportToday() || force {
+			// Send NATS information
+			if a.NatsConnection != nil {
+				if _, err := a.NatsConnection.Request("update", data, 1*time.Minute); err != nil {
+					log.Logger.Printf("[ERROR]: could not sent report to server %v\n", err)
+				} else {
+					a.Config.LastReportDate = start
+					log.Logger.Println("[INFO]: report was sent to server!")
+				}
+			}
+		} else {
+			log.Logger.Println("[INFO]: agent has already reported today skip sending to server")
+		}
 	}
 
 	log.Logger.Printf("[INFO]: agent execution took %v\n", time.Since(start))
@@ -140,6 +157,7 @@ func (a *Agent) printAgent() {
 }
 
 func (a *Agent) Start() {
+	now := time.Now()
 	// Read config from JSON
 	a.Config = readConfig()
 	if a.Config.UUID == "" {
@@ -147,10 +165,14 @@ func (a *Agent) Start() {
 		a.Config.UUID = id.String()
 		a.Config.ExecuteEveryXMinutes = 2
 		a.ID = id.String()
-		a.Config.FirstExecutionDate = time.Now()
+		a.Config.FirstExecutionDate = now
+		a.FirstContact = now
+		a.LastContact = now
 		writeConfig(a.Config)
 	} else {
 		a.ID = a.Config.UUID
+		a.FirstContact = a.Config.FirstExecutionDate
+		a.LastContact = now
 	}
 
 	log.Logger.Println("[INFO]: application has started...")
@@ -169,34 +191,6 @@ func (a *Agent) onReady() {
 
 	mRun := systray.AddMenuItem("Run Inventory", "Run Inventory and report it to OpenUEM server")
 	mQuit := systray.AddMenuItem("Quit", "Quit OpenUEM")
-
-	// Create NATS connection
-	a.NatsConnection, err = nats.Connect(
-		nats.DefaultURL,
-		nats.MaxReconnects(-1),
-		nats.DisconnectErrHandler(func(nc *nats.Conn, err error) {
-			if err != nil {
-				log.Logger.Printf("Disconnected due to: %s, will attempt reconnect", err)
-			}
-		}),
-		nats.ClosedHandler(func(nc *nats.Conn) {
-			log.Logger.Printf("[ERROR]: Connection closed. Reason: %q\n", nc.LastError())
-		}),
-	)
-	if err != nil {
-		log.Logger.Fatalf("[FATAL]: could not connect with server: %v\n", err)
-	}
-	log.Logger.Println("[INFO]: connection established with NATS server")
-
-	// Subscribe to receive trigger to run agent
-	a.NatsConnection.Subscribe(fmt.Sprintf("trigger-%s", a.ID), func(m *nats.Msg) {
-		if string(m.Data) == a.ID {
-			log.Logger.Println("[INFO]: a report has been triggered from OpenUEM server")
-			a.Run(true)
-		} else {
-			log.Logger.Printf("[ERROR]: received wrong message from NATS %s\n", m.Data)
-		}
-	})
 
 	// Run at agent start
 	a.Run(true)
@@ -269,4 +263,16 @@ func (a *Agent) stopScheduler() {
 	} else {
 		log.Logger.Println("[INFO]: task scheduler has been shutdown")
 	}
+}
+
+func (a *Agent) subscribeToReportTrigger() {
+	// Subscribe to receive trigger to run agent
+	a.NatsConnection.Subscribe(fmt.Sprintf("trigger-%s", a.ID), func(m *nats.Msg) {
+		if string(m.Data) == a.ID {
+			log.Logger.Println("[INFO]: a report has been triggered from OpenUEM server")
+			a.Run(true)
+		} else {
+			log.Logger.Printf("[ERROR]: received wrong message from NATS %s\n", m.Data)
+		}
+	})
 }

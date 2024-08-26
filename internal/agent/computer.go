@@ -85,11 +85,11 @@ func (myComputer *Computer) getComputerSystemInfo() error {
 	v := &computerDst[0]
 	myComputer.Manufacturer = "Unknown"
 	if v.Manufacturer != "System manufacturer" {
-		myComputer.Manufacturer = v.Manufacturer
+		myComputer.Manufacturer = strings.TrimSpace(v.Manufacturer)
 	}
 	myComputer.Model = "Unknown"
 	if v.Model != "System Product Name" {
-		myComputer.Model = v.Model
+		myComputer.Model = strings.TrimSpace(v.Model)
 	}
 	myComputer.Memory = v.TotalPhysicalMemory / 1024 / 1024
 	return nil
@@ -113,7 +113,7 @@ func (myComputer *Computer) getSerialNumber() error {
 	v := &serialDst[0]
 	myComputer.Serial = "Unknown"
 	if v.SerialNumber != "System Serial Number" {
-		myComputer.Serial = v.SerialNumber
+		myComputer.Serial = strings.TrimSpace(v.SerialNumber)
 	}
 	return nil
 }
