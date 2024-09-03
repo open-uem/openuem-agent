@@ -3,12 +3,11 @@ package agent
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
-	"github.com/doncicuto/openuem-agent/internal/log"
 	"github.com/yusufpapurcu/wmi"
-	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -32,24 +31,24 @@ const MAX_DISPLAYNAME_LENGTH = 256
 func (a *Agent) getOSInfo() {
 	a.Edges.OperatingSystem = OperatingSystem{}
 	if err := a.Edges.OperatingSystem.getOperatingSystemInfo(); err != nil {
-		log.Logger.Printf("[ERROR]: could not get operating system info from WMI Win32_OperatingSystem: %v", err)
+		log.Printf("[ERROR]: could not get operating system info from WMI Win32_OperatingSystem: %v", err)
 	} else {
-		log.Logger.Printf("[INFO]: operating system information has been retrieved using WMI Win32_OperatingSystem")
+		log.Printf("[INFO]: operating system information has been retrieved using WMI Win32_OperatingSystem")
 	}
 	if err := a.Edges.OperatingSystem.getEdition(); err != nil {
-		log.Logger.Printf("[ERROR]: could not get current version from Windows Registry: %v", err)
+		log.Printf("[ERROR]: could not get current version from Windows Registry: %v", err)
 	} else {
-		log.Logger.Printf("[INFO]: current version has been retrieved from Windows Registry")
+		log.Printf("[INFO]: current version has been retrieved from Windows Registry")
 	}
 	if err := a.Edges.OperatingSystem.getArch(); err != nil {
-		log.Logger.Printf("[ERROR]: could not get windows arch from Windows Registry: %v", err)
+		log.Printf("[ERROR]: could not get windows arch from Windows Registry: %v", err)
 	} else {
-		log.Logger.Printf("[INFO]: windows arch has been retrieved from Windows Registry")
+		log.Printf("[INFO]: windows arch has been retrieved from Windows Registry")
 	}
 	if err := a.Edges.OperatingSystem.getUsername(); err != nil {
-		log.Logger.Printf("[ERROR]: could not get windows username from Windows Registry: %v", err)
+		log.Printf("[ERROR]: could not get windows username from WMI Win32_Computer: %v", err)
 	} else {
-		log.Logger.Printf("[INFO]: windows username has been retrieved from Windows Registry")
+		log.Printf("[INFO]: windows username has been retrieved from WMI Win32_Computer")
 	}
 }
 
@@ -138,16 +137,31 @@ func (myOs *OperatingSystem) getArch() error {
 }
 
 func (myOs *OperatingSystem) getUsername() error {
-	var n uint32 = MAX_DISPLAYNAME_LENGTH
-	myOs.Username = "Undetected"
-
-	b := make([]uint16, n)
-	err := windows.GetUserNameEx(windows.NameDisplay, &b[0], &n)
+	username, err := getLoggedOnUsername()
 	if err != nil {
 		return err
 	}
-	myOs.Username = windows.UTF16ToString(b)
+	myOs.Username = strings.TrimSpace(username)
 	return nil
+}
+
+func getLoggedOnUsername() (string, error) {
+	var computerDst []struct{ Username string }
+
+	namespace := `root\cimv2`
+	qComputer := "SELECT Username FROM Win32_ComputerSystem"
+
+	err := wmi.QueryNamespace(qComputer, &computerDst, namespace)
+	if err != nil {
+		return "", err
+	}
+
+	if len(computerDst) != 1 {
+		return "", fmt.Errorf("got wrong computer system result set")
+	}
+
+	v := &computerDst[0]
+	return strings.TrimSpace(v.Username), nil
 }
 
 func (myOs *OperatingSystem) isWindowsServer() bool {

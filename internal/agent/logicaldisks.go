@@ -2,9 +2,9 @@ package agent
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
-	"github.com/doncicuto/openuem-agent/internal/log"
 	"github.com/doncicuto/openuem-agent/internal/utils"
 	"github.com/yusufpapurcu/wmi"
 )
@@ -16,6 +16,7 @@ type LogicalDisk struct {
 	SizeInUnits           string `json:"size_in_units,omitempty"`
 	RemainingSpaceInUnits string `json:"remaining_space_in_units,omitempty"`
 	VolumeName            string `json:"volume_name,omitempty"`
+	BitLockerStatus       string `json:"bitlocker_status,omitempty"`
 }
 
 type logicalDisk struct {
@@ -27,6 +28,12 @@ type logicalDisk struct {
 	VolumeName string
 }
 
+type bitLockerStatus struct {
+	ConversionStatus int8
+	ProtectionStatus int8
+	EncryptionMethod int8
+}
+
 func (a *Agent) getLogicalDisksInfo() {
 	var disksDst []logicalDisk
 	myDisks := []LogicalDisk{}
@@ -35,7 +42,7 @@ func (a *Agent) getLogicalDisksInfo() {
 	qLogicalDisk := "SELECT DeviceID, DriveType, FreeSpace, Size, FileSystem, VolumeName FROM Win32_LogicalDisk"
 	err := wmi.QueryNamespace(qLogicalDisk, &disksDst, namespace)
 	if err != nil {
-		log.Logger.Printf("[ERROR]: could not get logical disks information from WMI Win32_LogicalDisk: %v", err)
+		log.Printf("[ERROR]: could not get logical disks information from WMI Win32_LogicalDisk: %v", err)
 	}
 	for _, v := range disksDst {
 		myDisk := LogicalDisk{}
@@ -48,12 +55,14 @@ func (a *Agent) getLogicalDisksInfo() {
 
 			myDisk.SizeInUnits = utils.ConvertBytesToUnits(v.Size)
 			myDisk.RemainingSpaceInUnits = utils.ConvertBytesToUnits(v.FreeSpace)
+			myDisk.BitLockerStatus = getBitLockerStatus(myDisk.Label)
 
 			myDisks = append(myDisks, myDisk)
 		}
 	}
 	a.Edges.LogicalDisks = myDisks
-	log.Logger.Printf("[INFO]: logical disks information has been retrieved from WMI Win32_LogicalDisk")
+
+	log.Printf("[INFO]: logical disks information has been retrieved from WMI Win32_LogicalDisk")
 }
 
 func (a *Agent) logLogicalDisks() {
@@ -70,13 +79,42 @@ func (a *Agent) logLogicalDisks() {
 			fmt.Printf("%-40s |  %s \n", diskVolumeName, myDisk.VolumeName)
 			diskFS := fmt.Sprintf("Disk %s filesystem", myDisk.Label)
 			fmt.Printf("%-40s |  %s \n", diskFS, myDisk.Filesystem)
+			fmt.Printf("%-40s |  %s \n", "Bitlocker Status", myDisk.BitLockerStatus)
 
 			if len(a.Edges.LogicalDisks) > 1 && i+1 != len(a.Edges.LogicalDisks) {
 				fmt.Printf("---------------------------------------------------------------------------------------------------------------------\n")
 			}
 		}
-	} else {
-		fmt.Printf("%-40s\n", "No logical disks found")
+		return
 	}
 
+	fmt.Printf("%-40s\n", "No logical disks found")
+}
+
+func getBitLockerStatus(driveLetter string) string {
+	// This query would not be acceptable in general as it could lead to sql injection, but we're using a where condition using a
+	// index value retrieved by WMI it's not user generated input
+	namespace := `root\CIMV2\Security\MicrosoftVolumeEncryption`
+	qBitLocker := fmt.Sprintf("SELECT ConversionStatus, ProtectionStatus, EncryptionMethod FROM Win32_EncryptableVolume WHERE DriveLetter = '%s'", driveLetter)
+	response := []bitLockerStatus{}
+	err := wmi.QueryNamespace(qBitLocker, &response, namespace)
+	if err != nil {
+		log.Printf("[ERROR]: could not get bitlocker status from WMI Win32_EncryptableVolume: %v", err)
+		return "Unknown"
+	}
+
+	if len(response) != 1 {
+		log.Printf("[WARN]: no bitlocker result for drive %s got %d rows: %v", driveLetter, len(response), err)
+		return "Unknown"
+	}
+
+	log.Printf("[INFO]: could get bitlocker status from WMI Win32_EncryptableVolume for driver %s", driveLetter)
+	switch response[0].ProtectionStatus {
+	case 0:
+		return "Unencrypted"
+	case 1:
+		return "Encrypted"
+	default:
+		return "Unknown"
+	}
 }

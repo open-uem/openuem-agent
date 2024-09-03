@@ -1,4 +1,4 @@
 .vscode
 openuem.json
 *.exe
-*.txt
+*-log.txt

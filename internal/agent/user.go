@@ -2,9 +2,9 @@ package agent
 
 import (
 	"fmt"
+	"log"
 	"time"
 
-	"github.com/doncicuto/openuem-agent/internal/log"
 	"github.com/yusufpapurcu/wmi"
 )
 
@@ -20,9 +20,9 @@ func (a *Agent) getLoggedOnUserInfo() {
 
 	a.Edges.LoggedOnUsers, err = getLoggedOnUserFromWMI()
 	if err != nil {
-		log.Logger.Printf("[ERROR]: could not get logged on user information from WMI Win32_NetworkLoginProfile: %v", err)
+		log.Printf("[ERROR]: could not get logged on user information from WMI Win32_NetworkLoginProfile: %v", err)
 	} else {
-		log.Logger.Printf("[INFO]: logged on user information has been retrieved from WMI Win32_NetworkLoginProfile")
+		log.Printf("[INFO]: logged on user information has been retrieved from WMI Win32_NetworkLoginProfile")
 	}
 }
 

@@ -3,14 +3,13 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/doncicuto/openuem-agent/assets/icons"
-	"github.com/doncicuto/openuem-agent/internal/log"
-	"github.com/doncicuto/openuem-agent/internal/messages"
 	"github.com/getlantern/systray"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/google/uuid"
@@ -54,7 +53,7 @@ func (a *Agent) Run(force bool) {
 	var err error
 	start := time.Now()
 
-	log.Logger.Println("[INFO]: agent is running...")
+	log.Println("[INFO]: agent is running...")
 
 	// Get the information
 	a.getInfoFromOS()
@@ -64,7 +63,7 @@ func (a *Agent) Run(force bool) {
 	// Create JSON
 	data, err := json.Marshal(a.Report)
 	if err != nil {
-		log.Logger.Printf("[ERROR]: could not marshal report data %v\n", err)
+		log.Printf("[ERROR]: could not marshal report data %v\n", err)
 	}
 
 	// Print the information to stdout
@@ -72,11 +71,10 @@ func (a *Agent) Run(force bool) {
 
 	// Try to connect to NATS server if no connection is ready
 	if a.NatsConnection == nil {
-		a.NatsConnection, err = messages.Connect()
-		if err != nil {
-			log.Logger.Printf("[ERROR]: could not connect with message broker: %v\n", err)
+		if err := a.connect(); err != nil {
+			log.Printf("[ERROR]: could not connect with message broker: %v\n", err)
 		} else {
-			log.Logger.Println("[INFO]: connection established with NATS server")
+			log.Println("[INFO]: connection established with NATS server")
 			a.subscribeToReportTrigger()
 		}
 	}
@@ -84,25 +82,26 @@ func (a *Agent) Run(force bool) {
 	// Decide if we've to sent the report to the server
 	if a.NatsConnection != nil {
 		// TODO - maybe send report if some important properties have changed (like antivirus, windows update..)
-		if !a.Config.didIReportToday() || force {
+		if !a.Config.DidIReportToday() || force {
 			// Send NATS information
 			if a.NatsConnection != nil {
-				if _, err := a.NatsConnection.Request("update", data, 1*time.Minute); err != nil {
-					log.Logger.Printf("[ERROR]: could not sent report to server %v\n", err)
+				// TODO - set timeout for waiting for NATS process
+				if _, err := a.NatsConnection.Request("update", data, 5*time.Minute); err != nil {
+					log.Printf("[ERROR]: could not sent report to server %v\n", err)
 				} else {
 					a.Config.LastReportDate = start
-					log.Logger.Println("[INFO]: report was sent to server!")
+					log.Println("[INFO]: report was sent to server!")
 				}
 			}
 		} else {
-			log.Logger.Println("[INFO]: agent has already reported today skip sending to server")
+			log.Println("[INFO]: agent has already reported today skip sending to server")
 		}
 	}
 
-	log.Logger.Printf("[INFO]: agent execution took %v\n", time.Since(start))
+	log.Printf("[INFO]: agent execution took %v\n", time.Since(start))
 
 	a.Config.LastExecutionDate = start
-	writeConfig(a.Config)
+	a.Config.WriteConfig()
 }
 
 func (a *Agent) getInfoFromOS() {
@@ -156,10 +155,15 @@ func (a *Agent) printAgent() {
 	a.logApplications()
 }
 
+func (a *Agent) Test() {
+	log.Println("Test!")
+}
+
 func (a *Agent) Start() {
 	now := time.Now()
+
 	// Read config from JSON
-	a.Config = readConfig()
+	a.Config.ReadConfig()
 	if a.Config.UUID == "" {
 		id := uuid.New()
 		a.Config.UUID = id.String()
@@ -168,15 +172,21 @@ func (a *Agent) Start() {
 		a.Config.FirstExecutionDate = now
 		a.FirstContact = now
 		a.LastContact = now
-		writeConfig(a.Config)
+		a.Config.WriteConfig()
 	} else {
 		a.ID = a.Config.UUID
 		a.FirstContact = a.Config.FirstExecutionDate
 		a.LastContact = now
 	}
 
-	log.Logger.Println("[INFO]: application has started...")
-	systray.Run(a.onReady, a.OnQuit)
+	// Run at agent start
+	a.Run(true)
+
+	// Schedule task to run agent every X minutes according to config
+	a.startScheduler()
+
+	// TODO REMOVE Old code, agent could start a systray but the service
+	/* systray.Run(a.onReady, a.OnQuit) */
 }
 
 func (a *Agent) onReady() {
@@ -185,7 +195,7 @@ func (a *Agent) onReady() {
 
 	icon, err := icons.Data()
 	if err != nil {
-		log.Logger.Fatalf("[FATAL]: icon could not be added to systray: %v", err)
+		log.Fatalf("[FATAL]: icon could not be added to systray: %v", err)
 	}
 	systray.SetIcon(*icon)
 
@@ -204,7 +214,7 @@ func (a *Agent) onReady() {
 	for {
 		select {
 		case <-mRun.ClickedCh:
-			log.Logger.Println("[INFO]: user force a run of the OpenUEM Agent")
+			log.Println("[INFO]: user force a run of the OpenUEM Agent")
 			force := true
 			a.Run(force)
 		case <-mQuit.ClickedCh:
@@ -218,18 +228,18 @@ func (a *Agent) onReady() {
 func (a *Agent) OnQuit() {
 	a.stopScheduler()
 	a.NatsConnection.Close()
-	log.Logger.Println("[INFO]: agent has exited")
+	log.Println("[INFO]: agent has exited")
 }
 
 func (a *Agent) startScheduler() {
 	var err error
 	a.TaskScheduler, err = gocron.NewScheduler()
 	if err != nil {
-		log.Logger.Fatalf("[FATAL]: could not create the scheduler: %v", err)
+		log.Fatalf("[FATAL]: could not create the scheduler: %v", err)
 	}
 
 	// Get task duration from config
-	var taskEveryMinutes uint8 = 5
+	var taskEveryMinutes int = 5
 	if a.Config.ExecuteEveryXMinutes > 0 {
 		taskEveryMinutes = a.Config.ExecuteEveryXMinutes
 	}
@@ -247,21 +257,21 @@ func (a *Agent) startScheduler() {
 		),
 	)
 	if err != nil {
-		log.Logger.Fatalf("[FATAL]: could not start the scheduler: %v", err)
+		log.Fatalf("[FATAL]: could not start the scheduler: %v", err)
 	} else {
-		log.Logger.Printf("[INFO]: new job has been scheduled every %d minutes", taskEveryMinutes)
+		log.Printf("[INFO]: new job has been scheduled every %d minutes", taskEveryMinutes)
 	}
 
 	// Start scheduler
 	a.TaskScheduler.Start()
-	log.Logger.Println("[INFO]: task scheduler has started!")
+	log.Println("[INFO]: task scheduler has started!")
 }
 
 func (a *Agent) stopScheduler() {
 	if err := a.TaskScheduler.Shutdown(); err != nil {
-		log.Logger.Printf("[ERROR]: there was an error trying to shutdown the task scheduler %v", err)
+		log.Printf("[ERROR]: there was an error trying to shutdown the task scheduler %v", err)
 	} else {
-		log.Logger.Println("[INFO]: task scheduler has been shutdown")
+		log.Println("[INFO]: task scheduler has been shutdown")
 	}
 }
 
@@ -269,10 +279,10 @@ func (a *Agent) subscribeToReportTrigger() {
 	// Subscribe to receive trigger to run agent
 	a.NatsConnection.Subscribe(fmt.Sprintf("trigger-%s", a.ID), func(m *nats.Msg) {
 		if string(m.Data) == a.ID {
-			log.Logger.Println("[INFO]: a report has been triggered from OpenUEM server")
+			log.Println("[INFO]: a report has been triggered from OpenUEM server")
 			a.Run(true)
 		} else {
-			log.Logger.Printf("[ERROR]: received wrong message from NATS %s\n", m.Data)
+			log.Printf("[ERROR]: received wrong message from NATS %s\n", m.Data)
 		}
 	})
 }

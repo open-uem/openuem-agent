@@ -2,8 +2,8 @@ package agent
 
 import (
 	"fmt"
+	"log"
 
-	"github.com/doncicuto/openuem-agent/internal/log"
 	"github.com/doncicuto/openuem-agent/internal/utils"
 	"github.com/yusufpapurcu/wmi"
 )
@@ -29,7 +29,7 @@ func (a *Agent) getMonitorsInfo() {
 	qMonitors := "SELECT ManufacturerName, SerialNumberID, UserFriendlyName FROM WmiMonitorID"
 	err := wmi.QueryNamespace(qMonitors, &monitorDst, namespace)
 	if err != nil {
-		log.Logger.Printf("[ERROR]: could not get information from WMI WmiMonitorID: %v", err)
+		log.Printf("[ERROR]: could not get information from WMI WmiMonitorID: %v", err)
 	}
 	for _, v := range monitorDst {
 		myMonitor := Monitor{}
@@ -40,7 +40,7 @@ func (a *Agent) getMonitorsInfo() {
 		myMonitors = append(myMonitors, myMonitor)
 	}
 	a.Edges.Monitors = myMonitors
-	log.Logger.Printf("[INFO]: monitors information has been retrieved from WMI WmiMonitorID")
+	log.Printf("[INFO]: monitors information has been retrieved from WMI WmiMonitorID")
 }
 
 func (a *Agent) logMonitors() {

@@ -2,9 +2,9 @@ package agent
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
-	"github.com/doncicuto/openuem-agent/internal/log"
 	"github.com/yusufpapurcu/wmi"
 )
 
@@ -37,21 +37,21 @@ type processorInfo struct {
 func (a *Agent) getComputerInfo() {
 	a.Edges.Computer = Computer{}
 	if err := a.Edges.Computer.getComputerSystemInfo(); err != nil {
-		log.Logger.Printf("[ERROR]: could not get information from WMI Win32_ComputerSystem: %v", err)
+		log.Printf("[ERROR]: could not get information from WMI Win32_ComputerSystem: %v", err)
 	} else {
-		log.Logger.Printf("[INFO]: computer system info has been retrieved from WMI Win32_ComputerSystem")
+		log.Printf("[INFO]: computer system info has been retrieved from WMI Win32_ComputerSystem")
 	}
 
 	if err := a.Edges.Computer.getSerialNumber(); err != nil {
-		log.Logger.Printf("[ERROR]: could not get information from WMI Win32_Bios: %v", err)
+		log.Printf("[ERROR]: could not get information from WMI Win32_Bios: %v", err)
 	} else {
-		log.Logger.Printf("[INFO]: serial number info has been retrieved from WMI Win32_Bios")
+		log.Printf("[INFO]: serial number info has been retrieved from WMI Win32_Bios")
 	}
 
 	if err := a.Edges.Computer.getProcessorInfo(); err != nil {
-		log.Logger.Printf("[ERROR]: could not get information from WMI Win32_Processor: %v", err)
+		log.Printf("[ERROR]: could not get information from WMI Win32_Processor: %v", err)
 	} else {
-		log.Logger.Printf("[INFO]: processor info has been retrieved from WMI Win32_Processor")
+		log.Printf("[INFO]: processor info has been retrieved from WMI Win32_Processor")
 	}
 }
 

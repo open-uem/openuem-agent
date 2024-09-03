@@ -3,10 +3,10 @@ package agent
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
-	"github.com/doncicuto/openuem-agent/internal/log"
 	"github.com/yusufpapurcu/wmi"
 )
 
@@ -27,9 +27,9 @@ func (a *Agent) getAntivirusInfo() {
 	a.Edges.Antivirus = Antivirus{}
 
 	if err := a.Edges.Antivirus.getAntivirusFromWMI(); err != nil {
-		log.Logger.Printf("[ERROR]: could not get antivirus information from WMI AntiVirusProduct: %v", err)
+		log.Printf("[ERROR]: could not get antivirus information from WMI AntiVirusProduct: %v", err)
 	} else {
-		log.Logger.Printf("[INFO]: antivirus information has been retrieved from WMI AntiVirusProduct")
+		log.Printf("[INFO]: antivirus information has been retrieved from WMI AntiVirusProduct")
 	}
 }
 

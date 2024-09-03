@@ -2,10 +2,10 @@ package agent
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	wu "github.com/ceshihao/windowsupdate"
-	"github.com/doncicuto/openuem-agent/internal/log"
 	"github.com/doncicuto/openuem-agent/internal/utils"
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
@@ -40,21 +40,21 @@ func (a *Agent) getSystemUpdateInfo() {
 	// TODO 2 (security) check if firewall is enabled in the three possible domains
 
 	if err := a.Edges.SystemUpdate.getWindowsUpdateStatus(); err != nil {
-		log.Logger.Printf("[ERROR]: could not get windows update status info information from wuapi: %v", err)
+		log.Printf("[ERROR]: could not get windows update status info information from wuapi: %v", err)
 	} else {
-		log.Logger.Printf("[INFO]: windows update status info has been retrieved from wuapi")
+		log.Printf("[INFO]: windows update status info has been retrieved from wuapi")
 	}
 
 	if err := a.Edges.SystemUpdate.getWindowsUpdateDates(); err != nil {
-		log.Logger.Printf("[ERROR]: could not get windows update dates information from wuapi: %v", err)
+		log.Printf("[ERROR]: could not get windows update dates information from wuapi: %v", err)
 	} else {
-		log.Logger.Printf("[INFO]: windows update dates info has been retrieved from wuapi")
+		log.Printf("[INFO]: windows update dates info has been retrieved from wuapi")
 	}
 
 	if err := a.Edges.SystemUpdate.getPendingUpdates(); err != nil {
-		log.Logger.Printf("[ERROR]: could not get pending updates information from wuapi: %v", err)
+		log.Printf("[ERROR]: could not get pending updates information from wuapi: %v", err)
 	} else {
-		log.Logger.Printf("[INFO]: pending updates info has been retrieved from wuapi")
+		log.Printf("[INFO]: pending updates info has been retrieved from wuapi")
 	}
 }
 
@@ -108,12 +108,12 @@ func (mySystemUpdate *SystemUpdate) getPendingUpdates() error {
 	if err != nil {
 		return err
 	}
-
 	searcher, err := session.CreateUpdateSearcher()
 	if err != nil {
 		return err
 	}
 
+	// TODO There is an exception for Windows 10 (HP laptop)
 	result, err := searcher.Search("IsAssigned=1 and IsHidden=0 and IsInstalled=0 and Type='Software'")
 	if err != nil {
 		return err

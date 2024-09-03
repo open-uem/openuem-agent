@@ -2,9 +2,10 @@ package agent
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
-	"github.com/doncicuto/openuem-agent/internal/log"
+	"github.com/yusufpapurcu/wmi"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -56,32 +57,47 @@ func getApplications() map[string]Application {
 	applications := make(map[string]Application)
 
 	if err := getApplicationsFromRegistry(applications, registry.LOCAL_MACHINE, APPS); err != nil {
-		log.Logger.Printf("[ERROR]: could not get apps information from %s\\%s: %v", "HKLM", APPS, err)
+		log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKLM", APPS, err)
 	} else {
-		log.Logger.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKLM", APPS)
+		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKLM", APPS)
 	}
 
 	if err := getApplicationsFromRegistry(applications, registry.LOCAL_MACHINE, APPS32BITS); err != nil {
-		log.Logger.Printf("[ERROR]: could not get apps information from %s\\%s: %v", "HKLM", APPS32BITS, err)
+		log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKLM", APPS32BITS, err)
 	} else {
-		log.Logger.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKLM", APPS)
+		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKLM", APPS)
 	}
 
-	if err := getApplicationsFromRegistry(applications, registry.CURRENT_USER, APPS); err != nil {
-		log.Logger.Printf("[ERROR]: could not get apps information from %s\\%s: %v", "HKCU", APPS32BITS, err)
+	if err := getApplicationsFromRegistry(applications, registry.USERS, APPS); err != nil {
+		log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKCU", APPS, err)
 	} else {
-		log.Logger.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKCU", APPS)
+		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKCU", APPS)
 	}
 
-	if err := getApplicationsFromRegistry(applications, registry.CURRENT_USER, APPS32BITS); err != nil {
-		log.Logger.Printf("[ERROR]: could not get apps information from %s\\%s: %v", "HKCU", APPS32BITS, err)
+	if err := getApplicationsFromRegistry(applications, registry.USERS, APPS32BITS); err != nil {
+		log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKCU", APPS32BITS, err)
 	} else {
-		log.Logger.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKCU", APPS)
+		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKCU", APPS)
 	}
 	return applications
 }
 
 func getApplicationsFromRegistry(applications map[string]Application, hive registry.Key, key string) error {
+
+	if hive == registry.USERS {
+		loggedOnUser, err := getLoggedOnUsername()
+		if err != nil {
+			return fmt.Errorf("could not get logged on username")
+		}
+
+		sid, err := getSID(loggedOnUser)
+		if err != nil {
+			return fmt.Errorf("could not get SID for logged on user")
+		}
+
+		key = fmt.Sprintf("%s\\%s", sid, key)
+	}
+
 	k, err := registry.OpenKey(hive, key, registry.ENUMERATE_SUB_KEYS)
 	if err != nil {
 		return err
@@ -111,4 +127,39 @@ func getApplicationsFromRegistry(applications map[string]Application, hive regis
 		}
 	}
 	return nil
+}
+
+func getSID(username string) (string, error) {
+	var response []struct{ SID string }
+
+	// This query would not be acceptable in general as it could lead to sql injection, but we're using a where condition using a
+	// index value retrieved by WMI it's not user generated input
+	namespace := `root\cimv2`
+
+	user := strings.Split(username, "\\")
+
+	if len(user) != 2 {
+		log.Println("[ERROR]: could not parse username for WMI Win32_UserAccount query")
+		return "", fmt.Errorf("could not parse username, expect a domain and a name")
+	}
+
+	qSID := fmt.Sprintf("SELECT SID FROM Win32_UserAccount WHERE Domain = '%s' and Name = '%s'", user[0], user[1])
+	err := wmi.QueryNamespace(qSID, &response, namespace)
+	if err != nil {
+		log.Printf("[ERROR]: could not generate SQL for WMI Win32_UserAccount: %v", err)
+		return "", err
+	}
+
+	err = wmi.QueryNamespace(qSID, &response, namespace)
+	if err != nil {
+		log.Printf("[ERROR]: could not get user account info from WMI Win32_UserAccount: %v", err)
+		return "", err
+	}
+
+	if len(response) != 1 {
+		log.Printf("[ERROR]: expected one result got %d: %v", len(response), err)
+		return "", err
+	}
+
+	return response[0].SID, nil
 }

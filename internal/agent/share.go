@@ -2,8 +2,8 @@ package agent
 
 import (
 	"fmt"
+	"log"
 
-	"github.com/doncicuto/openuem-agent/internal/log"
 	"github.com/yusufpapurcu/wmi"
 )
 
@@ -17,9 +17,9 @@ func (a *Agent) getSharesInfo() {
 	var err error
 	a.Edges.Shares, err = getSharesFromWMI()
 	if err != nil {
-		log.Logger.Printf("[ERROR]: could not get shares information from WMI Win32_Share: %v", err)
+		log.Printf("[ERROR]: could not get shares information from WMI Win32_Share: %v", err)
 	} else {
-		log.Logger.Printf("[INFO]: shares information has been retrieved from WMI Win32_Share")
+		log.Printf("[INFO]: shares information has been retrieved from WMI Win32_Share")
 	}
 }
 

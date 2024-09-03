@@ -2,10 +2,10 @@ package agent
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
-	"github.com/doncicuto/openuem-agent/internal/log"
 	"github.com/yusufpapurcu/wmi"
 )
 
@@ -46,9 +46,9 @@ func (a *Agent) getNetworkAdaptersInfo() {
 	var err error
 	a.Edges.NetworkAdapters, err = getNetworkAdaptersFromWMI()
 	if err != nil {
-		log.Logger.Printf("[ERROR]: could not get network adapters information from WMI Win32_NetworkAdapter: %v", err)
+		log.Printf("[ERROR]: could not get network adapters information from WMI Win32_NetworkAdapter: %v", err)
 	} else {
-		log.Logger.Printf("[INFO]: network adapters information has been retrieved from WMI Win32_NetworkAdapter")
+		log.Printf("[INFO]: network adapters information has been retrieved from WMI Win32_NetworkAdapter")
 	}
 }
 
@@ -111,6 +111,8 @@ func getNetworkAdaptersFromWMI() ([]NetworkAdapter, error) {
 			myNetworkAdapter.Name = v.Name
 			myNetworkAdapter.MACAddress = v.MACAddress
 
+			// This query would not be acceptable in general as it could lead to sql injection, but we're using a where condition using a
+			// index value retrieved by WMI it's not user generated input
 			namespace = `root\cimv2`
 			qNetwork := fmt.Sprintf("SELECT DefaultIPGateway, DHCPEnabled, DHCPLeaseExpires, DHCPLeaseObtained, DNSDomain, DNSServerSearchOrder, IPAddress, IPSubnet FROM Win32_NetworkAdapterConfiguration WHERE Index = %d", v.Index)
 			err = wmi.QueryNamespace(qNetwork, &networkAdapterDst, namespace)

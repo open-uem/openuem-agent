@@ -2,8 +2,8 @@ package agent
 
 import (
 	"fmt"
+	"log"
 
-	"github.com/doncicuto/openuem-agent/internal/log"
 	"github.com/yusufpapurcu/wmi"
 )
 
@@ -41,9 +41,9 @@ func (a *Agent) getPrintersInfo() {
 	var err error
 	a.Edges.Printers, err = getPrintersFromWMI()
 	if err != nil {
-		log.Logger.Printf("[ERROR]: could not get printers information from WMI Win32_Printer: %v", err)
+		log.Printf("[ERROR]: could not get printers information from WMI Win32_Printer: %v", err)
 	} else {
-		log.Logger.Printf("[INFO]: printers information has been retrieved from WMI Win32_Printer")
+		log.Printf("[INFO]: printers information has been retrieved from WMI Win32_Printer")
 	}
 }
 
