@@ -1,4 +1,4 @@
-package agent
+package report
 
 import (
 	"fmt"
@@ -6,20 +6,12 @@ import (
 	"time"
 
 	wu "github.com/ceshihao/windowsupdate"
-	"github.com/doncicuto/openuem-agent/internal/utils"
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
 )
 
 // Ref: https://learn.microsoft.com/en-us/windows/win32/api/wuapi/ne-wuapi-automaticupdatesnotificationlevel
 type notificationLevel int32
-
-type SystemUpdate struct {
-	Status         string    `json:"status,omitempty"`
-	LastInstall    time.Time `json:"last_install,omitempty"`
-	LastSearch     time.Time `json:"last_search,omitempty"`
-	PendingUpdates bool      `json:"pending_updates,omitempty"`
-}
 
 const (
 	NOTIFICATION_LEVEL_NOT_CONFIGURED notificationLevel = iota
@@ -29,8 +21,7 @@ const (
 	NOTIFICATION_LEVEL_SCHEDULED_INSTALLATION
 )
 
-func (a *Agent) getSystemUpdateInfo() {
-	a.Edges.SystemUpdate = SystemUpdate{}
+func (r *Report) getSystemUpdateInfo() {
 	// Get information about Windows Update settings
 
 	// TODO 1 (security) get information about what SMB client version is installed
@@ -39,63 +30,63 @@ func (a *Agent) getSystemUpdateInfo() {
 
 	// TODO 2 (security) check if firewall is enabled in the three possible domains
 
-	if err := a.Edges.SystemUpdate.getWindowsUpdateStatus(); err != nil {
+	if err := r.getWindowsUpdateStatus(); err != nil {
 		log.Printf("[ERROR]: could not get windows update status info information from wuapi: %v", err)
 	} else {
 		log.Printf("[INFO]: windows update status info has been retrieved from wuapi")
 	}
 
-	if err := a.Edges.SystemUpdate.getWindowsUpdateDates(); err != nil {
+	if err := r.getWindowsUpdateDates(); err != nil {
 		log.Printf("[ERROR]: could not get windows update dates information from wuapi: %v", err)
 	} else {
 		log.Printf("[INFO]: windows update dates info has been retrieved from wuapi")
 	}
 
-	if err := a.Edges.SystemUpdate.getPendingUpdates(); err != nil {
+	if err := r.getPendingUpdates(); err != nil {
 		log.Printf("[ERROR]: could not get pending updates information from wuapi: %v", err)
 	} else {
 		log.Printf("[INFO]: pending updates info has been retrieved from wuapi")
 	}
 }
 
-func (a *Agent) logSystemUpdate() {
+func (r *Report) logSystemUpdate() {
 	fmt.Printf("\n** 🔄 Updates *******************************************************************************************************\n")
-	fmt.Printf("%-40s |  %s \n", "Automatic Updates status", a.Edges.SystemUpdate.Status)
-	if a.Edges.SystemUpdate.LastInstall.IsZero() {
+	fmt.Printf("%-40s |  %s \n", "Automatic Updates status", r.SystemUpdate.Status)
+	if r.SystemUpdate.LastInstall.IsZero() {
 		fmt.Printf("%-40s |  %s \n", "Last updates installation date", "Unknown")
 	} else {
-		fmt.Printf("%-40s |  %v \n", "Last updates installation date", a.Edges.SystemUpdate.LastInstall)
+		fmt.Printf("%-40s |  %v \n", "Last updates installation date", r.SystemUpdate.LastInstall)
 	}
-	if a.Edges.SystemUpdate.LastSearch.IsZero() {
+	if r.SystemUpdate.LastSearch.IsZero() {
 		fmt.Printf("%-40s |  %s \n", "Last updates search date", "Unknown")
 	} else {
-		fmt.Printf("%-40s |  %v \n", "Last updates search date", a.Edges.SystemUpdate.LastSearch)
+		fmt.Printf("%-40s |  %v \n", "Last updates search date", r.SystemUpdate.LastSearch)
 	}
-	fmt.Printf("%-40s |  %t \n", "Pending updates", a.Edges.SystemUpdate.PendingUpdates)
+	fmt.Printf("%-40s |  %t \n", "Pending updates", r.SystemUpdate.PendingUpdates)
 }
 
-func (mySystemUpdate *SystemUpdate) getWindowsUpdateStatus() error {
+func (r *Report) getWindowsUpdateStatus() error {
 	automaticUpdateSettings, err := newIAutomaticUpdates()
 	if err != nil {
 		return err
 	} else {
-		mySystemUpdate.Status = getAutomaticUpdatesStatus(automaticUpdateSettings.NotificationLevel)
+		r.SystemUpdate.Status = getAutomaticUpdatesStatus(automaticUpdateSettings.NotificationLevel)
 	}
 	return nil
 }
 
-func (mySystemUpdate *SystemUpdate) getWindowsUpdateDates() error {
+func (r *Report) getWindowsUpdateDates() error {
 	automaticUpdateResults, err := newIAutomaticUpdate2()
 	if err != nil {
 		return err
 	}
 
-	mySystemUpdate.LastInstall = automaticUpdateResults.LastInstallationSuccessDate.Local()
-	mySystemUpdate.LastSearch = automaticUpdateResults.LastSearchSuccessDate.Local()
+	r.SystemUpdate.LastInstall = automaticUpdateResults.LastInstallationSuccessDate.Local()
+	r.SystemUpdate.LastSearch = automaticUpdateResults.LastSearchSuccessDate.Local()
 	return nil
 }
 
-func (mySystemUpdate *SystemUpdate) getPendingUpdates() error {
+func (r *Report) getPendingUpdates() error {
 	// Get information about pending updates. THIS QUERY IS SLOW
 	// Ref: https://github.com/ceshihao/windowsupdate/blob/master/examples/query_update_history/main.go
 	// OLE Initialize
@@ -118,7 +109,7 @@ func (mySystemUpdate *SystemUpdate) getPendingUpdates() error {
 	if err != nil {
 		return err
 	}
-	mySystemUpdate.PendingUpdates = len(result.Updates) > 0
+	r.SystemUpdate.PendingUpdates = len(result.Updates) > 0
 	return nil
 }
 
@@ -157,7 +148,7 @@ func toIAutomaticUpdatesSettings(iAutomaticUpdatesSettingsDisp *ole.IDispatch) (
 		disp: iAutomaticUpdatesSettingsDisp,
 	}
 
-	if iAutomaticUpdatesSettings.NotificationLevel, err = utils.ToInt32Err(oleutil.GetProperty(iAutomaticUpdatesSettingsDisp, "NotificationLevel")); err != nil {
+	if iAutomaticUpdatesSettings.NotificationLevel, err = toInt32Err(oleutil.GetProperty(iAutomaticUpdatesSettingsDisp, "NotificationLevel")); err != nil {
 		return nil, err
 	}
 
@@ -165,7 +156,7 @@ func toIAutomaticUpdatesSettings(iAutomaticUpdatesSettingsDisp *ole.IDispatch) (
 }
 
 func toIAutomaticUpdates(IAutomaticUpdatesDisp *ole.IDispatch) (*IAutomaticUpdatesSettings, error) {
-	settingsDisp, err := utils.ToIDispatchErr(oleutil.GetProperty(IAutomaticUpdatesDisp, "Settings"))
+	settingsDisp, err := toIDispatchErr(oleutil.GetProperty(IAutomaticUpdatesDisp, "Settings"))
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +164,7 @@ func toIAutomaticUpdates(IAutomaticUpdatesDisp *ole.IDispatch) (*IAutomaticUpdat
 }
 
 func toIAutomaticUpdates2(IAutomaticUpdates2Disp *ole.IDispatch) (*IAutomaticUpdatesResults, error) {
-	resultsDisp, err := utils.ToIDispatchErr(oleutil.GetProperty(IAutomaticUpdates2Disp, "Results"))
+	resultsDisp, err := toIDispatchErr(oleutil.GetProperty(IAutomaticUpdates2Disp, "Results"))
 	if err != nil {
 		return nil, err
 	}
@@ -186,11 +177,11 @@ func toIAutomaticUpdatesResults(iAutomaticUpdatesResultsDisp *ole.IDispatch) (*I
 		disp: iAutomaticUpdatesResultsDisp,
 	}
 
-	if iAutomaticUpdatesResults.LastInstallationSuccessDate, err = utils.ToTimeErr(oleutil.GetProperty(iAutomaticUpdatesResultsDisp, "LastInstallationSuccessDate")); err != nil {
+	if iAutomaticUpdatesResults.LastInstallationSuccessDate, err = toTimeErr(oleutil.GetProperty(iAutomaticUpdatesResultsDisp, "LastInstallationSuccessDate")); err != nil {
 		return nil, err
 	}
 
-	if iAutomaticUpdatesResults.LastSearchSuccessDate, err = utils.ToTimeErr(oleutil.GetProperty(iAutomaticUpdatesResultsDisp, "LastSearchSuccessDate")); err != nil {
+	if iAutomaticUpdatesResults.LastSearchSuccessDate, err = toTimeErr(oleutil.GetProperty(iAutomaticUpdatesResultsDisp, "LastSearchSuccessDate")); err != nil {
 		return nil, err
 	}
 
@@ -229,4 +220,50 @@ func newIAutomaticUpdates() (*IAutomaticUpdatesSettings, error) {
 		return nil, err
 	}
 	return toIAutomaticUpdates(disp)
+}
+
+func toIDispatchErr(result *ole.VARIANT, err error) (*ole.IDispatch, error) {
+	if err != nil {
+		return nil, err
+	}
+	return variantToIDispatch(result), nil
+}
+
+func variantToIDispatch(v *ole.VARIANT) *ole.IDispatch {
+	value := v.Value()
+	if value == nil {
+		return nil
+	}
+	return v.ToIDispatch()
+}
+
+func toTimeErr(result *ole.VARIANT, err error) (*time.Time, error) {
+	if err != nil {
+		return nil, err
+	}
+	return variantToTime(result), nil
+}
+
+func variantToTime(v *ole.VARIANT) *time.Time {
+	value := v.Value()
+	if value == nil {
+		return nil
+	}
+	valueTime := value.(time.Time)
+	return &valueTime
+}
+
+func toInt32Err(result *ole.VARIANT, err error) (int32, error) {
+	if err != nil {
+		return 0, err
+	}
+	return variantToInt32(result), nil
+}
+
+func variantToInt32(v *ole.VARIANT) int32 {
+	value := v.Value()
+	if value == nil {
+		return 0
+	}
+	return value.(int32)
 }

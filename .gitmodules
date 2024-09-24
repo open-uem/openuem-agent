@@ -1,0 +1,3 @@
+[submodule "internal/nats"]
+	path = internal/nats
+	url = git@github.com:doncicuto/openuem-nats.git

@@ -1,4 +1,4 @@
-package agent
+package report
 
 import (
 	"errors"
@@ -10,12 +10,6 @@ import (
 	"github.com/yusufpapurcu/wmi"
 )
 
-type Antivirus struct {
-	Name      string `json:"name,omitempty"`
-	IsActive  bool   `json:"is_active,omitempty"`
-	IsUpdated bool   `json:"is_updated,omitempty"`
-}
-
 type antivirusProduct struct {
 	DisplayName              string
 	ProductState             int
@@ -23,17 +17,15 @@ type antivirusProduct struct {
 	PathToSignedReportingExe string
 }
 
-func (a *Agent) getAntivirusInfo() {
-	a.Edges.Antivirus = Antivirus{}
-
-	if err := a.Edges.Antivirus.getAntivirusFromWMI(); err != nil {
+func (r *Report) getAntivirusInfo() {
+	if err := r.getAntivirusFromWMI(); err != nil {
 		log.Printf("[ERROR]: could not get antivirus information from WMI AntiVirusProduct: %v", err)
 	} else {
 		log.Printf("[INFO]: antivirus information has been retrieved from WMI AntiVirusProduct")
 	}
 }
 
-func (myAntivirus *Antivirus) getAntivirusFromWMI() error {
+func (r *Report) getAntivirusFromWMI() error {
 	// Get information about the antivirus
 	// Ref: https://gist.github.com/whit3rabbit/02c1b8648635f3552483b7f9a0b459ea
 	var avDst []antivirusProduct
@@ -52,18 +44,18 @@ func (myAntivirus *Antivirus) getAntivirusFromWMI() error {
 		// vendors claiming that they're active and evend updated so we'll have to check if the executables
 		// are installed but for Windows Defender
 		if strings.TrimSpace(v.DisplayName) == "Windows Defender" {
-			myAntivirus.Name = strings.TrimSpace(v.DisplayName)
-			myAntivirus.IsActive = isActive
-			myAntivirus.IsUpdated = isSignatureDBUpdated(v.ProductState)
+			r.Antivirus.Name = strings.TrimSpace(v.DisplayName)
+			r.Antivirus.IsActive = isActive
+			r.Antivirus.IsUpdated = isSignatureDBUpdated(v.ProductState)
 
 			if isActive {
 				break
 			}
 		} else {
 			if isAntivirusInstalled(v) {
-				myAntivirus.Name = v.DisplayName
-				myAntivirus.IsActive = isActive
-				myAntivirus.IsUpdated = isSignatureDBUpdated(v.ProductState)
+				r.Antivirus.Name = v.DisplayName
+				r.Antivirus.IsActive = isActive
+				r.Antivirus.IsUpdated = isSignatureDBUpdated(v.ProductState)
 
 				if isActive {
 					break
@@ -74,11 +66,11 @@ func (myAntivirus *Antivirus) getAntivirusFromWMI() error {
 	return nil
 }
 
-func (a *Agent) logAntivirus() {
+func (r *Report) logAntivirus() {
 	fmt.Printf("\n** 🛡️ Antivirus *****************************************************************************************************\n")
-	fmt.Printf("%-40s |  %v \n", "Antivirus installed", a.Edges.Antivirus.Name)
-	fmt.Printf("%-40s |  %v \n", "Antivirus is active", a.Edges.Antivirus.IsActive)
-	fmt.Printf("%-40s |  %t \n", "Antivirus database is updated", a.Edges.Antivirus.IsUpdated)
+	fmt.Printf("%-40s |  %v \n", "Antivirus installed", r.Antivirus.Name)
+	fmt.Printf("%-40s |  %v \n", "Antivirus is active", r.Antivirus.IsActive)
+	fmt.Printf("%-40s |  %t \n", "Antivirus database is updated", r.Antivirus.IsUpdated)
 }
 
 func isAntivirusActive(productState int) bool {

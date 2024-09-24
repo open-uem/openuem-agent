@@ -1,24 +1,16 @@
-package agent
+package report
 
 import (
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/yusufpapurcu/wmi"
 )
 
-type LoggedOnUser struct {
-	Name      string    `json:"name,omitempty"`
-	LastLogon time.Time `json:"last_logon,omitempty"`
-}
-
 // TODO logon date with WMI shows as protected with *****
 // Another approach: https://gist.github.com/talatham/5772146
-func (a *Agent) getLoggedOnUserInfo() {
-	var err error
-
-	a.Edges.LoggedOnUsers, err = getLoggedOnUserFromWMI()
+func (r *Report) getLoggedOnUserInfo() {
+	err := r.getLoggedOnUserFromWMI()
 	if err != nil {
 		log.Printf("[ERROR]: could not get logged on user information from WMI Win32_NetworkLoginProfile: %v", err)
 	} else {
@@ -26,28 +18,23 @@ func (a *Agent) getLoggedOnUserInfo() {
 	}
 }
 
-func getLoggedOnUserFromWMI() ([]LoggedOnUser, error) {
-	// Get information about the antivirus
-	// Ref: https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-networkloginprofile
-	var userDst []LoggedOnUser
-
+func (r *Report) getLoggedOnUserFromWMI() error {
 	namespace := `root\cimv2`
 	q := "SELECT Name, LastLogon from Win32_NetworkLoginProfile"
-	err := wmi.QueryNamespace(q, &userDst, namespace)
+	err := wmi.QueryNamespace(q, &r.LoggedOnUsers, namespace)
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	return userDst, nil
+	return nil
 }
 
-func (a *Agent) logLoggedOnUsers() {
+func (r *Report) logLoggedOnUsers() {
 	fmt.Printf("\n** 👥 Logged On Users **********************************************************************************************\n")
-	if len(a.Edges.LoggedOnUsers) > 0 {
-		for i, v := range a.Edges.LoggedOnUsers {
+	if len(r.LoggedOnUsers) > 0 {
+		for i, v := range r.LoggedOnUsers {
 			fmt.Printf("%-40s |  %v \n", "Name", v.Name)
 			fmt.Printf("%-40s |  %s \n", "Last logon", v.LastLogon)
-			if len(a.Edges.Printers) > 1 && i+1 != len(a.Edges.Printers) {
+			if len(r.Printers) > 1 && i+1 != len(r.Printers) {
 				fmt.Printf("---------------------------------------------------------------------------------------------------------------------\n")
 			}
 		}

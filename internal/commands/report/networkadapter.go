@@ -1,4 +1,4 @@
-package agent
+package report
 
 import (
 	"fmt"
@@ -6,22 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/doncicuto/openuem_nats"
 	"github.com/yusufpapurcu/wmi"
 )
-
-type NetworkAdapter struct {
-	Name              string    `json:"name,omitempty"`
-	MACAddress        string    `json:"mac_address,omitempty"`
-	Addresses         string    `json:"addresses,omitempty"`
-	Subnet            string    `json:"subnet,omitempty"`
-	DefaultGateway    string    `json:"default_gateway,omitempty"`
-	DNSServers        string    `json:"dns_servers,omitempty"`
-	DNSDomain         string    `json:"dns_domain,omitempty"`
-	DHCPEnabled       bool      `json:"dhcp_enabled,omitempty"`
-	DHCPLeaseObtained time.Time `json:"dhcp_lease_obtained,omitempty"`
-	DHCPLeaseExpired  time.Time `json:"dhcp_lease_expired,omitempty"`
-	Speed             string    `json:"speed,omitempty"`
-}
 
 type networkAdapterInfo struct {
 	Index               uint32
@@ -42,9 +29,8 @@ type networkAdapterConfiguration struct {
 	IPSubnet             []string
 }
 
-func (a *Agent) getNetworkAdaptersInfo() {
-	var err error
-	a.Edges.NetworkAdapters, err = getNetworkAdaptersFromWMI()
+func (r *Report) getNetworkAdaptersInfo() {
+	err := r.getNetworkAdaptersFromWMI()
 	if err != nil {
 		log.Printf("[ERROR]: could not get network adapters information from WMI Win32_NetworkAdapter: %v", err)
 	} else {
@@ -52,10 +38,10 @@ func (a *Agent) getNetworkAdaptersInfo() {
 	}
 }
 
-func (a *Agent) logNetworkAdapters() {
+func (r *Report) logNetworkAdapters() {
 	fmt.Printf("\n** 📶 Network adapters (Active) *************************************************************************************\n")
-	if len(a.Edges.NetworkAdapters) > 0 {
-		for i, v := range a.Edges.NetworkAdapters {
+	if len(r.NetworkAdapters) > 0 {
+		for i, v := range r.NetworkAdapters {
 			fmt.Printf("%-40s |  %s \n", "Network Interface", v.Name)
 			fmt.Printf("%-40s |  %s \n", "MAC Address", v.MACAddress)
 			fmt.Printf("%-40s |  %s \n", "IP Addresses", v.Addresses)
@@ -70,7 +56,7 @@ func (a *Agent) logNetworkAdapters() {
 			}
 			fmt.Printf("%-40s |  %s \n", "Speed", v.Speed)
 
-			if len(a.Edges.NetworkAdapters) > 1 && i+1 != len(a.Edges.NetworkAdapters) {
+			if len(r.NetworkAdapters) > 1 && i+1 != len(r.NetworkAdapters) {
 				fmt.Printf("---------------------------------------------------------------------------------------------------------------------\n")
 			}
 		}
@@ -80,22 +66,20 @@ func (a *Agent) logNetworkAdapters() {
 
 }
 
-func getNetworkAdaptersFromWMI() ([]NetworkAdapter, error) {
+func (r *Report) getNetworkAdaptersFromWMI() error {
 	// Get active network adapters info
 	// Ref: https://devblogs.microsoft.com/scripting/using-powershell-to-find-connected-network-adapters/
 	// Ref: https://stackoverflow.com/questions/7822708/netaddresses-always-null-in-win32-networkadapter-query
 	var networkInfoDst []networkAdapterInfo
 
-	myNetworkAdapters := []NetworkAdapter{}
-
 	namespace := `root\cimv2`
 	qNetwork := "SELECT Index, MACAddress, Name, NetConnectionStatus, Speed FROM Win32_NetworkAdapter"
 	err := wmi.QueryNamespace(qNetwork, &networkInfoDst, namespace)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	for _, v := range networkInfoDst {
-		myNetworkAdapter := NetworkAdapter{}
+		myNetworkAdapter := openuem_nats.NetworkAdapter{}
 
 		if v.NetConnectionStatus == 2 {
 			var networkAdapterDst []networkAdapterConfiguration
@@ -117,11 +101,11 @@ func getNetworkAdaptersFromWMI() ([]NetworkAdapter, error) {
 			qNetwork := fmt.Sprintf("SELECT DefaultIPGateway, DHCPEnabled, DHCPLeaseExpires, DHCPLeaseObtained, DNSDomain, DNSServerSearchOrder, IPAddress, IPSubnet FROM Win32_NetworkAdapterConfiguration WHERE Index = %d", v.Index)
 			err = wmi.QueryNamespace(qNetwork, &networkAdapterDst, namespace)
 			if err != nil {
-				return nil, err
+				return err
 			}
 
 			if len(networkAdapterDst) != 1 {
-				return nil, fmt.Errorf("got wrong network adapter configuration result set")
+				return fmt.Errorf("got wrong network adapter configuration result set")
 			}
 			v := &networkAdapterDst[0]
 
@@ -142,9 +126,9 @@ func getNetworkAdaptersFromWMI() ([]NetworkAdapter, error) {
 				myNetworkAdapter.DHCPLeaseExpired = v.DHCPLeaseExpires.Local()
 			}
 
-			myNetworkAdapters = append(myNetworkAdapters, myNetworkAdapter)
+			r.NetworkAdapters = append(r.NetworkAdapters, myNetworkAdapter)
 		}
 	}
 
-	return myNetworkAdapters, nil
+	return nil
 }

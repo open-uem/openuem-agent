@@ -25,20 +25,20 @@ DisableDirPage=yes
 DisableProgramGroupPage=yes
 DirExistsWarning=no
 PrivilegesRequired=admin
-OutputBaseFilename=openuem-agent
+OutputBaseFilename=openuem-agent-setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon="{app}\assets\openuem.ico"
 
 [Languages]
-Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
+Name: "english"; MessagesFile: "Languages\English.isl"
+Name: "spanish"; MessagesFile: "Languages\Spanish.isl"
 
 [Files]
 Source: "C:\Users\mcabr\go\src\github.com\doncicuto\openuem-agent\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Users\mcabr\go\src\github.com\doncicuto\openuem-agent\innosetup\assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
-
+Source: "{src}\ca.cer"; DestDir: "{app}\certificates"; Flags: external ignoreversion
 [Dirs]
 Name: "{app}\logs";Permissions: users-modify
 Name: "{app}\config";Permissions: users-modify
@@ -55,24 +55,25 @@ Filename: {sys}\sc.exe; Parameters: "description openuem-agent ""OpenUEM Agent s
 Filename: {sys}\sc.exe; Parameters: "start openuem-agent" ; Flags: runhidden
 
 [UninstallRun]
-Filename: {sys}\sc.exe; Parameters: "stop openuem-agent" ; Flags: runhidden
-Filename: {sys}\sc.exe; Parameters: "delete openuem-agent" ; Flags: runhidden
+Filename: {sys}\sc.exe; Parameters: "stop openuem-agent" ; RunOnceId: "StopService"; Flags: runhidden
+Filename: {sys}\sc.exe; Parameters: "delete openuem-agent" ; RunOnceId: "DelService"; Flags: runhidden
 
 [Code]
 var
   InputQueryWizardPage: TInputQueryWizardPage;
+  
 
 procedure InitializeWizard;
 var  
   AfterID: Integer;
 begin
-  WizardForm.LicenseAcceptedRadio.Checked := True;
+  WizardForm.LicenseAcceptedRadio.Checked := False;
   AfterID := wpSelectTasks;
     
-  InputQueryWizardPage := CreateInputQueryPage(AfterID, 'Required configuration', 'Specify where is the OpenUEM server located', 'Example: https://example.com:4222');
-  InputQueryWizardPage.Add('&Server Url:', False);
-  InputQueryWizardPage.Values[0] := 'http://localhost:4222'
-  AfterID := InputQueryWizardPage.ID;  
+  InputQueryWizardPage := CreateInputQueryPage(AfterID,CustomMessage('RequiredConfiguration'),CustomMessage('ServerURL'),CustomMessage('ServerURLExample'));
+  InputQueryWizardPage.Add('&NATS Server Url:', False);
+  InputQueryWizardPage.Values[0] := 'tls://s3cr3t@localhost:4433'
+  AfterID := InputQueryWizardPage.ID;   
 end;
 
 function MyServerUrl(Param: String): String;

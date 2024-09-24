@@ -1,254 +1,112 @@
 package agent
 
 import (
-	"encoding/json"
-	"fmt"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
-	"github.com/doncicuto/openuem-agent/assets/icons"
-	"github.com/getlantern/systray"
+	"github.com/doncicuto/openuem_nats"
 	"github.com/go-co-op/gocron/v2"
-	"github.com/google/uuid"
-	"github.com/nats-io/nats.go"
-	"github.com/scjalliance/comshim"
-	"golang.org/x/sys/windows"
 )
 
-type Report struct {
-	ID           string    `json:"id,omitempty"`
-	OS           string    `json:"os,omitempty"`
-	Hostname     string    `json:"hostname,omitempty"`
-	Version      string    `json:"version,omitempty"`
-	FirstContact time.Time `json:"first_contact,omitempty"`
-	LastContact  time.Time `json:"last_contact,omitempty"`
-	Edges        Edges     `json:"edges"`
-}
-
 type Agent struct {
-	Report
 	Config         Config
 	TaskScheduler  gocron.Scheduler
-	NatsConnection *nats.Conn
+	AgentJob       gocron.Job
+	NATSConnectJob gocron.Job
+	MessageServer  *openuem_nats.MessageServer
 }
 
-type Edges struct {
-	Computer        Computer         `json:"computer,omitempty"`
-	Antivirus       Antivirus        `json:"antivirus,omitempty"`
-	OperatingSystem OperatingSystem  `json:"operatingsystem,omitempty"`
-	LogicalDisks    []LogicalDisk    `json:"logicaldisks,omitempty"`
-	Monitors        []Monitor        `json:"monitors,omitempty"`
-	Printers        []Printer        `json:"printers,omitempty"`
-	Shares          []Share          `json:"shares,omitempty"`
-	SystemUpdate    SystemUpdate     `json:"systemupdate,omitempty"`
-	NetworkAdapters []NetworkAdapter `json:"networkadapters,omitempty"`
-	Applications    []Application    `json:"apps,omitempty"`
-	LoggedOnUsers   []LoggedOnUser   `json:"loggedonusers,omitempty"`
+func New() Agent {
+	var err error
+	agent := Agent{}
+
+	agent.TaskScheduler, err = gocron.NewScheduler()
+	if err != nil {
+		log.Fatalf("[FATAL]: could not create the scheduler: %v", err)
+	}
+
+	agent.ReadConfig()
+
+	/* agent.MessageServer = openuem_nats.New() */
+
+	return agent
+}
+
+func (a *Agent) Start() {
+	if a.Config.UUID == "" {
+		a.SetInitialConfig()
+	}
+
+	/* else {
+		a.ID = a.Config.UUID
+		a.FirstContact = a.Config.FirstExecutionDate
+		a.LastContact = time.Now()
+	} */
+
+	// Start task scheduler
+	a.TaskScheduler.Start()
+	log.Println("[INFO]: task scheduler has started!")
+
+	// Try to connect to NATS server and start a reconnect job if failed
+	if err := a.MessageServer.Connect(); err != nil {
+		a.startNATSConnectJob()
+		return
+	}
+
+	// Run agent if all is ready
+	/* 	if a.NatsConnection != nil {
+		a.Run(true)
+		a.startAgentJob()
+	} */
 }
 
 func (a *Agent) Run(force bool) {
-	var err error
 	start := time.Now()
 
 	log.Println("[INFO]: agent is running...")
 
-	// Get the information
-	a.getInfoFromOS()
+	// TODO - maybe send report if some important properties have changed (like antivirus, windows update..)
+	/* 	if !a.Config.DidIReportToday() || force {
+	   		// Get the information
+	   		a.getInfoFromOS()
 
-	a.LastContact = start
+	   		a.LastContact = start
+	   		a.Enabled = a.Config.Enabled
 
-	// Create JSON
-	data, err := json.Marshal(a.Report)
-	if err != nil {
-		log.Printf("[ERROR]: could not marshal report data %v\n", err)
-	}
+	   		// Create JSON
+	   		data, err := json.Marshal(a.Report)
+	   		if err != nil {
+	   			log.Printf("[ERROR]: could not marshal report data %v\n", err)
+	   		}
 
-	// Print the information to stdout
-	a.printAgent()
-
-	// Try to connect to NATS server if no connection is ready
-	if a.NatsConnection == nil {
-		if err := a.connect(); err != nil {
-			log.Printf("[ERROR]: could not connect with message broker: %v\n", err)
-		} else {
-			log.Println("[INFO]: connection established with NATS server")
-			a.subscribeToReportTrigger()
-		}
-	}
-
-	// Decide if we've to sent the report to the server
-	if a.NatsConnection != nil {
-		// TODO - maybe send report if some important properties have changed (like antivirus, windows update..)
-		if !a.Config.DidIReportToday() || force {
-			// Send NATS information
-			if a.NatsConnection != nil {
-				// TODO - set timeout for waiting for NATS process
-				if _, err := a.NatsConnection.Request("update", data, 5*time.Minute); err != nil {
-					log.Printf("[ERROR]: could not sent report to server %v\n", err)
-				} else {
-					a.Config.LastReportDate = start
-					log.Println("[INFO]: report was sent to server!")
-				}
-			}
-		} else {
-			log.Println("[INFO]: agent has already reported today skip sending to server")
-		}
-	}
-
+	   		// Send NATS information
+	   		if a.NatsConnection != nil {
+	   			// TODO - set timeout for waiting for NATS process as a constant
+	   			if _, err := a.NatsConnection.Request("update", data, 5*time.Minute); err != nil {
+	   				log.Printf("[ERROR]: could not sent report to server %v\n", err)
+	   			} else {
+	   				a.Config.LastReportDate = start
+	   				log.Println("[INFO]: report was sent to server!")
+	   			}
+	   		} else {
+	   			log.Printf("[ERROR]: no connection with server is available %v\n", err)
+	   		}
+	   	} else {
+	   		log.Println("[INFO]: agent has already reported today skip sending to server")
+	   	}
+	*/
 	log.Printf("[INFO]: agent execution took %v\n", time.Since(start))
 
 	a.Config.LastExecutionDate = start
 	a.Config.WriteConfig()
 }
 
-func (a *Agent) getInfoFromOS() {
-	// Prepare COM
-	comshim.Add(1)
-	defer comshim.Done()
-
-	a.Version = "0.0.1-alpha"
-	a.OS = "windows"
-	computerName, err := windows.ComputerName()
-	if err == nil {
-		a.Hostname = computerName
-	}
-
-	// These operations don't benefit from goroutines
-	a.getComputerInfo()
-	a.getOSInfo()
-	a.getLogicalDisksInfo()
-	a.getMonitorsInfo()
-	a.getPrintersInfo()
-	a.getSharesInfo()
-
-	if !a.Edges.OperatingSystem.isWindowsServer() {
-		a.getAntivirusInfo()
-	}
-
-	a.getSystemUpdateInfo()
-	a.getNetworkAdaptersInfo()
-	a.getApplicationsInfo()
-}
-
-func (a *Agent) printAgent() {
-	fmt.Printf("\n** 🕵  Agent *********************************************************************************************************\n")
-	fmt.Printf("%-40s |  %s\n", "Computer Name", a.Hostname)
-	fmt.Printf("%-40s |  %s\n", "Version", a.Version)
-	fmt.Printf("%-40s |  %s\n", "Agent ID", a.ID)
-	fmt.Printf("%-40s |  %s\n", "Operating System", a.OS)
-	fmt.Printf("%-40s |  %s\n", "Last report", a.LastContact)
-
-	a.logComputer()
-	a.logOS()
-	a.logLogicalDisks()
-	a.logMonitors()
-	a.logPrinters()
-	a.logShares()
-	if !a.Edges.OperatingSystem.isWindowsServer() {
-		a.logAntivirus()
-	}
-	a.logSystemUpdate()
-	a.logNetworkAdapters()
-	a.logApplications()
-}
-
-func (a *Agent) Test() {
-	log.Println("Test!")
-}
-
-func (a *Agent) Start() {
-	now := time.Now()
-
-	// Read config from JSON
-	a.Config.ReadConfig()
-	if a.Config.UUID == "" {
-		id := uuid.New()
-		a.Config.UUID = id.String()
-		a.Config.ExecuteEveryXMinutes = 2
-		a.ID = id.String()
-		a.Config.FirstExecutionDate = now
-		a.FirstContact = now
-		a.LastContact = now
-		a.Config.WriteConfig()
-	} else {
-		a.ID = a.Config.UUID
-		a.FirstContact = a.Config.FirstExecutionDate
-		a.LastContact = now
-	}
-
-	// Run at agent start
-	a.Run(true)
-
-	// Schedule task to run agent every X minutes according to config
-	a.startScheduler()
-
-	// TODO REMOVE Old code, agent could start a systray but the service
-	/* systray.Run(a.onReady, a.OnQuit) */
-}
-
-func (a *Agent) onReady() {
-	// Agent launches and try to add menu icon to systray
-	// Credits: https://owenmoore.hashnode.dev/build-tray-gui-desktop-application-go
-
-	icon, err := icons.Data()
-	if err != nil {
-		log.Fatalf("[FATAL]: icon could not be added to systray: %v", err)
-	}
-	systray.SetIcon(*icon)
-
-	mRun := systray.AddMenuItem("Run Inventory", "Run Inventory and report it to OpenUEM server")
-	mQuit := systray.AddMenuItem("Quit", "Quit OpenUEM")
-
-	// Run at agent start
-	a.Run(true)
-
-	// Schedule task to run agent every X minutes according to config
-	a.startScheduler()
-
-	// Wait for user actions on systray
-	sigc := make(chan os.Signal, 1)
-	signal.Notify(sigc, syscall.SIGTERM, syscall.SIGINT)
-	for {
-		select {
-		case <-mRun.ClickedCh:
-			log.Println("[INFO]: user force a run of the OpenUEM Agent")
-			force := true
-			a.Run(force)
-		case <-mQuit.ClickedCh:
-			systray.Quit()
-		case <-sigc:
-			systray.Quit()
-		}
-	}
-}
-
-func (a *Agent) OnQuit() {
-	a.stopScheduler()
-	a.NatsConnection.Close()
-	log.Println("[INFO]: agent has exited")
-}
-
-func (a *Agent) startScheduler() {
+func (a *Agent) startAgentJob() error {
 	var err error
-	a.TaskScheduler, err = gocron.NewScheduler()
-	if err != nil {
-		log.Fatalf("[FATAL]: could not create the scheduler: %v", err)
-	}
-
-	// Get task duration from config
-	var taskEveryMinutes int = 5
-	if a.Config.ExecuteEveryXMinutes > 0 {
-		taskEveryMinutes = a.Config.ExecuteEveryXMinutes
-	}
-	taskDuration := time.Duration(taskEveryMinutes) * time.Minute
-
-	// Create new job
-	_, err = a.TaskScheduler.NewJob(
+	// Create task for running the agent
+	a.AgentJob, err = a.TaskScheduler.NewJob(
 		gocron.DurationJob(
-			time.Duration(taskDuration),
+			time.Duration(time.Duration(a.Config.ExecuteEveryXMinutes)*time.Minute),
 		),
 		gocron.NewTask(
 			func() {
@@ -257,32 +115,33 @@ func (a *Agent) startScheduler() {
 		),
 	)
 	if err != nil {
-		log.Fatalf("[FATAL]: could not start the scheduler: %v", err)
-	} else {
-		log.Printf("[INFO]: new job has been scheduled every %d minutes", taskEveryMinutes)
+		log.Fatalf("[FATAL]: could not start the agent job: %v", err)
+		return err
 	}
-
-	// Start scheduler
-	a.TaskScheduler.Start()
-	log.Println("[INFO]: task scheduler has started!")
+	log.Printf("[INFO]: new agent job has been scheduled every %d minutes", a.Config.ExecuteEveryXMinutes)
+	return nil
 }
 
-func (a *Agent) stopScheduler() {
-	if err := a.TaskScheduler.Shutdown(); err != nil {
-		log.Printf("[ERROR]: there was an error trying to shutdown the task scheduler %v", err)
-	} else {
-		log.Println("[INFO]: task scheduler has been shutdown")
+func (a *Agent) startNATSConnectJob() error {
+	var err error
+	// Create task for running the agent
+	a.NATSConnectJob, err = a.TaskScheduler.NewJob(
+		gocron.DurationJob(
+			time.Duration(5*time.Minute),
+		),
+		gocron.NewTask(
+			func() {
+				err := a.MessageServer.Connect()
+				if err == nil {
+					a.TaskScheduler.RemoveJob(a.NATSConnectJob.ID())
+				}
+			},
+		),
+	)
+	if err != nil {
+		log.Fatalf("[FATAL]: could not start the NATS connect job: %v", err)
+		return err
 	}
-}
-
-func (a *Agent) subscribeToReportTrigger() {
-	// Subscribe to receive trigger to run agent
-	a.NatsConnection.Subscribe(fmt.Sprintf("trigger-%s", a.ID), func(m *nats.Msg) {
-		if string(m.Data) == a.ID {
-			log.Println("[INFO]: a report has been triggered from OpenUEM server")
-			a.Run(true)
-		} else {
-			log.Printf("[ERROR]: received wrong message from NATS %s\n", m.Data)
-		}
-	})
+	log.Printf("[INFO]: new NATS connect job has been scheduled every %d minutes", a.Config.ExecuteEveryXMinutes)
+	return nil
 }

@@ -6,11 +6,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/doncicuto/openuem-agent/internal/utils"
+	"github.com/google/uuid"
 	"gopkg.in/ini.v1"
 )
 
 const JSON_CONFIG = "openuem.ini"
+const SCHEDULETIME = 60
 
 type Config struct {
 	ServerUrl            string    `ini:"ServerUrl"`
@@ -19,10 +20,12 @@ type Config struct {
 	LastExecutionDate    time.Time `ini:"LastExecutionDate" json:"last_execution_date"`
 	LastReportDate       time.Time `ini:"LastReportDate" json:"last_report_date"`
 	ExecuteEveryXMinutes int       `ini:"ExecuteEveryXMinutes" json:"execute_every_x_minutes"`
+	Enabled              bool      `ini:"enable" json:"enable"`
 }
 
-func (c *Config) ReadConfig() {
-	cwd, err := utils.Getwd()
+func (a *Agent) ReadConfig() {
+	var err error
+	cwd, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("could not get cwd: %v", err)
 	}
@@ -45,7 +48,7 @@ func (c *Config) ReadConfig() {
 	}
 
 	// Map content to structure
-	err = cfg.Section("Config").MapTo(&c)
+	err = cfg.Section("Config").MapTo(&a.Config)
 	if err != nil {
 		log.Fatalf("could not parse ini file: %v", err)
 	}
@@ -58,7 +61,7 @@ func (c *Config) ReadConfig() {
 }
 
 func (c *Config) WriteConfig() {
-	cwd, err := utils.Getwd()
+	cwd, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("could not get cwd: %v", err)
 	}
@@ -83,5 +86,14 @@ func (c *Config) WriteConfig() {
 }
 
 func (c Config) DidIReportToday() bool {
-	return utils.DateEqual(c.LastReportDate, c.LastExecutionDate)
+	return time.Since(c.LastReportDate).Hours() > 24
+}
+
+func (a *Agent) SetInitialConfig() {
+	now := time.Now()
+	id := uuid.New()
+	a.Config.UUID = id.String()
+	a.Config.ExecuteEveryXMinutes = SCHEDULETIME
+	a.Config.FirstExecutionDate = now
+	a.Config.WriteConfig()
 }

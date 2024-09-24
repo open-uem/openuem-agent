@@ -3,12 +3,10 @@ package icons
 import (
 	"os"
 	"path/filepath"
-
-	"github.com/doncicuto/openuem-agent/internal/utils"
 )
 
 func Data() (*[]byte, error) {
-	path, err := utils.Getwd()
+	path, err := os.Getwd()
 	if err != nil {
 		return nil, err
 	}

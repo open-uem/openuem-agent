@@ -1,18 +1,12 @@
-package agent
+package report
 
 import (
 	"fmt"
 	"log"
 
+	"github.com/doncicuto/openuem_nats"
 	"github.com/yusufpapurcu/wmi"
 )
-
-type Printer struct {
-	Name      string `json:"name,omitempty"`
-	Port      string `json:"port,omitempty"`
-	IsDefault bool   `json:"is_default,omitempty"`
-	IsNetwork bool   `json:"is_network,omitempty"`
-}
 
 type printerStatus uint16
 
@@ -37,9 +31,8 @@ const (
 	PRINTER_STATUS_MANUAL_FEED
 )
 
-func (a *Agent) getPrintersInfo() {
-	var err error
-	a.Edges.Printers, err = getPrintersFromWMI()
+func (r *Report) getPrintersInfo() {
+	err := r.getPrintersFromWMI()
 	if err != nil {
 		log.Printf("[ERROR]: could not get printers information from WMI Win32_Printer: %v", err)
 	} else {
@@ -47,15 +40,15 @@ func (a *Agent) getPrintersInfo() {
 	}
 }
 
-func (a *Agent) logPrinters() {
+func (r *Report) logPrinters() {
 	fmt.Printf("\n** 🖨️ Printers ******************************************************************************************************\n")
-	if len(a.Edges.Printers) > 0 {
-		for i, v := range a.Edges.Printers {
+	if len(r.Printers) > 0 {
+		for i, v := range r.Printers {
 			fmt.Printf("%-40s |  %s \n", "Name", v.Name)
 			fmt.Printf("%-40s |  %s \n", "Port", v.Port)
 			fmt.Printf("%-40s |  %t \n", "Is Default Printer", v.IsDefault)
 			fmt.Printf("%-40s |  %t \n", "Is Network Printer", v.IsNetwork)
-			if len(a.Edges.Printers) > 1 && i+1 != len(a.Edges.Printers) {
+			if len(r.Printers) > 1 && i+1 != len(r.Printers) {
 				fmt.Printf("---------------------------------------------------------------------------------------------------------------------\n")
 			}
 		}
@@ -64,7 +57,7 @@ func (a *Agent) logPrinters() {
 	}
 }
 
-func getPrintersFromWMI() ([]Printer, error) {
+func (r *Report) getPrintersFromWMI() error {
 	// Get Printers information
 	// Ref: https://learn.microsoft.com/en-us/windows/win32/wmicoreprov/wmimonitorid
 	var printersDst []struct {
@@ -75,20 +68,20 @@ func getPrintersFromWMI() ([]Printer, error) {
 		printerStatus
 	}
 
-	myPrinters := []Printer{}
+	r.Printers = []openuem_nats.Printer{}
 	namespace := `root\cimv2`
 	qPrinters := "SELECT Name, Default, PortName, PrinterStatus, Network FROM Win32_Printer"
 	err := wmi.QueryNamespace(qPrinters, &printersDst, namespace)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	for _, v := range printersDst {
-		myPrinter := Printer{}
+		myPrinter := openuem_nats.Printer{}
 		myPrinter.Name = v.Name
 		myPrinter.Port = v.PortName
 		myPrinter.IsDefault = v.Default
 		myPrinter.IsNetwork = v.Network
-		myPrinters = append(myPrinters, myPrinter)
+		r.Printers = append(r.Printers, myPrinter)
 	}
-	return myPrinters, nil
+	return nil
 }

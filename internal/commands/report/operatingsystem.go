@@ -1,4 +1,4 @@
-package agent
+package report
 
 import (
 	"errors"
@@ -7,19 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/doncicuto/openuem_nats"
 	"github.com/yusufpapurcu/wmi"
 	"golang.org/x/sys/windows/registry"
 )
-
-type OperatingSystem struct {
-	Version        string    `json:"version,omitempty"`
-	Description    string    `json:"description,omitempty"`
-	InstallDate    time.Time `json:"install_date,omitempty"`
-	Edition        string    `json:"edition,omitempty"`
-	Arch           string    `json:"arch,omitempty"`
-	Username       string    `json:"username,omitempty"`
-	LastBootUpTime time.Time `json:"last_bootup_time,omitempty"`
-}
 
 type windowsVersion struct {
 	name    string
@@ -28,42 +19,42 @@ type windowsVersion struct {
 
 const MAX_DISPLAYNAME_LENGTH = 256
 
-func (a *Agent) getOSInfo() {
-	a.Edges.OperatingSystem = OperatingSystem{}
-	if err := a.Edges.OperatingSystem.getOperatingSystemInfo(); err != nil {
+func (r *Report) getOSInfo() {
+	r.OperatingSystem = openuem_nats.OperatingSystem{}
+	if err := r.getOperatingSystemInfo(); err != nil {
 		log.Printf("[ERROR]: could not get operating system info from WMI Win32_OperatingSystem: %v", err)
 	} else {
 		log.Printf("[INFO]: operating system information has been retrieved using WMI Win32_OperatingSystem")
 	}
-	if err := a.Edges.OperatingSystem.getEdition(); err != nil {
+	if err := r.getEdition(); err != nil {
 		log.Printf("[ERROR]: could not get current version from Windows Registry: %v", err)
 	} else {
 		log.Printf("[INFO]: current version has been retrieved from Windows Registry")
 	}
-	if err := a.Edges.OperatingSystem.getArch(); err != nil {
+	if err := r.getArch(); err != nil {
 		log.Printf("[ERROR]: could not get windows arch from Windows Registry: %v", err)
 	} else {
 		log.Printf("[INFO]: windows arch has been retrieved from Windows Registry")
 	}
-	if err := a.Edges.OperatingSystem.getUsername(); err != nil {
+	if err := r.getUsername(); err != nil {
 		log.Printf("[ERROR]: could not get windows username from WMI Win32_Computer: %v", err)
 	} else {
 		log.Printf("[INFO]: windows username has been retrieved from WMI Win32_Computer")
 	}
 }
 
-func (a *Agent) logOS() {
+func (r *Report) logOS() {
 	fmt.Printf("\n** 📔 Operating System **********************************************************************************************\n")
-	fmt.Printf("%-40s |  %s \n", "Windows Version", a.Edges.OperatingSystem.Version)
-	fmt.Printf("%-40s |  %s \n", "Windows Description", a.Edges.OperatingSystem.Description)
-	fmt.Printf("%-40s |  %s \n", "Install Date", a.Edges.OperatingSystem.InstallDate)
-	fmt.Printf("%-40s |  %s \n", "Windows Edition", a.Edges.OperatingSystem.Edition)
-	fmt.Printf("%-40s |  %s \n", "Windows Architecture", a.Edges.OperatingSystem.Arch)
-	fmt.Printf("%-40s |  %s \n", "Last Boot Up Time", a.Edges.OperatingSystem.LastBootUpTime)
-	fmt.Printf("%-40s |  %s \n", "User Name", a.Edges.OperatingSystem.Username)
+	fmt.Printf("%-40s |  %s \n", "Windows Version", r.OperatingSystem.Version)
+	fmt.Printf("%-40s |  %s \n", "Windows Description", r.OperatingSystem.Description)
+	fmt.Printf("%-40s |  %s \n", "Install Date", r.OperatingSystem.InstallDate)
+	fmt.Printf("%-40s |  %s \n", "Windows Edition", r.OperatingSystem.Edition)
+	fmt.Printf("%-40s |  %s \n", "Windows Architecture", r.OperatingSystem.Arch)
+	fmt.Printf("%-40s |  %s \n", "Last Boot Up Time", r.OperatingSystem.LastBootUpTime)
+	fmt.Printf("%-40s |  %s \n", "User Name", r.OperatingSystem.Username)
 }
 
-func (myOs *OperatingSystem) getOperatingSystemInfo() error {
+func (r *Report) getOperatingSystemInfo() error {
 	var osDst []struct {
 		Version        string
 		Caption        string
@@ -83,23 +74,23 @@ func (myOs *OperatingSystem) getOperatingSystemInfo() error {
 	}
 
 	v := &osDst[0]
-	myOs.Version = "Undetected"
+	r.OperatingSystem.Version = "Undetected"
 	if v.Version != "" {
 		nt, err := getWindowsVersion(v.Version)
 		if err != nil {
 			return err
 		}
-		myOs.Version = fmt.Sprintf("%s %s", nt.name, nt.version)
+		r.OperatingSystem.Version = fmt.Sprintf("%s %s", nt.name, nt.version)
 	}
 
-	myOs.Description = v.Caption
-	myOs.InstallDate = v.InstallDate.Local()
-	myOs.LastBootUpTime = v.LastBootUpTime.Local()
+	r.OperatingSystem.Description = v.Caption
+	r.OperatingSystem.InstallDate = v.InstallDate.Local()
+	r.OperatingSystem.LastBootUpTime = v.LastBootUpTime.Local()
 
 	return nil
 }
 
-func (myOs *OperatingSystem) getEdition() error {
+func (r *Report) getEdition() error {
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows NT\CurrentVersion`, registry.QUERY_VALUE)
 	if err != nil {
 		return err
@@ -110,12 +101,12 @@ func (myOs *OperatingSystem) getEdition() error {
 	if err != nil {
 		return err
 	}
-	myOs.Edition = s
+	r.OperatingSystem.Edition = s
 	return nil
 }
 
-func (myOs *OperatingSystem) getArch() error {
-	myOs.Arch = "Undetected"
+func (r *Report) getArch() error {
+	r.OperatingSystem.Arch = "Undetected"
 
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Session Manager\Environment`, registry.QUERY_VALUE)
 	if err != nil {
@@ -129,19 +120,19 @@ func (myOs *OperatingSystem) getArch() error {
 	}
 	switch s {
 	case "AMD64":
-		myOs.Arch = "64 bits"
+		r.OperatingSystem.Arch = "64 bits"
 	case "x86":
-		myOs.Arch = "32 bits"
+		r.OperatingSystem.Arch = "32 bits"
 	}
 	return nil
 }
 
-func (myOs *OperatingSystem) getUsername() error {
+func (r *Report) getUsername() error {
 	username, err := getLoggedOnUsername()
 	if err != nil {
 		return err
 	}
-	myOs.Username = strings.TrimSpace(username)
+	r.OperatingSystem.Username = strings.TrimSpace(username)
 	return nil
 }
 
@@ -164,8 +155,8 @@ func getLoggedOnUsername() (string, error) {
 	return strings.TrimSpace(v.Username), nil
 }
 
-func (myOs *OperatingSystem) isWindowsServer() bool {
-	return strings.HasPrefix(myOs.Version, "Windows Server")
+func (r *Report) isWindowsServer() bool {
+	return strings.HasPrefix(r.OperatingSystem.Version, "Windows Server")
 }
 
 func getWindowsVersion(version string) (*windowsVersion, error) {

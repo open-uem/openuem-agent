@@ -1,23 +1,13 @@
-package agent
+package report
 
 import (
 	"fmt"
 	"log"
 	"strings"
 
-	"github.com/doncicuto/openuem-agent/internal/utils"
+	"github.com/doncicuto/openuem_nats"
 	"github.com/yusufpapurcu/wmi"
 )
-
-type LogicalDisk struct {
-	Label                 string `json:"label,omitempty"`
-	Usage                 int8   `json:"usage,omitempty"`
-	Filesystem            string `json:"filesystem,omitempty"`
-	SizeInUnits           string `json:"size_in_units,omitempty"`
-	RemainingSpaceInUnits string `json:"remaining_space_in_units,omitempty"`
-	VolumeName            string `json:"volume_name,omitempty"`
-	BitLockerStatus       string `json:"bitlocker_status,omitempty"`
-}
 
 type logicalDisk struct {
 	DeviceID   string
@@ -34,18 +24,26 @@ type bitLockerStatus struct {
 	EncryptionMethod int8
 }
 
-func (a *Agent) getLogicalDisksInfo() {
+func (r *Report) getLogicalDisksInfo() {
+	err := r.getLogicalDisksFromWMI()
+	if err != nil {
+		log.Printf("[ERROR]: could not get logical disks information from WMI Win32_LogicalDisk: %v", err)
+	} else {
+		log.Printf("[INFO]: logical disks information has been retrieved from WMI Win32_LogicalDisk")
+	}
+}
+
+func (r *Report) getLogicalDisksFromWMI() error {
 	var disksDst []logicalDisk
-	myDisks := []LogicalDisk{}
 
 	namespace := `root\cimv2`
 	qLogicalDisk := "SELECT DeviceID, DriveType, FreeSpace, Size, FileSystem, VolumeName FROM Win32_LogicalDisk"
 	err := wmi.QueryNamespace(qLogicalDisk, &disksDst, namespace)
 	if err != nil {
-		log.Printf("[ERROR]: could not get logical disks information from WMI Win32_LogicalDisk: %v", err)
+		return err
 	}
 	for _, v := range disksDst {
-		myDisk := LogicalDisk{}
+		myDisk := openuem_nats.LogicalDisk{}
 
 		if v.Size != 0 {
 			myDisk.Label = strings.TrimSpace(v.DeviceID)
@@ -53,22 +51,20 @@ func (a *Agent) getLogicalDisksInfo() {
 			myDisk.Filesystem = strings.TrimSpace(v.FileSystem)
 			myDisk.VolumeName = strings.TrimSpace(v.VolumeName)
 
-			myDisk.SizeInUnits = utils.ConvertBytesToUnits(v.Size)
-			myDisk.RemainingSpaceInUnits = utils.ConvertBytesToUnits(v.FreeSpace)
+			myDisk.SizeInUnits = convertBytesToUnits(v.Size)
+			myDisk.RemainingSpaceInUnits = convertBytesToUnits(v.FreeSpace)
 			myDisk.BitLockerStatus = getBitLockerStatus(myDisk.Label)
 
-			myDisks = append(myDisks, myDisk)
+			r.LogicalDisks = append(r.LogicalDisks, myDisk)
 		}
 	}
-	a.Edges.LogicalDisks = myDisks
-
-	log.Printf("[INFO]: logical disks information has been retrieved from WMI Win32_LogicalDisk")
+	return nil
 }
 
-func (a *Agent) logLogicalDisks() {
+func (r *Report) logLogicalDisks() {
 	fmt.Printf("\n** 💾 Logical Disks *************************************************************************************************\n")
-	if len(a.Edges.LogicalDisks) > 0 {
-		for i, myDisk := range a.Edges.LogicalDisks {
+	if len(r.LogicalDisks) > 0 {
+		for i, myDisk := range r.LogicalDisks {
 			diskUsage := fmt.Sprintf("Disk %s usage", myDisk.Label)
 			fmt.Printf("%-40s |  %d %% \n", diskUsage, myDisk.Usage)
 			diskFreeSpace := fmt.Sprintf("Disk %s free space", myDisk.Label)
@@ -81,7 +77,7 @@ func (a *Agent) logLogicalDisks() {
 			fmt.Printf("%-40s |  %s \n", diskFS, myDisk.Filesystem)
 			fmt.Printf("%-40s |  %s \n", "Bitlocker Status", myDisk.BitLockerStatus)
 
-			if len(a.Edges.LogicalDisks) > 1 && i+1 != len(a.Edges.LogicalDisks) {
+			if len(r.LogicalDisks) > 1 && i+1 != len(r.LogicalDisks) {
 				fmt.Printf("---------------------------------------------------------------------------------------------------------------------\n")
 			}
 		}
@@ -117,4 +113,18 @@ func getBitLockerStatus(driveLetter string) string {
 	default:
 		return "Unknown"
 	}
+}
+
+func convertBytesToUnits(size uint64) string {
+	units := fmt.Sprintf("%d MB", size/1_000_000)
+	if size/1_000_000 >= 1000 {
+		units = fmt.Sprintf("%d GB", size/1_000_000_000)
+	}
+	if size/1_000_000_000 >= 1000 {
+		units = fmt.Sprintf("%d TB", size/1_000_000_000_000)
+	}
+	if size/1_000_000_000_000 >= 1000 {
+		units = fmt.Sprintf("%d PB", size/1_000_000_000_000)
+	}
+	return units
 }

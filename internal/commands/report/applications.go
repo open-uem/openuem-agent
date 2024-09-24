@@ -1,10 +1,11 @@
-package agent
+package report
 
 import (
 	"fmt"
 	"log"
 	"strings"
 
+	"github.com/doncicuto/openuem_nats"
 	"github.com/yusufpapurcu/wmi"
 	"golang.org/x/sys/windows/registry"
 )
@@ -14,36 +15,28 @@ const (
 	APPS       = `SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`
 )
 
-type Application struct {
-	Name        string `json:"name,omitempty"`
-	Version     string `json:"version,omitempty"`
-	InstallDate string `json:"install_date,omitempty"`
-	Publisher   string `json:"publisher,omitempty"`
-}
-
-func (a *Agent) getApplicationsInfo() {
-	a.Edges.Applications = []Application{}
+func (r *Report) getApplicationsInfo() {
+	r.Applications = []openuem_nats.Application{}
 	myApps := getApplications()
 	for k, v := range myApps {
-		app := Application{}
+		app := openuem_nats.Application{}
 		app.Name = strings.TrimSpace(k)
 		app.Version = strings.TrimSpace(v.Version)
 		app.InstallDate = strings.TrimSpace(v.InstallDate)
 		app.Publisher = strings.TrimSpace(v.Publisher)
-		a.Edges.Applications = append(a.Edges.Applications, app)
+		r.Applications = append(r.Applications, app)
 	}
-
 }
 
-func (a *Agent) logApplications() {
+func (r *Report) logApplications() {
 	fmt.Printf("\n** 📱 Software ******************************************************************************************************\n")
-	if len(a.Edges.Applications) > 0 {
-		for i, v := range a.Edges.Applications {
+	if len(r.Applications) > 0 {
+		for i, v := range r.Applications {
 			fmt.Printf("%-40s |  %s \n", "Application", v.Name)
 			fmt.Printf("%-40s |  %s \n", "Version", v.Version)
 			fmt.Printf("%-40s |  %s \n", "Publisher", v.Publisher)
 			fmt.Printf("%-40s |  %s \n", "Installation date", v.InstallDate)
-			if len(a.Edges.Applications) > 1 && i+1 != len(a.Edges.Applications) {
+			if len(r.Applications) > 1 && i+1 != len(r.Applications) {
 				fmt.Printf("---------------------------------------------------------------------------------------------------------------------\n")
 			}
 		}
@@ -53,8 +46,8 @@ func (a *Agent) logApplications() {
 }
 
 // TODO - Microsoft Store Apps can't be retrieved from registry
-func getApplications() map[string]Application {
-	applications := make(map[string]Application)
+func getApplications() map[string]openuem_nats.Application {
+	applications := make(map[string]openuem_nats.Application)
 
 	if err := getApplicationsFromRegistry(applications, registry.LOCAL_MACHINE, APPS); err != nil {
 		log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKLM", APPS, err)
@@ -82,7 +75,7 @@ func getApplications() map[string]Application {
 	return applications
 }
 
-func getApplicationsFromRegistry(applications map[string]Application, hive registry.Key, key string) error {
+func getApplicationsFromRegistry(applications map[string]openuem_nats.Application, hive registry.Key, key string) error {
 
 	if hive == registry.USERS {
 		loggedOnUser, err := getLoggedOnUsername()
@@ -123,7 +116,7 @@ func getApplicationsFromRegistry(applications map[string]Application, hive regis
 			}
 			installDate, _, _ := sk.GetStringValue("InstallDate")
 			publisher, _, _ := sk.GetStringValue("Publisher")
-			applications[displayName] = Application{Version: displayVersion, InstallDate: installDate, Publisher: publisher}
+			applications[displayName] = openuem_nats.Application{Version: displayVersion, InstallDate: installDate, Publisher: publisher}
 		}
 	}
 	return nil
