@@ -24,8 +24,10 @@ func (s *OpenUEMService) Execute(args []string, r <-chan svc.ChangeRequest, chan
 	changes <- svc.Status{State: svc.StartPending}
 	changes <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
 
-	// Run service
+	// Get new agent
 	a := agent.New()
+
+	// Start agente
 	a.Start()
 
 	// service control manager
@@ -41,6 +43,7 @@ loop:
 			case svc.Stop, svc.Shutdown:
 				log.Println("[INFO]: service has received the stop or shutdown command")
 				s.Logger.Close()
+				a.Stop()
 				break loop
 			default:
 				log.Println("[WARN]: unexpected control request")

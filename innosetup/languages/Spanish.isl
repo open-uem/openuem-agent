@@ -383,4 +383,4 @@ AutoStartProgram=Iniciar automáticamente %1
 AddonHostProgramNotFound=%1 no pudo ser localizado en la carpeta seleccionada.%n%n¿Desea continuar de todas formas?
 RequiredConfiguration=Configuración requerida
 ServerURL=Especifique dónde se encuentra el servidor de NATS de OpenUEM
-ServerURLExample=Ejemplo: tls://token@example.com:4433
+ServerURLExample=Ejemplo: example.com:4433

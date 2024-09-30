@@ -384,4 +384,4 @@ AutoStartProgram=Automatically start %1
 AddonHostProgramNotFound=%1 could not be located in the folder you selected.%n%nDo you want to continue anyway?
 RequiredConfiguration=Required configuration
 ServerURL=Specify where's the OpenUEM NATS server located
-ServerURLExample=Example: tls://token@example.com:4433
+ServerURLExample=Example: example.com:4433

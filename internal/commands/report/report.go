@@ -3,6 +3,8 @@ package report
 import (
 	"fmt"
 	"log"
+	"sync"
+	"time"
 
 	"github.com/doncicuto/openuem_nats"
 	"github.com/scjalliance/comshim"
@@ -13,14 +15,18 @@ type Report struct {
 	openuem_nats.AgentReport
 }
 
-func RunReport() {
+func RunReport(agentId string) *Report {
+	var wg sync.WaitGroup
 	var err error
 	// Prepare COM
 	comshim.Add(1)
 	defer comshim.Done()
 
 	report := Report{}
+	report.AgentID = agentId
 	report.OS = "windows"
+	report.Version = "0.1.0"
+	report.ExecutionTime = time.Now()
 
 	report.Hostname, err = windows.ComputerName()
 	if err != nil {
@@ -28,27 +34,82 @@ func RunReport() {
 		report.Hostname = "UNKNOWN"
 	}
 
-	// These operations don't benefit from goroutines
-	report.getComputerInfo()
-	report.getOperatingSystemInfo()
-	report.getMonitorsInfo()
-	report.getLogicalDisksInfo()
-	report.getPrintersInfo()
-	report.getSharesInfo()
-	report.getAntivirusInfo()
-	report.getSystemUpdateInfo()
-	report.getNetworkAdaptersInfo()
+	// These operations will be run using goroutines
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		report.getComputerInfo()
+	}()
 
-	// Get network adapter with default gateway and set its ip address as the report IP address
-	for _, n := range report.NetworkAdapters {
-		if n.DefaultGateway != "" {
-			report.IP = n.Addresses
-			break
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		report.getOperatingSystemInfo()
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		report.getOSInfo()
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		report.getMonitorsInfo()
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		report.getLogicalDisksInfo()
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		report.getPrintersInfo()
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		report.getSharesInfo()
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		report.getAntivirusInfo()
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		report.getSystemUpdateInfo()
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		report.getNetworkAdaptersInfo()
+		// Get network adapter with default gateway and set its ip address as the report IP address
+		for _, n := range report.NetworkAdapters {
+			if n.DefaultGateway != "" {
+				report.IP = n.Addresses
+				break
+			}
 		}
-	}
+	}()
 
-	report.getApplicationsInfo()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		report.getApplicationsInfo()
+	}()
+	wg.Wait()
 
+	return &report
 }
 
 func (r *Report) Print() {

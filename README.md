@@ -12,7 +12,9 @@ The agent sends its report information to a NATS server so the available workers
 
 The console uses GRPC to send commands to the agent:
 
-- enable
-- disable
+- enable agent
+- disable agent
 - send a report now
+- get agent config
+- set agent config
 - uninstall the agent

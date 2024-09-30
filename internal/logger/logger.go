@@ -13,10 +13,12 @@ type OpenUEMLogger struct {
 func New() *OpenUEMLogger {
 	logger := OpenUEMLogger{}
 
-	wd, err := os.Getwd()
+	// Get executable path to store logs
+	ex, err := os.Executable()
 	if err != nil {
-		log.Fatalf("could not get cwd: %v", err)
+		log.Fatalf("could not get executable info: %v", err)
 	}
+	wd := filepath.Dir(ex)
 
 	logPath := filepath.Join(wd, "logs", "openuem-log.txt")
 	logger.LogFile, err = os.OpenFile(logPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)

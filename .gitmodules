@@ -4,6 +4,3 @@
 [submodule "internal/utils"]
 	path = internal/utils
 	url = git@github.com:doncicuto/openuem-utils.git
-[submodule "internal/manager/grpc"]
-	path = internal/manager/grpc
-	url = git@github.com:doncicuto/openuem-agent-grpc.git

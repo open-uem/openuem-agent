@@ -39,6 +39,9 @@ Name: "spanish"; MessagesFile: "Languages\Spanish.isl"
 Source: "C:\Users\mcabr\go\src\github.com\doncicuto\openuem-agent\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Users\mcabr\go\src\github.com\doncicuto\openuem-agent\innosetup\assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{src}\ca.cer"; DestDir: "{app}\certificates"; Flags: external ignoreversion
+Source: "{src}\agent.cer"; DestDir: "{app}\certificates"; Flags: external ignoreversion
+Source: "{src}\agent.key"; DestDir: "{app}\certificates"; Flags: external ignoreversion
+
 [Dirs]
 Name: "{app}\logs";Permissions: users-modify
 Name: "{app}\config";Permissions: users-modify
@@ -72,7 +75,7 @@ begin
     
   InputQueryWizardPage := CreateInputQueryPage(AfterID,CustomMessage('RequiredConfiguration'),CustomMessage('ServerURL'),CustomMessage('ServerURLExample'));
   InputQueryWizardPage.Add('&NATS Server Url:', False);
-  InputQueryWizardPage.Values[0] := 'tls://s3cr3t@localhost:4433'
+  InputQueryWizardPage.Values[0] := 'localhost:4433'
   AfterID := InputQueryWizardPage.ID;   
 end;
 
