@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os/exec"
 	"path/filepath"
-	"strings"
+	"syscall"
 	"time"
 
 	"github.com/doncicuto/openuem-agent/internal/commands/report"
@@ -13,6 +14,7 @@ import (
 	"github.com/doncicuto/openuem_utils"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/nats-io/nats.go"
+	"golang.org/x/sys/windows"
 )
 
 type Agent struct {
@@ -45,12 +47,7 @@ func New() Agent {
 		agent.Config.WriteConfig()
 	}
 
-	// Create NATS Config using NATS url from config and read required certificates and private key
-	natsURL := agent.Config.ServerUrl
-	natsURLSplitted := strings.Split(natsURL, ":")
-	if len(natsURLSplitted) != 2 {
-		log.Fatalf("[FATAL]: wrong NATS url format")
-	}
+	// Read required certificates and private key
 	cwd, err := Getwd()
 	if err != nil {
 		log.Fatalf("[FATAL]: could not get current working directory")
@@ -77,7 +74,7 @@ func New() Agent {
 	}
 	agent.CACertPath = clientCAPath
 
-	agent.MessageServer = openuem_nats.New(natsURLSplitted[0], natsURLSplitted[1], clientCertPath, clientCertKeyPath, caCert)
+	agent.MessageServer = openuem_nats.New(agent.Config.NATSHost, agent.Config.NATSPort, clientCertPath, clientCertKeyPath, caCert)
 
 	return agent
 }
@@ -309,13 +306,92 @@ func (a *Agent) RunReportSubscribe() error {
 		if err := a.SendReport(r); err != nil {
 			log.Printf("[ERROR]: report could not be send to NATS server!, reason: %v\n", err)
 			if err := msg.Respond([]byte("Agent Run Report failed!")); err != nil {
-				log.Printf("❌ could not respond to agent force report run, reason: %v\n", err)
+				log.Printf("[ERROR]: could not respond to agent force report run, reason: %v\n", err)
 			}
 		}
+
+		// Test to show message
+		if err := runAsUser(`C:\Program Files\OpenUEM Agent\openuem_message.exe`, []string{"info", "--message", "Test", "--title", "Title"}); err != nil {
+			log.Printf("[ERROR]: could not show test message to user, reason: %v\n", err)
+		}
+
 	})
 
 	if err != nil {
 		return fmt.Errorf("[ERROR]: could not subscribe to agent report subject, reason: %v", err)
+	}
+	return nil
+}
+
+// Reference: https://blog.davidvassallo.me/2022/06/17/golang-in-windows-execute-command-as-another-user/
+func getUserToken(pid int) (syscall.Token, error) {
+	var err error
+	var token syscall.Token
+
+	handle, err := syscall.OpenProcess(syscall.PROCESS_QUERY_INFORMATION, false, uint32(pid))
+	if err != nil {
+		log.Println("Token Process", "err", err)
+	}
+	defer syscall.CloseHandle(handle)
+
+	// Find process token via win32
+	err = syscall.OpenProcessToken(handle, syscall.TOKEN_ALL_ACCESS, &token)
+
+	if err != nil {
+		log.Println("Open Token Process", "err", err)
+	}
+	return token, err
+}
+
+const processEntrySize = 568
+
+// Reference: https://stackoverflow.com/questions/36333896/how-to-get-process-id-by-process-name-in-windows-environment
+func findProcessByName(name string) (uint32, error) {
+	h, e := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if e != nil {
+		return 0, e
+	}
+	p := windows.ProcessEntry32{Size: processEntrySize}
+	for {
+		e := windows.Process32Next(h, &p)
+		if e != nil {
+			return 0, e
+		}
+		if windows.UTF16ToString(p.ExeFile[:]) == name {
+			return p.ProcessID, nil
+		}
+	}
+}
+
+// Reference: https://blog.davidvassallo.me/2022/06/17/golang-in-windows-execute-command-as-another-user/
+func runAsUser(cmdPath string, args []string) error {
+	pid, err := findProcessByName("explorer.exe")
+	if err != nil {
+		return err
+	}
+
+	token, err := getUserToken(int(pid))
+	if err != nil {
+		return err
+	}
+	defer token.Close()
+
+	cmd := exec.Command(cmdPath, args...)
+
+	// this is the important bit!
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Token:         token,
+		CreationFlags: 0x08000000, // Reference: https://stackoverflow.com/questions/42500570/how-to-hide-command-prompt-window-when-using-exec-in-golang
+	}
+
+	err = cmd.Start()
+	if err != nil {
+		return err
+	}
+
+	err = cmd.Wait()
+	if err != nil {
+		return err
 	}
 	return nil
 }

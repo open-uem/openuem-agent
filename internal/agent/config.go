@@ -2,83 +2,94 @@ package agent
 
 import (
 	"log"
-	"os"
-	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
-	"gopkg.in/ini.v1"
+	"golang.org/x/sys/windows/registry"
 )
 
-const JSON_CONFIG = "openuem.ini"
 const SCHEDULETIME_5MIN = 5
 const SCHEDULETIME_60MIN = 60
 
 type Config struct {
-	ServerUrl                string `ini:"ServerUrl"`
-	UUID                     string `ini:"UUID" json:"uuid"`
-	ExecuteTaskEveryXMinutes int    `ini:"ExecuteEveryXMinutes" json:"execute_every_x_minutes"`
-	Enabled                  bool   `ini:"enable" json:"enable"`
+	NATSHost                 string
+	NATSPort                 string
+	UUID                     string
+	ExecuteTaskEveryXMinutes int
+	Enabled                  bool
 }
 
 func (a *Agent) ReadConfig() {
-	var err error
-	cwd, err := Getwd()
+
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\OpenUEM\Agent`, registry.QUERY_VALUE)
 	if err != nil {
-		log.Fatalf("could not get cwd: %v", err)
+		log.Println("[ERROR]: agent cannot read the agent hive")
+	}
+	defer k.Close()
+
+	uuid, _, err := k.GetStringValue("UUID")
+	if err == nil {
+		a.Config.UUID = uuid
 	}
 
-	path := filepath.Join(cwd, "config", JSON_CONFIG)
+	enabled, _, err := k.GetIntegerValue("Enabled")
+	if err == nil {
+		a.Config.Enabled = enabled == 1
+	}
 
-	// Check if file exists and create if not
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		f, err := os.Create(path)
-		if err != nil {
-			log.Printf("[ERROR]: could not create file in path: %s - %v", path, err)
+	scheduled, _, err := k.GetIntegerValue("ExecuteTaskEveryXMinutes")
+	if err == nil {
+		a.Config.ExecuteTaskEveryXMinutes = int(scheduled)
+	}
+	k.Close()
+
+	k, err = registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\OpenUEM`, registry.QUERY_VALUE)
+	if err != nil {
+		log.Println("[ERROR]: agent cannot read the OpenUEM hive")
+		return
+	}
+	defer k.Close()
+
+	serverUrl, _, err := k.GetStringValue("NATS")
+	if err == nil {
+		strippedUrl := strings.Split(serverUrl, ":")
+		if len(strippedUrl) == 2 {
+			a.Config.NATSHost = strippedUrl[0]
+			a.Config.NATSPort = strippedUrl[1]
 		}
-		defer f.Close()
 	}
 
-	// Try to read INI file
-	cfg, err := ini.Load(path)
-	if err != nil {
-		log.Fatalf("could not read ini file: %v", err)
-	}
+	log.Println("[INFO]: agent has read its settings from the registry")
 
-	// Map content to structure
-	err = cfg.Section("Config").MapTo(&a.Config)
-	if err != nil {
-		log.Fatalf("could not parse ini file: %v", err)
-	}
-	log.Println("[INFO]: agent has read its INI file")
-
-	err = os.Chdir("../")
-	if err != nil {
-		log.Fatalf("could not change to parent folder: %v", err)
-	}
 }
 
 func (c *Config) WriteConfig() {
-	cwd, err := Getwd()
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\OpenUEM\Agent`, registry.SET_VALUE)
 	if err != nil {
-		log.Fatalf("could not get cwd: %v", err)
+		log.Println("[ERROR]: agent cannot read the agent hive")
+	}
+	defer k.Close()
+
+	err = k.SetStringValue("UUID", c.UUID)
+	if err != nil {
+		log.Println("[ERROR]: could not save the Enabled key")
 	}
 
-	path := filepath.Join(cwd, "config", JSON_CONFIG)
-
-	cfg, err := ini.Load(path)
-	if err != nil {
-		log.Fatalf("could not read ini file: %v", err)
+	enabled := 0
+	if c.Enabled {
+		enabled = 1
 	}
 
-	err = cfg.Section("Config").ReflectFrom(&c)
+	err = k.SetDWordValue("Enabled", uint32(enabled))
 	if err != nil {
-		log.Fatalf("could not reflect ini from config: %v", err)
+		log.Println("[ERROR]: could not save the Enabled key")
 	}
 
-	err = cfg.SaveTo(path)
+	err = k.SetDWordValue("ExecuteTaskEveryXMinutes", uint32(c.ExecuteTaskEveryXMinutes))
 	if err != nil {
-		log.Fatalf("could not save ini: %v", err)
+		log.Println("[ERROR]: could not save the Enabled key")
 	}
+
 	log.Println("[INFO]: agent has updated its INI file")
 }
 
@@ -86,5 +97,6 @@ func (a *Agent) SetInitialConfig() {
 	id := uuid.New()
 	a.Config.UUID = id.String()
 	a.Config.Enabled = true
+	a.Config.ExecuteTaskEveryXMinutes = 5
 	a.Config.WriteConfig()
 }
