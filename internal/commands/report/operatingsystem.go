@@ -128,7 +128,7 @@ func (r *Report) getArch() error {
 }
 
 func (r *Report) getUsername() error {
-	username, err := getLoggedOnUsername()
+	username, err := GetLoggedOnUsername()
 	if err != nil {
 		return err
 	}
@@ -136,7 +136,7 @@ func (r *Report) getUsername() error {
 	return nil
 }
 
-func getLoggedOnUsername() (string, error) {
+func GetLoggedOnUsername() (string, error) {
 	var computerDst []struct{ Username string }
 
 	namespace := `root\cimv2`

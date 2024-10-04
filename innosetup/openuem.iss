@@ -43,6 +43,17 @@ Source: "{src}\ca.cer"; DestDir: "{app}\certificates"; Flags: external ignorever
 Source: "{src}\agent.cer"; DestDir: "{app}\certificates"; Flags: external ignoreversion
 Source: "{src}\agent.key"; DestDir: "{app}\certificates"; Flags: external ignoreversion
 
+[Registry]
+Root: HKLM; Subkey: "Software\OpenUEM"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\OpenUEM"; ValueType: string; ValueName: "NATS"; ValueData: "{code:MyServerUrl}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\OpenUEM\Agent"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\OpenUEM\Agent"; ValueType: dword; ValueName: "Enabled"; ValueData: "1"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\OpenUEM\Agent"; ValueType: dword; ValueName: "ExecuteTaskEveryXMinutes"; ValueData: "5"; Flags: uninsdeletekey
+
+[Run]
+;Add firewall rules
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""OpenUEM Remote Assistance"" dir=in action=allow protocol=TCP localport=1443 program=""{app}\{#MyAppExeName}"""; StatusMsg: "Adding rule for port access TCP 1443"; Flags: runhidden
+
 [Dirs]
 Name: "{app}\logs";Permissions: users-modify
 Name: "{app}\config";Permissions: users-modify
@@ -50,8 +61,6 @@ Name: "{app}\config";Permissions: users-modify
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
 
-[INI]
-FileName: "{app}\config\openuem.ini"; Section: "Config"; Key: "ServerUrl"; String: "{code:MyServerUrl}";
 
 [Run]
 Filename: {sys}\sc.exe; Parameters: "create openuem-agent start= auto DisplayName= ""OpenUEM Agent"" binPath= ""{app}\openuem-agent.exe""" ; Flags: runhidden

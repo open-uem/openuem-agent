@@ -78,12 +78,12 @@ func getApplications() map[string]openuem_nats.Application {
 func getApplicationsFromRegistry(applications map[string]openuem_nats.Application, hive registry.Key, key string) error {
 
 	if hive == registry.USERS {
-		loggedOnUser, err := getLoggedOnUsername()
+		loggedOnUser, err := GetLoggedOnUsername()
 		if err != nil {
 			return fmt.Errorf("could not get logged on username")
 		}
 
-		sid, err := getSID(loggedOnUser)
+		sid, err := GetSID(loggedOnUser)
 		if err != nil {
 			return fmt.Errorf("could not get SID for logged on user")
 		}
@@ -122,7 +122,7 @@ func getApplicationsFromRegistry(applications map[string]openuem_nats.Applicatio
 	return nil
 }
 
-func getSID(username string) (string, error) {
+func GetSID(username string) (string, error) {
 	var response []struct{ SID string }
 
 	// This query would not be acceptable in general as it could lead to sql injection, but we're using a where condition using a

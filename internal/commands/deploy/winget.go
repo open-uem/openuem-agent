@@ -9,12 +9,14 @@ import (
 	"strings"
 )
 
-func installPackage(packageID string) error {
+func InstallPackage(agentId, packageID string) error {
 	wgPath, err := locateWinGet()
 	if err != nil {
 		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
 		return err
 	}
+
+	log.Printf("[INFO]: received a request to install package %s", packageID)
 
 	cmd := exec.Command(wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
 	err = cmd.Start()
@@ -23,7 +25,7 @@ func installPackage(packageID string) error {
 		return err
 	}
 
-	log.Println("[INFO]: winget.exe is installing an app", wgPath)
+	log.Printf("[INFO]: winget.exe is installing an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
 	err = cmd.Wait()
 	if err != nil {
 		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", err)
@@ -31,12 +33,35 @@ func installPackage(packageID string) error {
 	}
 	log.Println("[INFO]: winget.exe has installed an application", wgPath)
 
-	// TODO Run a new report
-	/* a.Run(true) */
 	return nil
 }
 
-func uninstallPackage(packageID string) error {
+func UpdatePackage(agentId, packageID string) error {
+	wgPath, err := locateWinGet()
+	if err != nil {
+		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
+		return err
+	}
+
+	cmd := exec.Command(wgPath, "update", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	err = cmd.Start()
+	if err != nil {
+		log.Printf("[ERROR]: could not start winget.exe command %v", err)
+		return err
+	}
+
+	log.Printf("[INFO]: winget.exe is updating an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	err = cmd.Wait()
+	if err != nil {
+		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", err)
+		return err
+	}
+	log.Println("[INFO]: winget.exe has updated an application", wgPath)
+
+	return nil
+}
+
+func UninstallPackage(agentId, packageID string) error {
 	wgPath, err := locateWinGet()
 	if err != nil {
 		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
@@ -50,7 +75,7 @@ func uninstallPackage(packageID string) error {
 		return err
 	}
 
-	log.Println("[INFO]: winget.exe is uninstalling an app", wgPath)
+	log.Printf("[INFO]: winget.exe is uninstalling an app, using command %s %s %s\n", wgPath, "remove", packageID)
 	err = cmd.Wait()
 	if err != nil {
 		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", err)
@@ -58,8 +83,6 @@ func uninstallPackage(packageID string) error {
 	}
 	log.Println("[INFO]: winget.exe has uninstalled an application", wgPath)
 
-	// TODO Run a new report
-	/* a.Run(true) */
 	return nil
 }
 
