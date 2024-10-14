@@ -31,7 +31,7 @@ func InstallPackage(agentId, packageID string) error {
 		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", err)
 		return err
 	}
-	log.Println("[INFO]: winget.exe has installed an application", wgPath)
+	log.Printf("[INFO]: winget.exe has installed an application: %s", packageID)
 
 	return nil
 }

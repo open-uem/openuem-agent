@@ -93,10 +93,11 @@ func RunReport(agentId string) *Report {
 	go func() {
 		defer wg.Done()
 		report.getNetworkAdaptersInfo()
-		// Get network adapter with default gateway and set its ip address as the report IP address
+		// Get network adapter with default gateway and set its ip address and MAC as the report IP/MAC address
 		for _, n := range report.NetworkAdapters {
 			if n.DefaultGateway != "" {
 				report.IP = n.Addresses
+				report.MACAddress = n.MACAddress
 				break
 			}
 		}
