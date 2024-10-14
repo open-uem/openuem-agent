@@ -90,7 +90,7 @@ func (c *Config) WriteConfig() {
 		log.Println("[ERROR]: could not save the Enabled key")
 	}
 
-	log.Println("[INFO]: agent has updated its INI file")
+	log.Println("[INFO]: agent has updated its registry keys")
 }
 
 func (a *Agent) SetInitialConfig() {

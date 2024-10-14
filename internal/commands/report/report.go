@@ -109,11 +109,11 @@ func RunReport(agentId string) *Report {
 		report.getApplicationsInfo()
 	}()
 
-	wg.Add(1)
+	/* wg.Add(1)
 	go func() {
 		defer wg.Done()
 		report.getVNCInfo()
-	}()
+	}() */
 
 	wg.Wait()
 
