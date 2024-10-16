@@ -42,6 +42,7 @@ Source: "C:\Users\mcabr\go\src\github.com\doncicuto\openuem-agent\innosetup\asse
 Source: "{src}\ca.cer"; DestDir: "{app}\certificates"; Flags: external ignoreversion
 Source: "{src}\agent.cer"; DestDir: "{app}\certificates"; Flags: external ignoreversion
 Source: "{src}\agent.key"; DestDir: "{app}\certificates"; Flags: external ignoreversion
+Source: "{src}\console.cer"; DestDir: "{app}\certificates"; Flags: external ignoreversion
 
 [Registry]
 Root: HKLM; Subkey: "Software\OpenUEM"; Flags: uninsdeletekey
@@ -53,10 +54,12 @@ Root: HKLM; Subkey: "Software\OpenUEM\Agent"; ValueType: dword; ValueName: "Exec
 [Run]
 ;Add firewall rules
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""OpenUEM Remote Assistance"" dir=in action=allow protocol=TCP localport=1443 program=""{app}\{#MyAppExeName}"""; StatusMsg: "Adding rule for port access TCP 1443"; Flags: runhidden
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""OpenUEM SFTP Server"" dir=in action=allow protocol=TCP localport=2022 program=""{app}\{#MyAppExeName}"""; StatusMsg: "Adding rule for port access TCP 2022"; Flags: runhidden
 
 [Dirs]
 Name: "{app}\logs";Permissions: users-modify
 Name: "{app}\config";Permissions: users-modify
+Name: "{app}\badgerdb";
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"

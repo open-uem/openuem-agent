@@ -1,18 +1,22 @@
 package agent
 
 import (
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"os/user"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/dgraph-io/badger/v4"
 	"github.com/doncicuto/openuem-agent/internal/commands/deploy"
 	"github.com/doncicuto/openuem-agent/internal/commands/report"
+	"github.com/doncicuto/openuem-agent/internal/commands/sftp"
 	"github.com/doncicuto/openuem-agent/internal/commands/vnc"
 	"github.com/doncicuto/openuem_nats"
 	"github.com/doncicuto/openuem_utils"
@@ -29,7 +33,11 @@ type Agent struct {
 	CertPath       string
 	KeyPath        string
 	CACertPath     string
+	CACert         *x509.Certificate
+	ConsoleCert    *x509.Certificate
 	VNCServer      *vnc.VNCServer
+	BadgerDB       *badger.DB
+	SFTPServer     *sftp.SFTP
 }
 
 type JSONActions struct {
@@ -64,25 +72,32 @@ func New() Agent {
 	clientCertPath := filepath.Join(cwd, "certificates", "agent.cer")
 	_, err = openuem_utils.ReadPEMCertificate(clientCertPath)
 	if err != nil {
-		log.Fatalf("[FATAL]: could not get read agent certificate")
+		log.Fatalf("[FATAL]: could not read agent certificate")
 	}
 	agent.CertPath = clientCertPath
 
 	clientCertKeyPath := filepath.Join(cwd, "certificates", "agent.key")
 	_, err = openuem_utils.ReadPEMPrivateKey(clientCertKeyPath)
 	if err != nil {
-		log.Fatalf("[FATAL]: could not get read agent private key")
+		log.Fatalf("[FATAL]: could not read agent private key")
 	}
 	agent.KeyPath = clientCertKeyPath
 
 	clientCAPath := filepath.Join(cwd, "certificates", "ca.cer")
 	caCert, err := openuem_utils.ReadPEMCertificate(clientCAPath)
 	if err != nil {
-		log.Fatalf("[FATAL]: could not get read CA certificate")
+		log.Fatalf("[FATAL]: could not read CA certificate")
 	}
 	agent.CACertPath = clientCAPath
+	agent.CACert = caCert
 
-	agent.MessageServer = openuem_nats.New(agent.Config.NATSHost, agent.Config.NATSPort, clientCertPath, clientCertKeyPath, caCert)
+	consoleCertPath := filepath.Join(cwd, "certificates", "console.cer")
+	agent.ConsoleCert, err = openuem_utils.ReadPEMCertificate(consoleCertPath)
+	if err != nil {
+		log.Fatalf("[FATAL]: could not read console certificate")
+	}
+
+	agent.MessageServer = openuem_nats.New(agent.Config.NATSHost, agent.Config.NATSPort, clientCertPath, clientCertKeyPath, agent.CACert)
 
 	return agent
 }
@@ -93,6 +108,13 @@ func (a *Agent) Start() {
 
 	log.Println("[INFO]: agent has been started!")
 
+	// Log agent associated user
+	currentUser, err := user.Current()
+	if err != nil {
+		log.Printf("[ERROR]: %v", err)
+	}
+	log.Printf("[INFO]: agent is run as %s", currentUser.Username)
+
 	a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN
 	a.Config.WriteConfig()
 
@@ -100,12 +122,28 @@ func (a *Agent) Start() {
 	a.TaskScheduler.Start()
 	log.Println("[INFO]: task scheduler has started!")
 
+	// Start BadgerDB KV
+	cwd, err := Getwd()
+	a.BadgerDB, err = badger.Open(badger.DefaultOptions(filepath.Join(cwd, "badgerdb")))
+	if err != nil {
+		log.Printf("[ERROR]: %v", err)
+	}
+
+	// Start SFTP server
+	a.SFTPServer = sftp.New()
+	go func() {
+		err := a.SFTPServer.Serve(":2022", a.ConsoleCert, a.CACert, a.BadgerDB)
+		if err != nil {
+			log.Printf("[ERROR]: %v", err)
+		}
+	}()
+	log.Println("[INFO]: SFTP server has started!")
+
 	// Try to connect to NATS server and start a reconnect job if failed
 	if err := a.MessageServer.Connect(); err != nil {
 		a.startNATSConnectJob()
 		return
 	}
-
 	a.SubscribeToNATSSubjects()
 
 	// Run report for the first time after start if agent is enabled
@@ -136,6 +174,18 @@ func (a *Agent) Stop() {
 	if a.MessageServer != nil {
 		if err := a.MessageServer.Close(); err != nil {
 			log.Printf("[ERROR]: could not close NATS connection, reason: %s\n", err.Error())
+		}
+	}
+
+	if a.SFTPServer != nil {
+		if err := a.SFTPServer.Server.Close(); err != nil {
+			log.Printf("[ERROR]: could not close SFTP server, reason: %s\n", err.Error())
+		}
+	}
+
+	if a.BadgerDB != nil {
+		if err := a.BadgerDB.Close(); err != nil {
+			log.Printf("[ERROR]: could not close BadgerDB connection, reason: %s\n", err.Error())
 		}
 	}
 	log.Println("[INFO]: agent has been stopped!")
