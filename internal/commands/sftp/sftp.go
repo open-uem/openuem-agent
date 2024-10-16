@@ -34,7 +34,7 @@ func sftpHandler(sess ssh.Session) {
 		serverOptions...,
 	)
 	if err != nil {
-		log.Printf("sftp server init error: %s\n", err)
+		log.Printf("[ERROR]: sftp server init error: %s\n", err)
 		return
 	}
 	if err := server.Serve(); err == io.EOF {
