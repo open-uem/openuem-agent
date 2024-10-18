@@ -29,6 +29,8 @@ OutputBaseFilename=openuem-agent-setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+WizardImageFile=openuem_icon.bmp
+WizardSmallImageFile=openuem_small_icon.bmp
 UninstallDisplayIcon="{app}\assets\openuem.ico"
 
 [Languages]

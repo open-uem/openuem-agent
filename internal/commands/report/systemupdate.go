@@ -6,6 +6,7 @@ import (
 	"time"
 
 	wu "github.com/ceshihao/windowsupdate"
+	"github.com/doncicuto/openuem_nats"
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
 )
@@ -46,6 +47,12 @@ func (r *Report) getSystemUpdateInfo() {
 		log.Printf("[ERROR]: could not get pending updates information from wuapi: %v", err)
 	} else {
 		log.Printf("[INFO]: pending updates info has been retrieved from wuapi")
+	}
+
+	if err := r.getUpdatesHistory(); err != nil {
+		log.Printf("[ERROR]: could not get updates history information from wuapi: %v", err)
+	} else {
+		log.Printf("[INFO]: updates history info has been retrieved from wuapi")
 	}
 }
 
@@ -110,6 +117,43 @@ func (r *Report) getPendingUpdates() error {
 		return err
 	}
 	r.SystemUpdate.PendingUpdates = len(result.Updates) > 0
+	return nil
+}
+
+func (r *Report) getUpdatesHistory() error {
+	err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED|ole.COINIT_SPEED_OVER_MEMORY)
+	if err != nil {
+		return err
+	}
+	defer ole.CoUninitialize()
+	session, err := wu.NewUpdateSession()
+	if err != nil {
+		return err
+	}
+
+	searcher, err := session.CreateUpdateSearcher()
+	if err != nil {
+		return err
+	}
+
+	result, err := searcher.QueryHistoryAll()
+	if err != nil {
+		panic(err)
+	}
+
+	updates := []openuem_nats.Update{}
+	for _, entry := range result {
+		if entry.ClientApplicationID == "MoUpdateOrchestrator" {
+			update := openuem_nats.Update{
+				Title:      entry.Title,
+				Date:       *entry.Date,
+				SupportURL: entry.SupportUrl,
+			}
+			updates = append(updates, update)
+		}
+	}
+	r.Updates = updates
+
 	return nil
 }
 

@@ -13,5 +13,6 @@ func (r *Report) getVNCInfo() {
 		r.SupportedVNCServer = ""
 	} else {
 		r.SupportedVNCServer = v.Name
+		log.Printf("[INFO]: supported VNC server found: %s", v.Name)
 	}
 }
