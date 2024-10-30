@@ -7,7 +7,7 @@ require (
 	github.com/go-ole/go-ole v1.3.0
 	github.com/scjalliance/comshim v0.0.0-20240712181150-e070933cb68e
 	github.com/yusufpapurcu/wmi v1.2.4
-	golang.org/x/sys v0.25.0
+	golang.org/x/sys v0.26.0
 )
 
 require (
@@ -29,6 +29,7 @@ require (
 require (
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/danieljoos/wincred v1.2.2 // indirect
 	github.com/dgraph-io/ristretto v1.0.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/evangwt/go-bufcopy v0.1.1 // indirect

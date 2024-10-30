@@ -41,16 +41,8 @@ func (a *Agent) ReadConfig() {
 	if err == nil {
 		a.Config.ExecuteTaskEveryXMinutes = int(scheduled)
 	}
-	k.Close()
 
-	k, err = registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\OpenUEM`, registry.QUERY_VALUE)
-	if err != nil {
-		log.Println("[ERROR]: agent cannot read the OpenUEM hive")
-		return
-	}
-	defer k.Close()
-
-	serverUrl, _, err := k.GetStringValue("NATS")
+	serverUrl, _, err := k.GetStringValue("NATSServers")
 	if err == nil {
 		strippedUrl := strings.Split(serverUrl, ":")
 		if len(strippedUrl) == 2 {
@@ -59,6 +51,7 @@ func (a *Agent) ReadConfig() {
 		}
 	}
 
+	k.Close()
 	log.Println("[INFO]: agent has read its settings from the registry")
 
 }

@@ -56,7 +56,10 @@ func RunReport(agentId string) *Report {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		report.getMonitorsInfo()
+		if err := report.getMonitorsInfo(); err != nil {
+			// Retry
+			report.getMonitorsInfo()
+		}
 	}()
 
 	wg.Add(1)

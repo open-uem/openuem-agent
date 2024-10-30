@@ -141,6 +141,7 @@ func (a *Agent) Start() {
 
 	// Try to connect to NATS server and start a reconnect job if failed
 	if err := a.MessageServer.Connect(); err != nil {
+		log.Printf("[ERROR]: %v", err)
 		a.startNATSConnectJob()
 		return
 	}
@@ -152,11 +153,13 @@ func (a *Agent) Start() {
 
 		// Send first report to NATS
 		if err := a.SendReport(r); err != nil {
+			a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN // Try to send it again in 5 minutes
 			log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
+		} else {
+			// Start scheduled report job every 60 minutes
+			a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_60MIN
 		}
 
-		// Start scheduled report job every 60 minutes
-		a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_60MIN
 		a.Config.WriteConfig()
 		a.startReportJob()
 	}

@@ -9,7 +9,7 @@ import (
 	"github.com/yusufpapurcu/wmi"
 )
 
-func (r *Report) getMonitorsInfo() {
+func (r *Report) getMonitorsInfo() error {
 	// Get monitors information
 	// Ref: https://learn.microsoft.com/en-us/windows/win32/wmicoreprov/wmimonitorid
 	var monitorDst []struct {
@@ -25,6 +25,7 @@ func (r *Report) getMonitorsInfo() {
 	err := wmi.QueryNamespace(qMonitors, &monitorDst, namespace)
 	if err != nil {
 		log.Printf("[ERROR]: could not get information from WMI WmiMonitorID: %v", err)
+		return err
 	}
 	for _, v := range monitorDst {
 		myMonitor := openuem_nats.Monitor{}
@@ -35,6 +36,7 @@ func (r *Report) getMonitorsInfo() {
 		r.Monitors = append(r.Monitors, myMonitor)
 	}
 	log.Printf("[INFO]: monitors information has been retrieved from WMI WmiMonitorID")
+	return nil
 }
 
 func (r *Report) logMonitors() {

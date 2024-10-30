@@ -47,11 +47,12 @@ Source: "{src}\agent.key"; DestDir: "{app}\certificates"; Flags: external ignore
 Source: "{src}\console.cer"; DestDir: "{app}\certificates"; Flags: external ignoreversion
 
 [Registry]
-Root: HKLM; Subkey: "Software\OpenUEM"; Flags: uninsdeletekey
-Root: HKLM; Subkey: "Software\OpenUEM"; ValueType: string; ValueName: "NATS"; ValueData: "{code:MyServerUrl}"; Flags: uninsdeletekey
-Root: HKLM; Subkey: "Software\OpenUEM\Agent"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\OpenUEM"; Flags:uninsdeletekeyifempty
+Root: HKLM; Subkey: "Software\OpenUEM\Agent"; Flags:uninsdeletekeyifempty
 Root: HKLM; Subkey: "Software\OpenUEM\Agent"; ValueType: dword; ValueName: "Enabled"; ValueData: "1"; Flags: uninsdeletekey
 Root: HKLM; Subkey: "Software\OpenUEM\Agent"; ValueType: dword; ValueName: "ExecuteTaskEveryXMinutes"; ValueData: "5"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\OpenUEM\Agent"; ValueType: string; ValueName: "NATSServers"; ValueData: "{code:MyServerUrl}"; Flags:uninsdeletekey
+
 
 [Run]
 ;Add firewall rules
