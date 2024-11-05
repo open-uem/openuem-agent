@@ -24,13 +24,15 @@ type bitLockerStatus struct {
 	EncryptionMethod int8
 }
 
-func (r *Report) getLogicalDisksInfo() {
+func (r *Report) getLogicalDisksInfo() error {
 	err := r.getLogicalDisksFromWMI()
 	if err != nil {
 		log.Printf("[ERROR]: could not get logical disks information from WMI Win32_LogicalDisk: %v", err)
+		return err
 	} else {
 		log.Printf("[INFO]: logical disks information has been retrieved from WMI Win32_LogicalDisk")
 	}
+	return nil
 }
 
 func (r *Report) getLogicalDisksFromWMI() error {

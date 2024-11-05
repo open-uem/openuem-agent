@@ -22,7 +22,7 @@ const (
 	NOTIFICATION_LEVEL_SCHEDULED_INSTALLATION
 )
 
-func (r *Report) getSystemUpdateInfo() {
+func (r *Report) getSystemUpdateInfo() error {
 	// Get information about Windows Update settings
 
 	// TODO 1 (security) get information about what SMB client version is installed
@@ -33,27 +33,32 @@ func (r *Report) getSystemUpdateInfo() {
 
 	if err := r.getWindowsUpdateStatus(); err != nil {
 		log.Printf("[ERROR]: could not get windows update status info information from wuapi: %v", err)
+		return err
 	} else {
 		log.Printf("[INFO]: windows update status info has been retrieved from wuapi")
 	}
 
 	if err := r.getWindowsUpdateDates(); err != nil {
 		log.Printf("[ERROR]: could not get windows update dates information from wuapi: %v", err)
+		return err
 	} else {
 		log.Printf("[INFO]: windows update dates info has been retrieved from wuapi")
 	}
 
 	if err := r.getPendingUpdates(); err != nil {
 		log.Printf("[ERROR]: could not get pending updates information from wuapi: %v", err)
+		return err
 	} else {
 		log.Printf("[INFO]: pending updates info has been retrieved from wuapi")
 	}
 
 	if err := r.getUpdatesHistory(); err != nil {
 		log.Printf("[ERROR]: could not get updates history information from wuapi: %v", err)
+		return err
 	} else {
 		log.Printf("[INFO]: updates history info has been retrieved from wuapi")
 	}
+	return nil
 }
 
 func (r *Report) logSystemUpdate() {

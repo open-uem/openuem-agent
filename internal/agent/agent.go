@@ -428,7 +428,7 @@ func (a *Agent) StartVNCSubscribe() error {
 		}
 
 		// Instantiate new vnc server
-		v, err := vnc.New(a.CertPath, a.KeyPath, sid)
+		v, err := vnc.New(a.CertPath, a.KeyPath, sid, "1443")
 		if err != nil {
 			log.Println("[ERROR]: could not get a VNC server")
 			return
@@ -439,12 +439,12 @@ func (a *Agent) StartVNCSubscribe() error {
 		v.Start()
 
 		if err := msg.Respond([]byte("VNC Started!")); err != nil {
-			log.Printf("❌ could not respond to agent start vnc message, reason: %v\n", err)
+			log.Printf("[ERROR]: could not respond to agent start vnc message, reason: %v\n", err)
 		}
 	})
 
 	if err != nil {
-		return fmt.Errorf("could not subscribe to agent start vnc, reason: %v", err)
+		return fmt.Errorf("[ERROR]: could not subscribe to agent start vnc, reason: %v", err)
 	}
 	return nil
 }
@@ -457,12 +457,12 @@ func (a *Agent) StopVNCSubscribe() error {
 		}
 
 		if err := msg.Respond([]byte("VNC Stopped!")); err != nil {
-			log.Printf("❌ could not respond to agent stop vnc message, reason: %v\n", err)
+			log.Printf("[ERROR]: could not respond to agent stop vnc message, reason: %v\n", err)
 		}
 	})
 
 	if err != nil {
-		return fmt.Errorf("could not subscribe to agent stop vnc, reason: %v", err)
+		return fmt.Errorf("[ERROR]: could not subscribe to agent stop vnc, reason: %v", err)
 	}
 	return nil
 }
@@ -499,7 +499,7 @@ func (a *Agent) InstallPackageSubscribe() error {
 	})
 
 	if err != nil {
-		return fmt.Errorf("could not subscribe to agent install package, reason: %v", err)
+		return fmt.Errorf("[ERROR]: could not subscribe to agent install package, reason: %v", err)
 	}
 	return nil
 }
@@ -541,7 +541,7 @@ func (a *Agent) UpdatePackageSubscribe() error {
 	})
 
 	if err != nil {
-		return fmt.Errorf("could not subscribe to agent install package, reason: %v", err)
+		return fmt.Errorf("[ERROR]: could not subscribe to agent install package, reason: %v", err)
 	}
 	return nil
 }
@@ -578,7 +578,7 @@ func (a *Agent) UninstallPackageSubscribe() error {
 	})
 
 	if err != nil {
-		return fmt.Errorf("could not subscribe to agent uninstall package, reason: %v", err)
+		return fmt.Errorf("[ERROR]: could not subscribe to agent uninstall package, reason: %v", err)
 	}
 	return nil
 }

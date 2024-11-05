@@ -31,13 +31,15 @@ const (
 	PRINTER_STATUS_MANUAL_FEED
 )
 
-func (r *Report) getPrintersInfo() {
+func (r *Report) getPrintersInfo() error {
 	err := r.getPrintersFromWMI()
 	if err != nil {
 		log.Printf("[ERROR]: could not get printers information from WMI Win32_Printer: %v", err)
+		return err
 	} else {
 		log.Printf("[INFO]: printers information has been retrieved from WMI Win32_Printer")
 	}
+	return nil
 }
 
 func (r *Report) logPrinters() {

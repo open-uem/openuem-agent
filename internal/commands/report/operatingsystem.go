@@ -19,28 +19,33 @@ type windowsVersion struct {
 
 const MAX_DISPLAYNAME_LENGTH = 256
 
-func (r *Report) getOSInfo() {
+func (r *Report) getOSInfo() error {
 	r.OperatingSystem = openuem_nats.OperatingSystem{}
 	if err := r.getOperatingSystemInfo(); err != nil {
 		log.Printf("[ERROR]: could not get operating system info from WMI Win32_OperatingSystem: %v", err)
+		return err
 	} else {
 		log.Printf("[INFO]: operating system information has been retrieved using WMI Win32_OperatingSystem")
 	}
 	if err := r.getEdition(); err != nil {
 		log.Printf("[ERROR]: could not get current version from Windows Registry: %v", err)
+		return err
 	} else {
 		log.Printf("[INFO]: current version has been retrieved from Windows Registry")
 	}
 	if err := r.getArch(); err != nil {
 		log.Printf("[ERROR]: could not get windows arch from Windows Registry: %v", err)
+		return err
 	} else {
 		log.Printf("[INFO]: windows arch has been retrieved from Windows Registry")
 	}
 	if err := r.getUsername(); err != nil {
 		log.Printf("[ERROR]: could not get windows username from WMI Win32_Computer: %v", err)
+		return err
 	} else {
 		log.Printf("[INFO]: windows username has been retrieved from WMI Win32_Computer")
 	}
+	return nil
 }
 
 func (r *Report) logOS() {

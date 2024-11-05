@@ -17,12 +17,14 @@ type antivirusProduct struct {
 	PathToSignedReportingExe string
 }
 
-func (r *Report) getAntivirusInfo() {
+func (r *Report) getAntivirusInfo() error {
 	if err := r.getAntivirusFromWMI(); err != nil {
 		log.Printf("[ERROR]: could not get antivirus information from WMI AntiVirusProduct: %v", err)
+		return err
 	} else {
 		log.Printf("[INFO]: antivirus information has been retrieved from WMI AntiVirusProduct")
 	}
+	return nil
 }
 
 func (r *Report) getAntivirusFromWMI() error {

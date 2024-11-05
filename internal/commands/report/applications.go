@@ -15,9 +15,12 @@ const (
 	APPS       = `SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`
 )
 
-func (r *Report) getApplicationsInfo() {
+func (r *Report) getApplicationsInfo() error {
 	r.Applications = []openuem_nats.Application{}
-	myApps := getApplications()
+	myApps, err := getApplications()
+	if err != nil {
+		return err
+	}
 	for k, v := range myApps {
 		app := openuem_nats.Application{}
 		app.Name = strings.TrimSpace(k)
@@ -26,6 +29,7 @@ func (r *Report) getApplicationsInfo() {
 		app.Publisher = strings.TrimSpace(v.Publisher)
 		r.Applications = append(r.Applications, app)
 	}
+	return nil
 }
 
 func (r *Report) logApplications() {
@@ -46,33 +50,37 @@ func (r *Report) logApplications() {
 }
 
 // TODO - Microsoft Store Apps can't be retrieved from registry
-func getApplications() map[string]openuem_nats.Application {
+func getApplications() (map[string]openuem_nats.Application, error) {
 	applications := make(map[string]openuem_nats.Application)
 
 	if err := getApplicationsFromRegistry(applications, registry.LOCAL_MACHINE, APPS); err != nil {
 		log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKLM", APPS, err)
+		return nil, err
 	} else {
 		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKLM", APPS)
 	}
 
 	if err := getApplicationsFromRegistry(applications, registry.LOCAL_MACHINE, APPS32BITS); err != nil {
 		log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKLM", APPS32BITS, err)
+		return nil, err
 	} else {
 		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKLM", APPS)
 	}
 
 	if err := getApplicationsFromRegistry(applications, registry.USERS, APPS); err != nil {
 		log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKCU", APPS, err)
+		return nil, err
 	} else {
 		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKCU", APPS)
 	}
 
 	if err := getApplicationsFromRegistry(applications, registry.USERS, APPS32BITS); err != nil {
 		log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKCU", APPS32BITS, err)
+		return nil, err
 	} else {
 		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKCU", APPS)
 	}
-	return applications
+	return applications, nil
 }
 
 func getApplicationsFromRegistry(applications map[string]openuem_nats.Application, hive registry.Key, key string) error {

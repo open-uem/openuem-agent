@@ -7,13 +7,15 @@ import (
 	"github.com/yusufpapurcu/wmi"
 )
 
-func (r *Report) getSharesInfo() {
+func (r *Report) getSharesInfo() error {
 	err := r.getSharesFromWMI()
 	if err != nil {
 		log.Printf("[ERROR]: could not get shares information from WMI Win32_Share: %v", err)
+		return err
 	} else {
 		log.Printf("[INFO]: shares information has been retrieved from WMI Win32_Share")
 	}
+	return nil
 }
 
 func (r *Report) logShares() {

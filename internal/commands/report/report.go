@@ -38,19 +38,28 @@ func RunReport(agentId string) *Report {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		report.getComputerInfo()
+		if err := report.getComputerInfo(); err != nil {
+			// Retry
+			report.getComputerInfo()
+		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		report.getOperatingSystemInfo()
+		if err := report.getOperatingSystemInfo(); err != nil {
+			// Retry
+			report.getOperatingSystemInfo()
+		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		report.getOSInfo()
+		if err := report.getOSInfo(); err != nil {
+			// Retry
+			report.getOSInfo()
+		}
 	}()
 
 	wg.Add(1)
@@ -65,37 +74,55 @@ func RunReport(agentId string) *Report {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		report.getLogicalDisksInfo()
+		if err := report.getLogicalDisksInfo(); err != nil {
+			// Retry
+			report.getLogicalDisksInfo()
+		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		report.getPrintersInfo()
+		if err := report.getPrintersInfo(); err != nil {
+			// Retry
+			report.getPrintersInfo()
+		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		report.getSharesInfo()
+		if err := report.getSharesInfo(); err != nil {
+			// Retry
+			report.getSharesInfo()
+		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		report.getAntivirusInfo()
+		if err := report.getAntivirusInfo(); err != nil {
+			// Retry
+			report.getAntivirusInfo()
+		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		report.getSystemUpdateInfo()
+		if err := report.getSystemUpdateInfo(); err != nil {
+			// Retry
+			report.getSystemUpdateInfo()
+		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		report.getNetworkAdaptersInfo()
+		if err := report.getNetworkAdaptersInfo(); err != nil {
+			// Retry
+			report.getNetworkAdaptersInfo()
+		}
 		// Get network adapter with default gateway and set its ip address and MAC as the report IP/MAC address
 		for _, n := range report.NetworkAdapters {
 			if n.DefaultGateway != "" {
@@ -109,13 +136,18 @@ func RunReport(agentId string) *Report {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		report.getApplicationsInfo()
+		if err := report.getApplicationsInfo(); err != nil {
+			// Retry
+			report.getApplicationsInfo()
+		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		report.getVNCInfo()
+		if err := report.getVNCInfo(); err != nil {
+			report.getVNCInfo()
+		}
 	}()
 
 	wg.Wait()

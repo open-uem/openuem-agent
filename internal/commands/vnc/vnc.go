@@ -26,9 +26,10 @@ type VNCServer struct {
 	Proxy           *echo.Echo
 	ProxyCert       string
 	ProxyKey        string
+	ProxyPort       string
 }
 
-func New(certPath, keyPath, sid string) (*VNCServer, error) {
+func New(certPath, keyPath, sid, proxyPort string) (*VNCServer, error) {
 	server, err := GetSupportedVNCServer(sid)
 	if err != nil {
 		return nil, err
@@ -36,6 +37,7 @@ func New(certPath, keyPath, sid string) (*VNCServer, error) {
 	server.Proxy = echo.New()
 	server.ProxyCert = certPath
 	server.ProxyKey = keyPath
+	server.ProxyPort = proxyPort
 	return server, nil
 }
 
@@ -100,7 +102,7 @@ func (vnc *VNCServer) Stop() {
 
 func (vnc *VNCServer) StartProxy() {
 	// Launch proxy only if port is available
-	_, err := net.DialTimeout("tcp", ":1443", 5*time.Second)
+	_, err := net.DialTimeout("tcp", ":"+vnc.ProxyPort, 5*time.Second)
 	if err != nil {
 		vncProxy := vncproxy.New(&vncproxy.Config{
 			LogLevel: vncproxy.InfoFlag,
@@ -115,7 +117,7 @@ func (vnc *VNCServer) StartProxy() {
 		})
 		fmt.Println("[INFO]: NoVNC proxy server started")
 
-		if err := vnc.Proxy.StartTLS(":1443", vnc.ProxyCert, vnc.ProxyKey); err != http.ErrServerClosed {
+		if err := vnc.Proxy.StartTLS(":"+vnc.ProxyPort, vnc.ProxyCert, vnc.ProxyKey); err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
 	}

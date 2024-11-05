@@ -29,13 +29,15 @@ type networkAdapterConfiguration struct {
 	IPSubnet             []string
 }
 
-func (r *Report) getNetworkAdaptersInfo() {
+func (r *Report) getNetworkAdaptersInfo() error {
 	err := r.getNetworkAdaptersFromWMI()
 	if err != nil {
 		log.Printf("[ERROR]: could not get network adapters information from WMI Win32_NetworkAdapter: %v", err)
+		return err
 	} else {
 		log.Printf("[INFO]: network adapters information has been retrieved from WMI Win32_NetworkAdapter")
 	}
+	return nil
 }
 
 func (r *Report) logNetworkAdapters() {
