@@ -165,15 +165,15 @@ func (r *Report) getUpdatesHistory() error {
 func getAutomaticUpdatesStatus(notificationLevel int32) string {
 	switch notificationLevel {
 	case int32(NOTIFICATION_LEVEL_NOT_CONFIGURED):
-		return "Automatic updates are not configured"
+		return "systemupdate.not_configured"
 	case int32(NOTIFICATION_LEVEL_DISABLED):
-		return "Automatic updates are disabled"
+		return "systemupdate.disabled"
 	case int32(NOTIFICATION_LEVEL_NOTIFY_BEFORE_DOWNLOAD):
-		return "Updates are downloaded and installed by user intervention"
+		return "systemupdate.notify_before_download"
 	case int32(NOTIFICATION_LEVEL_NOTIFY_BEFORE_INSTALLATION):
-		return "Updates are installed by user intervention"
+		return "systemupdate.notify_before_installation"
 	case int32(NOTIFICATION_LEVEL_SCHEDULED_INSTALLATION):
-		return "Updates are installed automatically"
+		return "systemupdate.notify_scheduled_installation"
 	}
 	return "Unknown"
 }
