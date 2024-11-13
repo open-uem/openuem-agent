@@ -25,7 +25,7 @@ func RunReport(agentId string) *Report {
 	report := Report{}
 	report.AgentID = agentId
 	report.OS = "windows"
-	report.Version = "0.1.0"
+	report.Version = "0.1.1"
 	report.ExecutionTime = time.Now()
 
 	report.Hostname, err = windows.ComputerName()

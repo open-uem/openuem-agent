@@ -40,6 +40,7 @@ Name: "spanish"; MessagesFile: "Languages\Spanish.isl"
 [Files]
 Source: "C:\Users\mcabr\go\src\github.com\doncicuto\openuem-agent\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Users\mcabr\go\src\github.com\doncicuto\openuem-message\openuem_message.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Users\mcabr\go\src\github.com\doncicuto\openuem-updater-service\windows\openuem-updater-service.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Users\mcabr\go\src\github.com\doncicuto\openuem-agent\innosetup\assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{src}\ca.cer"; DestDir: "{app}\certificates"; Flags: external ignoreversion
 Source: "{src}\agent.cer"; DestDir: "{app}\certificates"; Flags: external ignoreversion
@@ -62,6 +63,7 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""O
 [Dirs]
 Name: "{app}\logs";Permissions: users-modify
 Name: "{app}\config";Permissions: users-modify
+Name: "{app}\updater";Permissions: users-modify
 Name: "{app}\badgerdb";
 
 [UninstallDelete]
@@ -72,10 +74,15 @@ Type: filesandordirs; Name: "{app}"
 Filename: {sys}\sc.exe; Parameters: "create openuem-agent start= auto DisplayName= ""OpenUEM Agent"" binPath= ""{app}\openuem-agent.exe""" ; Flags: runhidden
 Filename: {sys}\sc.exe; Parameters: "description openuem-agent ""OpenUEM Agent service to report inventory info""" ; Flags: runhidden
 Filename: {sys}\sc.exe; Parameters: "start openuem-agent" ; Flags: runhidden
+Filename: {sys}\sc.exe; Parameters: "create openuem-updater-service start= auto DisplayName= ""OpenUEM Updater Service"" binPath= ""{app}\openuem-updater-service.exe""" ; Flags: runhidden
+Filename: {sys}\sc.exe; Parameters: "description openuem-updater-service ""OpenUEM service to update agents and components""" ; Flags: runhidden
+Filename: {sys}\sc.exe; Parameters: "start openuem-updater-service" ; Flags: runhidden
 
 [UninstallRun]
 Filename: {sys}\sc.exe; Parameters: "stop openuem-agent" ; RunOnceId: "StopService"; Flags: runhidden
 Filename: {sys}\sc.exe; Parameters: "delete openuem-agent" ; RunOnceId: "DelService"; Flags: runhidden
+Filename: {sys}\sc.exe; Parameters: "stop openuem-updater-service" ; RunOnceId: "StopService"; Flags: runhidden
+Filename: {sys}\sc.exe; Parameters: "delete openuem-updater-service" ; RunOnceId: "DelService"; Flags: runhidden
 
 [Code]
 var
