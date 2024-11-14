@@ -53,6 +53,9 @@ Root: HKLM; Subkey: "Software\OpenUEM\Agent"; Flags:uninsdeletekeyifempty
 Root: HKLM; Subkey: "Software\OpenUEM\Agent"; ValueType: dword; ValueName: "Enabled"; ValueData: "1"; Flags: uninsdeletekey
 Root: HKLM; Subkey: "Software\OpenUEM\Agent"; ValueType: dword; ValueName: "ExecuteTaskEveryXMinutes"; ValueData: "5"; Flags: uninsdeletekey
 Root: HKLM; Subkey: "Software\OpenUEM\Agent"; ValueType: string; ValueName: "NATSServers"; ValueData: "{code:MyServerUrl}"; Flags:uninsdeletekey
+Root: HKLM; Subkey: "Software\OpenUEM\Agent"; ValueType: string; ValueName: "UpdaterLastExecutionTime"; ValueData: ""; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\OpenUEM\Agent"; ValueType: string; ValueName: "UpdaterLastExecutionStatus"; ValueData: ""; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\OpenUEM\Agent"; ValueType: string; ValueName: "UpdaterLastExecutionResult"; ValueData: ""; Flags: uninsdeletekey
 
 
 [Run]

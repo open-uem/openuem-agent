@@ -150,6 +150,15 @@ func RunReport(agentId string) *Report {
 		}
 	}()
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.getUpdateTaskInfo(); err != nil {
+			// Retry
+			report.getUpdateTaskInfo()
+		}
+	}()
+
 	wg.Wait()
 
 	return &report
