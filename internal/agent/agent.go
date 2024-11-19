@@ -103,8 +103,6 @@ func New() Agent {
 }
 
 func (a *Agent) Start() {
-	// Read Agent Config from file
-	// a.ReadConfig()
 
 	log.Println("[INFO]: agent has been started!")
 
@@ -147,6 +145,11 @@ func (a *Agent) Start() {
 	}
 	a.SubscribeToNATSSubjects()
 
+	// Get remote config
+	if err := a.GetRemoteConfig(); err != nil {
+		log.Printf("[ERROR]: could not get remote config %v", err)
+	}
+
 	// Run report for the first time after start if agent is enabled
 	if a.Config.Enabled {
 		r := a.RunReport()
@@ -156,8 +159,8 @@ func (a *Agent) Start() {
 			a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN // Try to send it again in 5 minutes
 			log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
 		} else {
-			// Start scheduled report job every 60 minutes
-			a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_60MIN
+			// Start scheduled report job with default frequency
+			a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
 		}
 
 		a.Config.WriteConfig()
@@ -216,6 +219,10 @@ func (a *Agent) SendReport(r *report.Report) error {
 	data, err := json.Marshal(r)
 	if err != nil {
 		return err
+	}
+
+	if a.MessageServer.Connection == nil {
+		return fmt.Errorf("NATS connection is not ready")
 	}
 	_, err = a.MessageServer.Connection.Request("report", data, 4*time.Minute)
 	if err != nil {
@@ -278,6 +285,12 @@ func (a *Agent) startNATSConnectJob() error {
 				a.SubscribeToNATSSubjects()
 				a.startReportJob()
 				a.startPendingACKJob()
+
+				// Get remote config
+				if err := a.GetRemoteConfig(); err != nil {
+					log.Printf("[ERROR]: could not get remote config %v", err)
+				}
+
 			},
 		),
 	)
@@ -302,8 +315,8 @@ func (a *Agent) ReportTask() {
 		return
 	}
 
-	// Report run and sent! Set normal execution time
-	a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_60MIN
+	// Report run and sent! Use default frequency
+	a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
 	a.Config.WriteConfig()
 	a.RescheduleReportRunTask()
 }
@@ -357,7 +370,8 @@ func (a *Agent) EnableAgentSubscribe() error {
 					log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
 					a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN
 				} else {
-					a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_60MIN
+					// Use default frequency
+					a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
 				}
 
 				a.Config.Enabled = true
@@ -613,6 +627,34 @@ func (a *Agent) UninstallPackageSubscribe() error {
 	return nil
 }
 
+func (a *Agent) NewConfigSubscribe() error {
+	_, err := a.MessageServer.Connection.Subscribe("agent.newconfig", func(msg *nats.Msg) {
+
+		config := openuem_nats.Config{}
+		err := json.Unmarshal(msg.Data, &config)
+		if err != nil {
+			log.Printf("[ERROR]: could not get new config to apply, reason: %v\n", err)
+			return
+		}
+
+		a.Config.DefaultFrequency = config.AgentFrequency
+
+		// Should we re-schedule agent report?
+		if a.Config.ExecuteTaskEveryXMinutes != SCHEDULETIME_5MIN {
+			a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
+			a.RescheduleReportRunTask()
+		}
+
+		a.Config.WriteConfig()
+		log.Println("[INFO]: new config has been set from console")
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to agent uninstall package, reason: %v", err)
+	}
+	return nil
+}
+
 func (a *Agent) SendDeployResult(r *openuem_nats.DeployAction) error {
 	data, err := json.Marshal(r)
 	if err != nil {
@@ -771,4 +813,40 @@ func (a *Agent) SubscribeToNATSSubjects() {
 		log.Printf("[ERROR]: %v\n", err)
 	}
 
+	err = a.NewConfigSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
+}
+
+func (a *Agent) GetRemoteConfig() error {
+	if a.MessageServer.Connection == nil {
+		return fmt.Errorf("NATS connection is not ready")
+	}
+
+	msg, err := a.MessageServer.Connection.Request("agentconfig", nil, 10*time.Minute)
+	if err != nil {
+		return err
+	}
+
+	if msg == nil || msg.Data == nil {
+		return fmt.Errorf("no config was received")
+	}
+
+	config := openuem_nats.Config{}
+
+	if err := json.Unmarshal(msg.Data, &config); err != nil {
+		return err
+	}
+
+	if config.Ok {
+		a.Config.DefaultFrequency = config.AgentFrequency
+		a.Config.WriteConfig()
+
+		if a.Config.Debug {
+			log.Printf("[DEBUG]: new default frequency is %d", a.Config.DefaultFrequency)
+		}
+	}
+	return nil
 }

@@ -10,7 +10,6 @@ import (
 )
 
 const SCHEDULETIME_5MIN = 5
-const SCHEDULETIME_60MIN = 60
 
 type Config struct {
 	NATSHost                 string
@@ -19,6 +18,7 @@ type Config struct {
 	ExecuteTaskEveryXMinutes int
 	Enabled                  bool
 	Debug                    bool
+	DefaultFrequency         int
 }
 
 func (a *Agent) ReadConfig() {
@@ -63,6 +63,11 @@ func (a *Agent) ReadConfig() {
 		}
 	}
 
+	defaultFrequency, _, err := k.GetIntegerValue("DefaultFrequency")
+	if err == nil {
+		a.Config.DefaultFrequency = int(defaultFrequency)
+	}
+
 	k.Close()
 	log.Println("[INFO]: agent has read its settings from the registry")
 
@@ -88,6 +93,11 @@ func (c *Config) WriteConfig() {
 	err = k.SetDWordValue("Enabled", uint32(enabled))
 	if err != nil {
 		log.Println("[ERROR]: could not save the Enabled key")
+	}
+
+	err = k.SetDWordValue("DefaultFrequency", uint32(c.DefaultFrequency))
+	if err != nil {
+		log.Println("[ERROR]: could not save the Default Frequency key")
 	}
 
 	err = k.SetDWordValue("ExecuteTaskEveryXMinutes", uint32(c.ExecuteTaskEveryXMinutes))
