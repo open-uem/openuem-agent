@@ -2,6 +2,7 @@ package agent
 
 import (
 	"log"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -17,6 +18,7 @@ type Config struct {
 	UUID                     string
 	ExecuteTaskEveryXMinutes int
 	Enabled                  bool
+	Debug                    bool
 }
 
 func (a *Agent) ReadConfig() {
@@ -48,6 +50,16 @@ func (a *Agent) ReadConfig() {
 		if len(strippedUrl) == 2 {
 			a.Config.NATSHost = strippedUrl[0]
 			a.Config.NATSPort = strippedUrl[1]
+		}
+	}
+
+	debug, _, err := k.GetStringValue("Debug")
+	if err == nil {
+		val, err := strconv.ParseBool(debug)
+		if err != nil {
+			a.Config.Debug = false
+		} else {
+			a.Config.Debug = val
 		}
 	}
 

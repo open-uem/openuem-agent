@@ -15,12 +15,24 @@ type Report struct {
 	openuem_nats.AgentReport
 }
 
-func RunReport(agentId string) *Report {
+func RunReport(agentId string, debug bool) *Report {
 	var wg sync.WaitGroup
 	var err error
+
+	if debug {
+		log.Println("[DEBUG]: preparing com")
+	}
 	// Prepare COM
 	comshim.Add(1)
 	defer comshim.Done()
+
+	if debug {
+		log.Println("[DEBUG]: com prepared")
+	}
+
+	if debug {
+		log.Println("[DEBUG]: preparing report info")
+	}
 
 	report := Report{}
 	report.AgentID = agentId
@@ -34,94 +46,84 @@ func RunReport(agentId string) *Report {
 		report.Hostname = "UNKNOWN"
 	}
 
+	if debug {
+		log.Println("[DEBUG]: report info ready")
+	}
+
+	if debug {
+		log.Println("[DEBUG]: launching goroutines")
+	}
+
 	// These operations will be run using goroutines
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := report.getComputerInfo(); err != nil {
+		if err := report.getComputerInfo(debug); err != nil {
 			// Retry
-			report.getComputerInfo()
+			report.getComputerInfo(debug)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := report.getOperatingSystemInfo(); err != nil {
+		if err := report.getOperatingSystemInfo(debug); err != nil {
 			// Retry
-			report.getOperatingSystemInfo()
+			report.getOperatingSystemInfo(debug)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := report.getOSInfo(); err != nil {
+		if err := report.getOSInfo(debug); err != nil {
 			// Retry
-			report.getOSInfo()
+			report.getOSInfo(debug)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := report.getMonitorsInfo(); err != nil {
+		if err := report.getMonitorsInfo(debug); err != nil {
 			// Retry
-			report.getMonitorsInfo()
+			report.getMonitorsInfo(debug)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := report.getLogicalDisksInfo(); err != nil {
+		if err := report.getPrintersInfo(debug); err != nil {
 			// Retry
-			report.getLogicalDisksInfo()
+			report.getPrintersInfo(debug)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := report.getPrintersInfo(); err != nil {
+		if err := report.getSharesInfo(debug); err != nil {
 			// Retry
-			report.getPrintersInfo()
+			report.getSharesInfo(debug)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := report.getSharesInfo(); err != nil {
+		if err := report.getAntivirusInfo(debug); err != nil {
 			// Retry
-			report.getSharesInfo()
+			report.getAntivirusInfo(debug)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := report.getAntivirusInfo(); err != nil {
+		if err := report.getNetworkAdaptersInfo(debug); err != nil {
 			// Retry
-			report.getAntivirusInfo()
-		}
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := report.getSystemUpdateInfo(); err != nil {
-			// Retry
-			report.getSystemUpdateInfo()
-		}
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := report.getNetworkAdaptersInfo(); err != nil {
-			// Retry
-			report.getNetworkAdaptersInfo()
+			report.getNetworkAdaptersInfo(debug)
 		}
 		// Get network adapter with default gateway and set its ip address and MAC as the report IP/MAC address
 		for _, n := range report.NetworkAdapters {
@@ -136,30 +138,41 @@ func RunReport(agentId string) *Report {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := report.getApplicationsInfo(); err != nil {
+		if err := report.getApplicationsInfo(debug); err != nil {
 			// Retry
-			report.getApplicationsInfo()
+			report.getApplicationsInfo(debug)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := report.getVNCInfo(); err != nil {
-			report.getVNCInfo()
+		if err := report.getVNCInfo(debug); err != nil {
+			report.getVNCInfo(debug)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := report.getUpdateTaskInfo(); err != nil {
+		if err := report.getUpdateTaskInfo(debug); err != nil {
 			// Retry
-			report.getUpdateTaskInfo()
+			report.getUpdateTaskInfo(debug)
 		}
 	}()
 
 	wg.Wait()
+
+	// These tasks can affect previous tasks
+	if err := report.getSystemUpdateInfo(debug); err != nil {
+		// Retry
+		report.getSystemUpdateInfo(debug)
+	}
+
+	if err := report.getLogicalDisksInfo(debug); err != nil {
+		// Retry
+		report.getLogicalDisksInfo(debug)
+	}
 
 	return &report
 }

@@ -1,13 +1,16 @@
 package report
 
 import (
+	"context"
 	"fmt"
 	"log"
-
-	"github.com/yusufpapurcu/wmi"
 )
 
-func (r *Report) getSharesInfo() error {
+func (r *Report) getSharesInfo(debug bool) error {
+	if debug {
+		log.Println("[DEBUG]: shares info has been requested")
+	}
+
 	err := r.getSharesFromWMI()
 	if err != nil {
 		log.Printf("[ERROR]: could not get shares information from WMI Win32_Share: %v", err)
@@ -37,7 +40,9 @@ func (r *Report) logShares() {
 func (r *Report) getSharesFromWMI() error {
 	namespace := `root\cimv2`
 	qShares := "SELECT Name, Path, Description FROM Win32_Share"
-	err := wmi.QueryNamespace(qShares, &r.Shares, namespace)
+
+	ctx := context.Background()
+	err := WMIQueryWithContext(ctx, qShares, &r.Shares, namespace)
 	if err != nil {
 		return err
 	}

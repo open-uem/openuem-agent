@@ -1,11 +1,11 @@
 package report
 
 import (
+	"context"
 	"fmt"
 	"log"
 
 	"github.com/doncicuto/openuem_nats"
-	"github.com/yusufpapurcu/wmi"
 )
 
 type printerStatus uint16
@@ -31,7 +31,11 @@ const (
 	PRINTER_STATUS_MANUAL_FEED
 )
 
-func (r *Report) getPrintersInfo() error {
+func (r *Report) getPrintersInfo(debug bool) error {
+	if debug {
+		log.Println("[DEBUG]: printers info has been requested")
+	}
+
 	err := r.getPrintersFromWMI()
 	if err != nil {
 		log.Printf("[ERROR]: could not get printers information from WMI Win32_Printer: %v", err)
@@ -73,7 +77,9 @@ func (r *Report) getPrintersFromWMI() error {
 	r.Printers = []openuem_nats.Printer{}
 	namespace := `root\cimv2`
 	qPrinters := "SELECT Name, Default, PortName, PrinterStatus, Network FROM Win32_Printer"
-	err := wmi.QueryNamespace(qPrinters, &printersDst, namespace)
+
+	ctx := context.Background()
+	err := WMIQueryWithContext(ctx, qPrinters, &printersDst, namespace)
 	if err != nil {
 		return err
 	}

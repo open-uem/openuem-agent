@@ -1,13 +1,18 @@
 package report
 
 import (
+	"log"
 	"time"
 
 	"github.com/doncicuto/openuem_utils"
 	"golang.org/x/sys/windows/registry"
 )
 
-func (r *Report) getUpdateTaskInfo() error {
+func (r *Report) getUpdateTaskInfo(debug bool) error {
+	if debug {
+		log.Println("[DEBUG]: update task info has been requested")
+	}
+
 	k, err := openuem_utils.OpenRegistryForQuery(registry.LOCAL_MACHINE, `SOFTWARE\OpenUEM\Agent`)
 	if err != nil {
 		return err

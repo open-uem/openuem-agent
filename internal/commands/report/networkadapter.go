@@ -1,13 +1,13 @@
 package report
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
 	"time"
 
 	"github.com/doncicuto/openuem_nats"
-	"github.com/yusufpapurcu/wmi"
 )
 
 type networkAdapterInfo struct {
@@ -29,7 +29,11 @@ type networkAdapterConfiguration struct {
 	IPSubnet             []string
 }
 
-func (r *Report) getNetworkAdaptersInfo() error {
+func (r *Report) getNetworkAdaptersInfo(debug bool) error {
+	if debug {
+		log.Println("[DEBUG]: network adapters info has been requested")
+	}
+
 	err := r.getNetworkAdaptersFromWMI()
 	if err != nil {
 		log.Printf("[ERROR]: could not get network adapters information from WMI Win32_NetworkAdapter: %v", err)
@@ -76,7 +80,9 @@ func (r *Report) getNetworkAdaptersFromWMI() error {
 
 	namespace := `root\cimv2`
 	qNetwork := "SELECT Index, MACAddress, Name, NetConnectionStatus, Speed FROM Win32_NetworkAdapter"
-	err := wmi.QueryNamespace(qNetwork, &networkInfoDst, namespace)
+
+	ctx := context.Background()
+	err := WMIQueryWithContext(ctx, qNetwork, &networkInfoDst, namespace)
 	if err != nil {
 		return err
 	}
@@ -101,7 +107,8 @@ func (r *Report) getNetworkAdaptersFromWMI() error {
 			// index value retrieved by WMI it's not user generated input
 			namespace = `root\cimv2`
 			qNetwork := fmt.Sprintf("SELECT DefaultIPGateway, DHCPEnabled, DHCPLeaseExpires, DHCPLeaseObtained, DNSDomain, DNSServerSearchOrder, IPAddress, IPSubnet FROM Win32_NetworkAdapterConfiguration WHERE Index = %d", v.Index)
-			err = wmi.QueryNamespace(qNetwork, &networkAdapterDst, namespace)
+
+			err = WMIQueryWithContext(ctx, qNetwork, &networkAdapterDst, namespace)
 			if err != nil {
 				return err
 			}

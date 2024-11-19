@@ -6,7 +6,11 @@ import (
 	"github.com/doncicuto/openuem-agent/internal/commands/vnc"
 )
 
-func (r *Report) getVNCInfo() error {
+func (r *Report) getVNCInfo(debug bool) error {
+	if debug {
+		log.Println("[DEBUG]: vnc info has been requested")
+	}
+
 	v, err := vnc.GetSupportedVNCServer("")
 	if err != nil {
 		log.Println("[ERROR]: could not find a supported VNC server")

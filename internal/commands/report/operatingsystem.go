@@ -1,6 +1,7 @@
 package report
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -8,7 +9,6 @@ import (
 	"time"
 
 	"github.com/doncicuto/openuem_nats"
-	"github.com/yusufpapurcu/wmi"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -19,13 +19,20 @@ type windowsVersion struct {
 
 const MAX_DISPLAYNAME_LENGTH = 256
 
-func (r *Report) getOSInfo() error {
+func (r *Report) getOSInfo(debug bool) error {
+	if debug {
+		log.Println("[DEBUG]: os info (operating system info) has been requested")
+	}
 	r.OperatingSystem = openuem_nats.OperatingSystem{}
-	if err := r.getOperatingSystemInfo(); err != nil {
+	if err := r.getOperatingSystemInfo(debug); err != nil {
 		log.Printf("[ERROR]: could not get operating system info from WMI Win32_OperatingSystem: %v", err)
 		return err
 	} else {
 		log.Printf("[INFO]: operating system information has been retrieved using WMI Win32_OperatingSystem")
+	}
+
+	if debug {
+		log.Println("[DEBUG]: os edition has been requested")
 	}
 	if err := r.getEdition(); err != nil {
 		log.Printf("[ERROR]: could not get current version from Windows Registry: %v", err)
@@ -33,11 +40,19 @@ func (r *Report) getOSInfo() error {
 	} else {
 		log.Printf("[INFO]: current version has been retrieved from Windows Registry")
 	}
+
+	if debug {
+		log.Println("[DEBUG]: arch info has been requested")
+	}
 	if err := r.getArch(); err != nil {
 		log.Printf("[ERROR]: could not get windows arch from Windows Registry: %v", err)
 		return err
 	} else {
 		log.Printf("[INFO]: windows arch has been retrieved from Windows Registry")
+	}
+
+	if debug {
+		log.Println("[DEBUG]: username info has been requested")
 	}
 	if err := r.getUsername(); err != nil {
 		log.Printf("[ERROR]: could not get windows username from WMI Win32_Computer: %v", err)
@@ -59,7 +74,7 @@ func (r *Report) logOS() {
 	fmt.Printf("%-40s |  %s \n", "User Name", r.OperatingSystem.Username)
 }
 
-func (r *Report) getOperatingSystemInfo() error {
+func (r *Report) getOperatingSystemInfo(debug bool) error {
 	var osDst []struct {
 		Version        string
 		Caption        string
@@ -67,9 +82,15 @@ func (r *Report) getOperatingSystemInfo() error {
 		LastBootUpTime time.Time
 	}
 
+	if debug {
+		log.Println("[DEBUG]: operating system info has been requested")
+	}
+
 	namespace := `root\cimv2`
 	qOS := "SELECT Version, Caption, InstallDate, LastBootUpTime FROM Win32_OperatingSystem"
-	err := wmi.QueryNamespace(qOS, &osDst, namespace)
+
+	ctx := context.Background()
+	err := WMIQueryWithContext(ctx, qOS, &osDst, namespace)
 	if err != nil {
 		return err
 	}
@@ -147,7 +168,8 @@ func GetLoggedOnUsername() (string, error) {
 	namespace := `root\cimv2`
 	qComputer := "SELECT Username FROM Win32_ComputerSystem"
 
-	err := wmi.QueryNamespace(qComputer, &computerDst, namespace)
+	ctx := context.Background()
+	err := WMIQueryWithContext(ctx, qComputer, &computerDst, namespace)
 	if err != nil {
 		return "", err
 	}

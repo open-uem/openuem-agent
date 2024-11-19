@@ -1,6 +1,7 @@
 package report
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -22,7 +23,11 @@ const (
 	NOTIFICATION_LEVEL_SCHEDULED_INSTALLATION
 )
 
-func (r *Report) getSystemUpdateInfo() error {
+func (r *Report) getSystemUpdateInfo(debug bool) error {
+	if debug {
+		log.Println("[DEBUG]: system updates info has been requested")
+	}
+
 	// Get information about Windows Update settings
 
 	// TODO 1 (security) get information about what SMB client version is installed
@@ -31,33 +36,47 @@ func (r *Report) getSystemUpdateInfo() error {
 
 	// TODO 2 (security) check if firewall is enabled in the three possible domains
 
-	if err := r.getWindowsUpdateStatus(); err != nil {
+	if debug {
+		log.Println("[DEBUG]: windows update status info has been requested")
+	}
+	if err := r.getWindowsUpdateStatusWithCancelContext(); err != nil {
 		log.Printf("[ERROR]: could not get windows update status info information from wuapi: %v", err)
 		return err
 	} else {
 		log.Printf("[INFO]: windows update status info has been retrieved from wuapi")
 	}
 
-	if err := r.getWindowsUpdateDates(); err != nil {
+	if debug {
+		log.Println("[DEBUG]: windows update dates info has been requested")
+	}
+	if err := r.getWindowsUpdateDatesWithCancelContext(); err != nil {
 		log.Printf("[ERROR]: could not get windows update dates information from wuapi: %v", err)
 		return err
 	} else {
 		log.Printf("[INFO]: windows update dates info has been retrieved from wuapi")
 	}
 
-	if err := r.getPendingUpdates(); err != nil {
+	if debug {
+		log.Println("[DEBUG]: windows update pending updates info has been requested")
+	}
+	if err := r.getPendingUpdatesWithCancelContext(); err != nil {
 		log.Printf("[ERROR]: could not get pending updates information from wuapi: %v", err)
 		return err
 	} else {
 		log.Printf("[INFO]: pending updates info has been retrieved from wuapi")
 	}
 
-	if err := r.getUpdatesHistory(); err != nil {
+	if debug {
+		log.Println("[DEBUG]: windows update history info has been requested")
+	}
+
+	if err := r.getUpdatesHistoryWithCancelContext(); err != nil {
 		log.Printf("[ERROR]: could not get updates history information from wuapi: %v", err)
 		return err
 	} else {
 		log.Printf("[INFO]: updates history info has been retrieved from wuapi")
 	}
+
 	return nil
 }
 
@@ -77,25 +96,68 @@ func (r *Report) logSystemUpdate() {
 	fmt.Printf("%-40s |  %t \n", "Pending updates", r.SystemUpdate.PendingUpdates)
 }
 
-func (r *Report) getWindowsUpdateStatus() error {
-	automaticUpdateSettings, err := newIAutomaticUpdates()
-	if err != nil {
-		return err
-	} else {
-		r.SystemUpdate.Status = getAutomaticUpdatesStatus(automaticUpdateSettings.NotificationLevel)
+func (r *Report) getWindowsUpdateStatusWithCancelContext() error {
+	ctx := context.Background()
+	if _, ok := ctx.Deadline(); !ok {
+		ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		ctx = ctxTimeout
 	}
-	return nil
+
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- r.newIAutomaticUpdates()
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errChan:
+		return err
+	}
+
 }
 
-func (r *Report) getWindowsUpdateDates() error {
-	automaticUpdateResults, err := newIAutomaticUpdate2()
-	if err != nil {
-		return err
+func (r *Report) getWindowsUpdateDatesWithCancelContext() error {
+	ctx := context.Background()
+	if _, ok := ctx.Deadline(); !ok {
+		ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		ctx = ctxTimeout
 	}
 
-	r.SystemUpdate.LastInstall = automaticUpdateResults.LastInstallationSuccessDate.Local()
-	r.SystemUpdate.LastSearch = automaticUpdateResults.LastSearchSuccessDate.Local()
-	return nil
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- r.newIAutomaticUpdate2()
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errChan:
+		return err
+	}
+}
+
+func (r *Report) getPendingUpdatesWithCancelContext() error {
+	ctx := context.Background()
+	if _, ok := ctx.Deadline(); !ok {
+		ctxTimeout, cancel := context.WithTimeout(ctx, 90*time.Second)
+		defer cancel()
+		ctx = ctxTimeout
+	}
+
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- r.getPendingUpdates()
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errChan:
+		return err
+	}
 }
 
 func (r *Report) getPendingUpdates() error {
@@ -125,6 +187,27 @@ func (r *Report) getPendingUpdates() error {
 	return nil
 }
 
+func (r *Report) getUpdatesHistoryWithCancelContext() error {
+	ctx := context.Background()
+	if _, ok := ctx.Deadline(); !ok {
+		ctxTimeout, cancel := context.WithTimeout(ctx, 45*time.Second)
+		defer cancel()
+		ctx = ctxTimeout
+	}
+
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- r.getUpdatesHistory()
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errChan:
+		return err
+	}
+}
+
 func (r *Report) getUpdatesHistory() error {
 	err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED|ole.COINIT_SPEED_OVER_MEMORY)
 	if err != nil {
@@ -143,7 +226,7 @@ func (r *Report) getUpdatesHistory() error {
 
 	result, err := searcher.QueryHistoryAll()
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	updates := []openuem_nats.Update{}
@@ -239,36 +322,51 @@ func toIAutomaticUpdatesResults(iAutomaticUpdatesResultsDisp *ole.IDispatch) (*I
 
 // NewIAutomaticUpdate2 creates a new IAutomaticUpdates2 interface.
 // https://learn.microsoft.com/en-us/windows/win32/api/wuapi/nn-wuapi-iautomaticupdates2
-func newIAutomaticUpdate2() (*IAutomaticUpdatesResults, error) {
+func (r *Report) newIAutomaticUpdate2() error {
 	unknown, err := oleutil.CreateObject("Microsoft.Update.AutoUpdate")
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Ref: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-uamg/e839e7e0-1795-451b-94ef-abacd6cbecac
 	iid_iautomaticupdates2 := ole.NewGUID("4A2F5C31-CFD9-410E-B7FB-29A653973A0F")
 	disp, err := unknown.QueryInterface(iid_iautomaticupdates2)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return toIAutomaticUpdates2(disp)
+
+	results, err := toIAutomaticUpdates2(disp)
+	if err != nil {
+		return err
+	}
+
+	r.SystemUpdate.LastInstall = results.LastInstallationSuccessDate.Local()
+	r.SystemUpdate.LastSearch = results.LastSearchSuccessDate.Local()
+	return nil
 }
 
 // NewIAutomaticUpdatesSettings creates a new IAutomaticUpdatesSettings interface.
 // https://learn.microsoft.com/en-us/windows/win32/api/wuapi/nn-wuapi-iautomaticupdates2
-func newIAutomaticUpdates() (*IAutomaticUpdatesSettings, error) {
+func (r *Report) newIAutomaticUpdates() error {
 	unknown, err := oleutil.CreateObject("Microsoft.Update.AutoUpdate")
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Ref: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-uamg/e839e7e0-1795-451b-94ef-abacd6cbecac
 	iidIAutomaticUpdates := ole.NewGUID("673425BF-C082-4C7C-BDFD-569464B8E0CE")
 	disp, err := unknown.QueryInterface(iidIAutomaticUpdates)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return toIAutomaticUpdates(disp)
+
+	settings, err := toIAutomaticUpdates(disp)
+	if err != nil {
+		return err
+	}
+
+	r.SystemUpdate.Status = getAutomaticUpdatesStatus(settings.NotificationLevel)
+	return nil
 }
 
 func toIDispatchErr(result *ole.VARIANT, err error) (*ole.IDispatch, error) {

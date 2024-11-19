@@ -1,12 +1,12 @@
 package report
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
 
 	"github.com/doncicuto/openuem_nats"
-	"github.com/yusufpapurcu/wmi"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -15,9 +15,12 @@ const (
 	APPS       = `SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`
 )
 
-func (r *Report) getApplicationsInfo() error {
+func (r *Report) getApplicationsInfo(debug bool) error {
+	if debug {
+		log.Println("[DEBUG]: applications info has been requested")
+	}
 	r.Applications = []openuem_nats.Application{}
-	myApps, err := getApplications()
+	myApps, err := getApplications(debug)
 	if err != nil {
 		return err
 	}
@@ -50,9 +53,12 @@ func (r *Report) logApplications() {
 }
 
 // TODO - Microsoft Store Apps can't be retrieved from registry
-func getApplications() (map[string]openuem_nats.Application, error) {
+func getApplications(debug bool) (map[string]openuem_nats.Application, error) {
 	applications := make(map[string]openuem_nats.Application)
 
+	if debug {
+		log.Printf("[DEBUG]: apps information has been retrieved from %s", "HKLM\\APPS")
+	}
 	if err := getApplicationsFromRegistry(applications, registry.LOCAL_MACHINE, APPS); err != nil {
 		log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKLM", APPS, err)
 		return nil, err
@@ -60,13 +66,19 @@ func getApplications() (map[string]openuem_nats.Application, error) {
 		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKLM", APPS)
 	}
 
+	if debug {
+		log.Printf("[DEBUG]: apps information has been retrieved from %s", "HKLM\\APPS32BITS")
+	}
 	if err := getApplicationsFromRegistry(applications, registry.LOCAL_MACHINE, APPS32BITS); err != nil {
 		log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKLM", APPS32BITS, err)
 		return nil, err
 	} else {
-		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKLM", APPS)
+		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKLM", APPS32BITS)
 	}
 
+	if debug {
+		log.Printf("[DEBUG]: apps information has been retrieved from %s", "HKCU\\APPS")
+	}
 	if err := getApplicationsFromRegistry(applications, registry.USERS, APPS); err != nil {
 		log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKCU", APPS, err)
 		return nil, err
@@ -74,11 +86,14 @@ func getApplications() (map[string]openuem_nats.Application, error) {
 		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKCU", APPS)
 	}
 
+	if debug {
+		log.Printf("[DEBUG]: apps information has been retrieved from %s", "HKCU\\APPS32BITS")
+	}
 	if err := getApplicationsFromRegistry(applications, registry.USERS, APPS32BITS); err != nil {
 		log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKCU", APPS32BITS, err)
 		return nil, err
 	} else {
-		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKCU", APPS)
+		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKCU", APPS32BITS)
 	}
 	return applications, nil
 }
@@ -145,13 +160,15 @@ func GetSID(username string) (string, error) {
 	}
 
 	qSID := fmt.Sprintf("SELECT SID FROM Win32_UserAccount WHERE Domain = '%s' and Name = '%s'", user[0], user[1])
-	err := wmi.QueryNamespace(qSID, &response, namespace)
+
+	ctx := context.Background()
+	err := WMIQueryWithContext(ctx, qSID, &response, namespace)
 	if err != nil {
 		log.Printf("[ERROR]: could not generate SQL for WMI Win32_UserAccount: %v", err)
 		return "", err
 	}
 
-	err = wmi.QueryNamespace(qSID, &response, namespace)
+	err = WMIQueryWithContext(ctx, qSID, &response, namespace)
 	if err != nil {
 		log.Printf("[ERROR]: could not get user account info from WMI Win32_UserAccount: %v", err)
 		return "", err

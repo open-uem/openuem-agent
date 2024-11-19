@@ -1,15 +1,19 @@
 package report
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
 
 	"github.com/doncicuto/openuem_nats"
-	"github.com/yusufpapurcu/wmi"
 )
 
-func (r *Report) getMonitorsInfo() error {
+func (r *Report) getMonitorsInfo(debug bool) error {
+	if debug {
+		log.Println("[DEBUG]: monitors info has been requested")
+	}
+
 	// Get monitors information
 	// Ref: https://learn.microsoft.com/en-us/windows/win32/wmicoreprov/wmimonitorid
 	var monitorDst []struct {
@@ -22,7 +26,9 @@ func (r *Report) getMonitorsInfo() error {
 
 	namespace := `root\wmi`
 	qMonitors := "SELECT ManufacturerName, SerialNumberID, UserFriendlyName FROM WmiMonitorID"
-	err := wmi.QueryNamespace(qMonitors, &monitorDst, namespace)
+
+	ctx := context.Background()
+	err := WMIQueryWithContext(ctx, qMonitors, &monitorDst, namespace)
 	if err != nil {
 		log.Printf("[ERROR]: could not get information from WMI WmiMonitorID: %v", err)
 		return err

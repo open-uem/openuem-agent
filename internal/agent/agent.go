@@ -104,7 +104,7 @@ func New() Agent {
 
 func (a *Agent) Start() {
 	// Read Agent Config from file
-	a.ReadConfig()
+	// a.ReadConfig()
 
 	log.Println("[INFO]: agent has been started!")
 
@@ -196,9 +196,19 @@ func (a *Agent) Stop() {
 
 func (a *Agent) RunReport() *report.Report {
 	start := time.Now()
+
+	if a.Config.Debug {
+		log.Println("========================================================================")
+	}
+
 	log.Println("[INFO]: agent is running a report...")
-	r := report.RunReport(a.Config.UUID)
+	r := report.RunReport(a.Config.UUID, a.Config.Debug)
+
 	log.Printf("[INFO]: agent report run took %v\n", time.Since(start))
+
+	if a.Config.Debug {
+		log.Println("========================================================================")
+	}
 	return r
 }
 
@@ -281,6 +291,9 @@ func (a *Agent) startNATSConnectJob() error {
 
 func (a *Agent) ReportTask() {
 	r := a.RunReport()
+	if r == nil {
+		return
+	}
 	if err := a.SendReport(r); err != nil {
 		a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN
 		a.Config.WriteConfig()
@@ -335,6 +348,9 @@ func (a *Agent) EnableAgentSubscribe() error {
 			// Run report async
 			go func() {
 				r := a.RunReport()
+				if r == nil {
+					return
+				}
 
 				// Send report to NATS
 				if err := a.SendReport(r); err != nil {
@@ -397,6 +413,9 @@ func (a *Agent) RunReportSubscribe() error {
 	_, err := a.MessageServer.Connection.QueueSubscribe("agent.report."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
 		a.ReadConfig()
 		r := a.RunReport()
+		if r == nil {
+			return
+		}
 
 		if err := a.SendReport(r); err != nil {
 			log.Printf("[ERROR]: report could not be send to NATS server!, reason: %v\n", err)
@@ -493,6 +512,9 @@ func (a *Agent) InstallPackageSubscribe() error {
 
 		// Send a report to update the installed apps
 		r := a.RunReport()
+		if r == nil {
+			return
+		}
 		if err := a.SendReport(r); err != nil {
 			log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
 		}
@@ -535,6 +557,10 @@ func (a *Agent) UpdatePackageSubscribe() error {
 
 		// Send a report to update the installed apps
 		r := a.RunReport()
+		if r == nil {
+			return
+		}
+
 		if err := a.SendReport(r); err != nil {
 			log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
 		}
@@ -572,6 +598,10 @@ func (a *Agent) UninstallPackageSubscribe() error {
 
 		// Send a report to update the installed apps
 		r := a.RunReport()
+		if r == nil {
+			return
+		}
+
 		if err := a.SendReport(r); err != nil {
 			log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
 		}

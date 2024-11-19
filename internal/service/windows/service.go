@@ -1,4 +1,4 @@
-package service
+package main
 
 import (
 	"log"
@@ -13,7 +13,7 @@ type OpenUEMService struct {
 	Logger *logger.OpenUEMLogger
 }
 
-func New(l *logger.OpenUEMLogger) *OpenUEMService {
+func NewService(l *logger.OpenUEMLogger) *OpenUEMService {
 	return &OpenUEMService{
 		Logger: l,
 	}
@@ -27,7 +27,7 @@ func (s *OpenUEMService) Execute(args []string, r <-chan svc.ChangeRequest, chan
 	// Get new agent
 	a := agent.New()
 
-	// Start agente
+	// Start agent
 	a.Start()
 
 	// service control manager

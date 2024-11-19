@@ -4,7 +4,6 @@ import (
 	"log"
 
 	"github.com/doncicuto/openuem-agent/internal/logger"
-	"github.com/doncicuto/openuem-agent/internal/service"
 	"golang.org/x/sys/windows/svc"
 )
 
@@ -13,7 +12,7 @@ func main() {
 	l := logger.New()
 
 	// Instantiate service
-	s := service.New(l)
+	s := NewService(l)
 
 	// Run service
 	err := svc.Run("openuem-agent", s)

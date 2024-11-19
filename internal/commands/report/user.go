@@ -1,15 +1,18 @@
 package report
 
 import (
+	"context"
 	"fmt"
 	"log"
-
-	"github.com/yusufpapurcu/wmi"
 )
 
 // TODO logon date with WMI shows as protected with *****
 // Another approach: https://gist.github.com/talatham/5772146
-func (r *Report) getLoggedOnUserInfo() {
+func (r *Report) getLoggedOnUserInfo(debug bool) {
+	if debug {
+		log.Println("[DEBUG]: logged on users info has been requested")
+	}
+
 	err := r.getLoggedOnUserFromWMI()
 	if err != nil {
 		log.Printf("[ERROR]: could not get logged on user information from WMI Win32_NetworkLoginProfile: %v", err)
@@ -21,7 +24,9 @@ func (r *Report) getLoggedOnUserInfo() {
 func (r *Report) getLoggedOnUserFromWMI() error {
 	namespace := `root\cimv2`
 	q := "SELECT Name, LastLogon from Win32_NetworkLoginProfile"
-	err := wmi.QueryNamespace(q, &r.LoggedOnUsers, namespace)
+
+	ctx := context.Background()
+	err := WMIQueryWithContext(ctx, q, &r.LoggedOnUsers, namespace)
 	if err != nil {
 		return err
 	}

@@ -47,7 +47,7 @@ func UltraVNCEncrypt(pin string) string {
 	// Create a DES cipher using the same key as UltraVNC.
 	block, err := des.NewCipher(ultraVNCDESKey)
 	if err != nil {
-		panic(err)
+		return ""
 	}
 	// Encrypt password.
 	encryptedPassword := make([]byte, block.BlockSize())

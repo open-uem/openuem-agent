@@ -1,11 +1,10 @@
 package report
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
-
-	"github.com/yusufpapurcu/wmi"
 )
 
 type computerSystem struct {
@@ -24,7 +23,10 @@ type processorInfo struct {
 	NumberOfCores uint32
 }
 
-func (r *Report) getComputerInfo() error {
+func (r *Report) getComputerInfo(debug bool) error {
+	if debug {
+		log.Println("[DEBUG]: computer system info has been requested")
+	}
 	if err := r.getComputerSystemInfo(); err != nil {
 		log.Printf("[ERROR]: could not get information from WMI Win32_ComputerSystem: %v", err)
 		return err
@@ -32,6 +34,9 @@ func (r *Report) getComputerInfo() error {
 		log.Printf("[INFO]: computer system info has been retrieved from WMI Win32_ComputerSystem")
 	}
 
+	if debug {
+		log.Println("[DEBUG]: serial number has been requested")
+	}
 	if err := r.getSerialNumber(); err != nil {
 		log.Printf("[ERROR]: could not get information from WMI Win32_Bios: %v", err)
 		return err
@@ -39,6 +44,9 @@ func (r *Report) getComputerInfo() error {
 		log.Printf("[INFO]: serial number info has been retrieved from WMI Win32_Bios")
 	}
 
+	if debug {
+		log.Println("[DEBUG]: processor info has been requested")
+	}
 	if err := r.getProcessorInfo(); err != nil {
 		log.Printf("[ERROR]: could not get information from WMI Win32_Processor: %v", err)
 		return err
@@ -66,7 +74,9 @@ func (r *Report) getComputerSystemInfo() error {
 
 	namespace := `root\cimv2`
 	qComputer := "SELECT Manufacturer, Model, TotalPhysicalMemory FROM Win32_ComputerSystem"
-	err := wmi.QueryNamespace(qComputer, &computerDst, namespace)
+
+	ctx := context.Background()
+	err := WMIQueryWithContext(ctx, qComputer, &computerDst, namespace)
 	if err != nil {
 		return err
 	}
@@ -94,7 +104,9 @@ func (r *Report) getSerialNumber() error {
 	var serialDst []biosInfo
 	namespace := `root\cimv2`
 	qSerial := "SELECT SerialNumber FROM Win32_Bios"
-	err := wmi.QueryNamespace(qSerial, &serialDst, namespace)
+
+	ctx := context.Background()
+	err := WMIQueryWithContext(ctx, qSerial, &serialDst, namespace)
 	if err != nil {
 		return err
 	}
@@ -117,7 +129,9 @@ func (r *Report) getProcessorInfo() error {
 	var processorDst []processorInfo
 	namespace := `root\cimv2`
 	qProcessor := "SELECT Architecture, Name, NumberOfCores FROM Win32_Processor"
-	err := wmi.QueryNamespace(qProcessor, &processorDst, namespace)
+
+	ctx := context.Background()
+	err := WMIQueryWithContext(ctx, qProcessor, &processorDst, namespace)
 	if err != nil {
 		return err
 	}

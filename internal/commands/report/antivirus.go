@@ -1,13 +1,12 @@
 package report
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
 	"os"
 	"strings"
-
-	"github.com/yusufpapurcu/wmi"
 )
 
 type antivirusProduct struct {
@@ -17,7 +16,10 @@ type antivirusProduct struct {
 	PathToSignedReportingExe string
 }
 
-func (r *Report) getAntivirusInfo() error {
+func (r *Report) getAntivirusInfo(debug bool) error {
+	if debug {
+		log.Println("[DEBUG]: antivirus info has been requested")
+	}
 	if err := r.getAntivirusFromWMI(); err != nil {
 		log.Printf("[ERROR]: could not get antivirus information from WMI AntiVirusProduct: %v", err)
 		return err
@@ -34,7 +36,7 @@ func (r *Report) getAntivirusFromWMI() error {
 
 	namespace := `root\SecurityCenter2`
 	q := "SELECT displayName, productState, pathToSignedProductExe, pathToSignedReportingExe from AntiVirusProduct"
-	err := wmi.QueryNamespace(q, &avDst, namespace)
+	err := WMIQueryWithContext(context.Background(), q, &avDst, namespace)
 	if err != nil {
 		return err
 	}
