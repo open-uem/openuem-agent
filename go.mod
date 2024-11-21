@@ -11,7 +11,7 @@ require (
 
 require (
 	github.com/dgraph-io/badger/v4 v4.3.1
-	github.com/doncicuto/comshim v0.0.0-20241121134247-855c4974463a
+	github.com/doncicuto/comshim v0.0.0-20241121140116-6b86c684d9e9
 	github.com/doncicuto/openuem_nats v0.0.0-00010101000000-000000000000
 	github.com/doncicuto/openuem_utils v0.0.0-00010101000000-000000000000
 	github.com/evangwt/go-vncproxy v1.1.0

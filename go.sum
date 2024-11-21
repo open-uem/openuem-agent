@@ -22,6 +22,8 @@ github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 h1:fAjc9m62+UWV/WA
 github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13/go.mod h1:SqUrOPUnsFjfmXRMNPybcSiG0BgUW2AuFH8PAnS2iTw=
 github.com/doncicuto/comshim v0.0.0-20241121134247-855c4974463a h1:Pk5MUsqxniAQRWoPginDMM/AaWc5e3srlf1gVc2R0cs=
 github.com/doncicuto/comshim v0.0.0-20241121134247-855c4974463a/go.mod h1:bIt5zdEmi2s9aYzduWhUK9TVG2vuphfXGkFutnTHLY0=
+github.com/doncicuto/comshim v0.0.0-20241121140116-6b86c684d9e9 h1:T8YBUaO+Zlj1illfVBIaNuTHjYyE1rhC5goyLZsJgLg=
+github.com/doncicuto/comshim v0.0.0-20241121140116-6b86c684d9e9/go.mod h1:bIt5zdEmi2s9aYzduWhUK9TVG2vuphfXGkFutnTHLY0=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/envoyproxy/go-control-plane v0.9.0/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
