@@ -153,6 +153,9 @@ func (a *Agent) Start() {
 	// Run report for the first time after start if agent is enabled
 	if a.Config.Enabled {
 		r := a.RunReport()
+		if r == nil {
+			return
+		}
 
 		// Send first report to NATS
 		if err := a.SendReport(r); err != nil {

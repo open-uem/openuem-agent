@@ -1,17 +1,17 @@
 module github.com/doncicuto/openuem-agent
 
-go 1.23.1
+go 1.23.3
 
 require (
 	github.com/ceshihao/windowsupdate v0.0.4
 	github.com/go-ole/go-ole v1.3.0
-	github.com/scjalliance/comshim v0.0.0-20240712181150-e070933cb68e
 	github.com/yusufpapurcu/wmi v1.2.4
-	golang.org/x/sys v0.26.0
+	golang.org/x/sys v0.27.0
 )
 
 require (
 	github.com/dgraph-io/badger/v4 v4.3.1
+	github.com/doncicuto/comshim v0.0.0-20241121134247-855c4974463a
 	github.com/doncicuto/openuem_nats v0.0.0-00010101000000-000000000000
 	github.com/doncicuto/openuem_utils v0.0.0-00010101000000-000000000000
 	github.com/evangwt/go-vncproxy v1.1.0

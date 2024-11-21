@@ -38,7 +38,7 @@ Name: "english"; MessagesFile: "Languages\English.isl"
 Name: "spanish"; MessagesFile: "Languages\Spanish.isl"
 
 [Files]
-Source: "C:\Users\mcabr\go\src\github.com\doncicuto\openuem-agent\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Users\mcabr\go\src\github.com\doncicuto\openuem-agent\internal\service\windows\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Users\mcabr\go\src\github.com\doncicuto\openuem-message\openuem_message.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Users\mcabr\go\src\github.com\doncicuto\openuem-updater-service\windows\openuem-updater-service.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Users\mcabr\go\src\github.com\doncicuto\openuem-agent\innosetup\assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs

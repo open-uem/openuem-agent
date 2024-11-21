@@ -3,11 +3,12 @@ package report
 import (
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/doncicuto/comshim"
 	"github.com/doncicuto/openuem_nats"
-	"github.com/scjalliance/comshim"
 	"golang.org/x/sys/windows"
 )
 
@@ -23,8 +24,15 @@ func RunReport(agentId string, debug bool) *Report {
 		log.Println("[DEBUG]: preparing com")
 	}
 	// Prepare COM
-	comshim.Add(1)
-	defer comshim.Done()
+	if err := comshim.Add(1); err != nil {
+		log.Printf("[ERROR]: run report could not add initial thread, %v", err)
+		return nil
+	}
+	defer func() {
+		if err := comshim.Done(); err != nil {
+			log.Printf("[ERROR]: run report got en error in comshim Done, %v", err)
+		}
+	}()
 
 	if debug {
 		log.Println("[DEBUG]: com prepared")
@@ -37,7 +45,19 @@ func RunReport(agentId string, debug bool) *Report {
 	report := Report{}
 	report.AgentID = agentId
 	report.OS = "windows"
-	report.Version = "0.1.1"
+
+	// TODO - Set real release information
+	report.Release = openuem_nats.Release{
+		Version:      "0.1.0",
+		Channel:      "stable",
+		Summary:      "the initial version for OpenUEM agents",
+		ReleaseNotes: "http://lothlorien.openuem.eu:8888/docs/release-note-0.1.0.html",
+		FileURL:      "http://lothlorien.openuem.eu:8888/downloads/openuem-agent-0.1.0.exe",
+		Checksum:     strings.ToLower("EBF59B5E859EAA1D5F07E2925D25079FDC95AAD46B558846C011625B401151FF"),
+		IsCritical:   false,
+		Arch:         "amd64",
+		Os:           "windows",
+	}
 	report.ExecutionTime = time.Now()
 
 	report.Hostname, err = windows.ComputerName()
