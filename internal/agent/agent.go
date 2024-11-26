@@ -120,22 +120,39 @@ func (a *Agent) Start() {
 	a.TaskScheduler.Start()
 	log.Println("[INFO]: task scheduler has started!")
 
-	// Start BadgerDB KV
-	cwd, err := Getwd()
-	a.BadgerDB, err = badger.Open(badger.DefaultOptions(filepath.Join(cwd, "badgerdb")))
-	if err != nil {
-		log.Printf("[ERROR]: %v", err)
-	}
+	// Start BadgerDB KV and SFTP server only if port is set
+	if a.Config.SFTPPort != "" {
+		cwd, err := Getwd()
+		if err != nil {
+			log.Println("[ERROR]: could not get working directory")
+			return
+		}
 
-	// Start SFTP server
-	a.SFTPServer = sftp.New()
-	go func() {
-		err := a.SFTPServer.Serve(":2022", a.ConsoleCert, a.CACert, a.BadgerDB)
+		badgerPath := filepath.Join(cwd, "badgerdb")
+		if err := os.RemoveAll(badgerPath); err != nil {
+			log.Println("[ERROR]: could not remove badgerdb directory")
+			return
+		}
+
+		if err := os.MkdirAll(badgerPath, 0660); err != nil {
+			log.Println("[ERROR]: could not recreate badgerdb directory")
+			return
+		}
+
+		a.BadgerDB, err = badger.Open(badger.DefaultOptions(filepath.Join(cwd, "badgerdb")))
 		if err != nil {
 			log.Printf("[ERROR]: %v", err)
 		}
-	}()
-	log.Println("[INFO]: SFTP server has started!")
+
+		go func() {
+			a.SFTPServer = sftp.New()
+			err = a.SFTPServer.Serve(":"+a.Config.SFTPPort, a.ConsoleCert, a.CACert, a.BadgerDB)
+			if err != nil {
+				log.Printf("[ERROR]: %v", err)
+			}
+			log.Println("[INFO]: SFTP server has started!")
+		}()
+	}
 
 	// Try to connect to NATS server and start a reconnect job if failed
 	if err := a.MessageServer.Connect(); err != nil {
@@ -144,11 +161,13 @@ func (a *Agent) Start() {
 		return
 	}
 	a.SubscribeToNATSSubjects()
+	log.Println("[INFO]: Subscribed to NATS subjects!")
 
 	// Get remote config
 	if err := a.GetRemoteConfig(); err != nil {
 		log.Printf("[ERROR]: could not get remote config %v", err)
 	}
+	log.Println("[INFO]: remote config requested")
 
 	// Run report for the first time after start if agent is enabled
 	if a.Config.Enabled {
@@ -208,7 +227,15 @@ func (a *Agent) RunReport() *report.Report {
 	}
 
 	log.Println("[INFO]: agent is running a report...")
-	r := report.RunReport(a.Config.UUID, a.Config.Debug)
+	r, err := report.RunReport(a.Config.UUID, a.Config.Debug, a.Config.VNCProxyPort, a.Config.SFTPPort)
+	if err != nil {
+		return nil
+	}
+
+	if r.IP == "" {
+		log.Println("[WARN]: agent has no IP address, report won't be sent")
+		return nil
+	}
 
 	log.Printf("[INFO]: agent report run took %v\n", time.Since(start))
 
@@ -464,7 +491,7 @@ func (a *Agent) StartVNCSubscribe() error {
 		}
 
 		// Instantiate new vnc server
-		v, err := vnc.New(a.CertPath, a.KeyPath, sid, "1443")
+		v, err := vnc.New(a.CertPath, a.KeyPath, sid, a.Config.VNCProxyPort)
 		if err != nil {
 			log.Println("[ERROR]: could not get a VNC server")
 			return
@@ -487,13 +514,13 @@ func (a *Agent) StartVNCSubscribe() error {
 
 func (a *Agent) StopVNCSubscribe() error {
 	_, err := a.MessageServer.Connection.QueueSubscribe("agent.stopvnc."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+		if err := msg.Respond([]byte("VNC Stopped!")); err != nil {
+			log.Printf("[ERROR]: could not respond to agent stop vnc message, reason: %v\n", err)
+		}
+
 		if a.VNCServer != nil {
 			a.VNCServer.Stop()
 			a.VNCServer = nil
-		}
-
-		if err := msg.Respond([]byte("VNC Stopped!")); err != nil {
-			log.Printf("[ERROR]: could not respond to agent stop vnc message, reason: %v\n", err)
 		}
 	})
 
@@ -791,14 +818,17 @@ func (a *Agent) SubscribeToNATSSubjects() {
 		log.Printf("[ERROR]: %v\n", err)
 	}
 
-	err = a.StartVNCSubscribe()
-	if err != nil {
-		log.Printf("[ERROR]: %v\n", err)
-	}
+	// Subscribe to VNC only if port is set
+	if a.Config.VNCProxyPort != "" {
+		err = a.StartVNCSubscribe()
+		if err != nil {
+			log.Printf("[ERROR]: %v\n", err)
+		}
 
-	err = a.StopVNCSubscribe()
-	if err != nil {
-		log.Printf("[ERROR]: %v\n", err)
+		err = a.StopVNCSubscribe()
+		if err != nil {
+			log.Printf("[ERROR]: %v\n", err)
+		}
 	}
 
 	err = a.InstallPackageSubscribe()

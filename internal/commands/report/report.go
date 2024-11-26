@@ -16,7 +16,7 @@ type Report struct {
 	openuem_nats.AgentReport
 }
 
-func RunReport(agentId string, debug bool) *Report {
+func RunReport(agentId string, debug bool, vncProxyPort, sftpPort string) (*Report, error) {
 	var wg sync.WaitGroup
 	var err error
 
@@ -26,7 +26,7 @@ func RunReport(agentId string, debug bool) *Report {
 	// Prepare COM
 	if err := comshim.Add(1); err != nil {
 		log.Printf("[ERROR]: run report could not add initial thread, %v", err)
-		return nil
+		return nil, err
 	}
 	defer func() {
 		if err := comshim.Done(); err != nil {
@@ -45,10 +45,12 @@ func RunReport(agentId string, debug bool) *Report {
 	report := Report{}
 	report.AgentID = agentId
 	report.OS = "windows"
+	report.SFTPPort = sftpPort
+	report.VNCProxyPort = vncProxyPort
 
 	// TODO - Set real release information
 	report.Release = openuem_nats.Release{
-		Version:      "0.1.0",
+		Version:      "0.1.1",
 		Channel:      "stable",
 		Summary:      "the initial version for OpenUEM agents",
 		ReleaseNotes: "http://lothlorien.openuem.eu:8888/docs/release-note-0.1.0.html",
@@ -194,7 +196,7 @@ func RunReport(agentId string, debug bool) *Report {
 		report.getLogicalDisksInfo(debug)
 	}
 
-	return &report
+	return &report, nil
 }
 
 func (r *Report) Print() {

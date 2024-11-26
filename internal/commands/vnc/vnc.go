@@ -6,8 +6,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/doncicuto/openuem_utils"
 	"github.com/evangwt/go-vncproxy"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/net/websocket"
@@ -20,6 +22,8 @@ type VNCServer struct {
 	StartCommand    string
 	StopCommand     string
 	StopCommandArgs []string
+	KillCommand     string
+	KillCommandArgs []string
 	Configure       func() error
 	ConfigureAsUser bool
 	SavePIN         func(pin string) error
@@ -50,10 +54,16 @@ func (vnc *VNCServer) Start() {
 		return
 	}
 
+	cwd, err := openuem_utils.GetWd()
+	if err != nil {
+		log.Printf("[ERROR]: could not get working directory, reason: %v\n", err)
+		return
+	}
+
 	// Show PIN to user
 	go func() {
 		message := fmt.Sprintf("This is the PIN for your remote assistance: %s", pin)
-		if err := RunAsUser(`C:\Program Files\OpenUEM Agent\openuem_message.exe`, []string{"info", "--message", message, "--title", "OpenUEM - Remote Assistance"}); err != nil {
+		if err := RunAsUser(filepath.Join(cwd, "openuem_message.exe"), []string{"info", "--message", message, "--title", "OpenUEM - Remote Assistance"}); err != nil {
 			log.Printf("[ERROR]: could not show test message to user, reason: %v\n", err)
 		}
 	}()
@@ -96,8 +106,21 @@ func (vnc *VNCServer) Stop() {
 		return
 	}
 
-	// Stop VNC server
-	go RunAsUser(vnc.StopCommand, vnc.StopCommandArgs)
+	// Stop gracefully VNC server
+	if vnc.StopCommand != "" {
+		err := RunAsUser(vnc.StopCommand, vnc.StopCommandArgs)
+		if err != nil {
+			log.Printf("VNC Stop error, %v\n", err)
+		}
+	}
+
+	// Kill VNC server as some remains can be there
+	if vnc.KillCommand != "" {
+		err := RunAsUser(vnc.KillCommand, vnc.KillCommandArgs)
+		if err != nil {
+			log.Printf("VNC Kill error, %v\n", err)
+		}
+	}
 }
 
 func (vnc *VNCServer) StartProxy() {
@@ -130,20 +153,42 @@ func GetSupportedVNCServer(sid string) (*VNCServer, error) {
 			StartCommand:    `C:\Program Files\TightVNC\tvnserver.exe`,
 			StopCommand:     `C:\Program Files\TightVNC\tvnserver.exe`,
 			StopCommandArgs: []string{"-controlapp", "-shutdown"},
+			KillCommand:     "taskkill",
+			KillCommandArgs: []string{"/F", "/T", "/IM", "tvnserver.exe"},
 			ConfigureAsUser: true,
 			Configure: func() error {
-				k, err := registry.OpenKey(registry.USERS, sid+`\SOFTWARE\TightVNC\Server`, registry.SET_VALUE)
+				k, err := registry.OpenKey(registry.USERS, sid+`\SOFTWARE\TightVNC\Server`, registry.QUERY_VALUE)
+				if err == registry.ErrNotExist {
+					k, err = registry.OpenKey(registry.USERS, sid+`\SOFTWARE`, registry.SET_VALUE)
+					if err != nil {
+						return err
+					}
+					k, _, err = registry.CreateKey(k, "TightVNC", registry.CREATE_SUB_KEY)
+					if err != nil {
+						return err
+					}
+
+					k, _, err = registry.CreateKey(k, "Server", registry.CREATE_SUB_KEY)
+					if err != nil {
+						return err
+					}
+				}
+
+				k, err = registry.OpenKey(registry.USERS, sid+`\SOFTWARE\TightVNC\Server`, registry.SET_VALUE)
 				if err != nil {
 					return err
 				}
 
-				// Allow loopback connections for NoVNC proxy
 				err = k.SetDWordValue("AllowLoopback", 1)
 				if err != nil {
 					return err
 				}
 
-				fmt.Println("[INFO]: VNC configured")
+				err = k.SetDWordValue("RemoveWallpaper", 0)
+				if err != nil {
+					return err
+				}
+
 				return nil
 			},
 			SavePIN: func(pin string) error {
@@ -157,6 +202,7 @@ func GetSupportedVNCServer(sid string) (*VNCServer, error) {
 				if err != nil {
 					return err
 				}
+
 				fmt.Println("[INFO]: PIN saved to registry")
 				return nil
 			},
@@ -231,8 +277,6 @@ func GetSupportedVNCServer(sid string) (*VNCServer, error) {
 					if err != nil {
 						return err
 					}
-				} else {
-					return err
 				}
 
 				return nil

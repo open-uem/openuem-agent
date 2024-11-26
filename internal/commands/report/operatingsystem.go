@@ -2,7 +2,6 @@ package report
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -102,11 +101,10 @@ func (r *Report) getOperatingSystemInfo(debug bool) error {
 	v := &osDst[0]
 	r.OperatingSystem.Version = "Undetected"
 	if v.Version != "" {
-		nt, err := getWindowsVersion(v.Version)
-		if err != nil {
-			return err
+		nt := getWindowsVersion(v.Version)
+		if nt != nil {
+			r.OperatingSystem.Version = fmt.Sprintf("%s %s", nt.name, nt.version)
 		}
-		r.OperatingSystem.Version = fmt.Sprintf("%s %s", nt.name, nt.version)
 	}
 
 	r.OperatingSystem.Description = v.Caption
@@ -186,7 +184,7 @@ func (r *Report) isWindowsServer() bool {
 	return strings.HasPrefix(r.OperatingSystem.Version, "Windows Server")
 }
 
-func getWindowsVersion(version string) (*windowsVersion, error) {
+func getWindowsVersion(version string) *windowsVersion {
 	var windowsVersions = map[string]windowsVersion{}
 
 	// Windows 11
@@ -228,6 +226,9 @@ func getWindowsVersion(version string) (*windowsVersion, error) {
 	windowsVersions["5.1.2700"] = windowsVersion{name: "Windows XP", version: ""}
 	windowsVersions["5.1.2600"] = windowsVersion{name: "Windows XP", version: ""}
 
+	// Windows Server 2025
+	windowsVersions["10.0.26100"] = windowsVersion{name: "Windows Server 2025", version: "24H2"}
+
 	// Windows Server 2022
 	windowsVersions["10.0.25398"] = windowsVersion{name: "Windows Server 2022", version: "23H2"}
 	windowsVersions["10.0.20348"] = windowsVersion{name: "Windows Server 2022", version: "21H2"}
@@ -264,9 +265,8 @@ func getWindowsVersion(version string) (*windowsVersion, error) {
 
 	val, ok := windowsVersions[version]
 	if !ok {
-		err := errors.New("windows version not found")
-		return nil, err
+		return nil
 	} else {
-		return &val, nil
+		return &val
 	}
 }

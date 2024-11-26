@@ -1,3 +1,5 @@
+//go:build windows
+
 package agent
 
 import (
@@ -19,6 +21,8 @@ type Config struct {
 	Enabled                  bool
 	Debug                    bool
 	DefaultFrequency         int
+	VNCProxyPort             string
+	SFTPPort                 string
 }
 
 func (a *Agent) ReadConfig() {
@@ -66,6 +70,26 @@ func (a *Agent) ReadConfig() {
 	defaultFrequency, _, err := k.GetIntegerValue("DefaultFrequency")
 	if err == nil {
 		a.Config.DefaultFrequency = int(defaultFrequency)
+	}
+
+	sftpPort, _, err := k.GetStringValue("SFTPPort")
+	if err == nil {
+		val, err := strconv.Atoi(sftpPort)
+		if err != nil || (val < 0) || (val > 65535) {
+			a.Config.SFTPPort = ""
+		} else {
+			a.Config.SFTPPort = sftpPort
+		}
+	}
+
+	vncPort, _, err := k.GetStringValue("VNCProxyPort")
+	if err == nil {
+		val, err := strconv.Atoi(vncPort)
+		if err != nil || (val < 0) || (val > 65535) {
+			a.Config.VNCProxyPort = ""
+		} else {
+			a.Config.VNCProxyPort = vncPort
+		}
 	}
 
 	k.Close()
