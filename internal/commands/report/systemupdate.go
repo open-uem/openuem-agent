@@ -163,12 +163,6 @@ func (r *Report) getPendingUpdatesWithCancelContext() error {
 func (r *Report) getPendingUpdates() error {
 	// Get information about pending updates. THIS QUERY IS SLOW
 	// Ref: https://github.com/ceshihao/windowsupdate/blob/master/examples/query_update_history/main.go
-	// OLE Initialize
-	err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED|ole.COINIT_SPEED_OVER_MEMORY)
-	if err != nil {
-		return err
-	}
-	defer ole.CoUninitialize()
 	session, err := wu.NewUpdateSession()
 	if err != nil {
 		return err
@@ -209,11 +203,6 @@ func (r *Report) getUpdatesHistoryWithCancelContext() error {
 }
 
 func (r *Report) getUpdatesHistory() error {
-	err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED|ole.COINIT_SPEED_OVER_MEMORY)
-	if err != nil {
-		return err
-	}
-	defer ole.CoUninitialize()
 	session, err := wu.NewUpdateSession()
 	if err != nil {
 		return err

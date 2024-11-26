@@ -56,20 +56,18 @@ func (r *Report) logApplications() {
 func getApplications(debug bool) (map[string]openuem_nats.Application, error) {
 	applications := make(map[string]openuem_nats.Application)
 
-	if debug {
-		log.Printf("[DEBUG]: apps information has been requested for %s", "HKLM\\APPS")
-	}
 	if err := getApplicationsFromRegistry(applications, registry.LOCAL_MACHINE, APPS, ""); err != nil {
-		log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKLM", APPS, err)
+		if debug {
+			log.Printf("[DEBUG]: could not get apps information from HKLM, reason: %v", err)
+		}
 	} else {
 		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKLM", APPS)
 	}
 
-	if debug {
-		log.Printf("[DEBUG]: apps information has been requested for %s", "HKLM\\APPS32BITS")
-	}
 	if err := getApplicationsFromRegistry(applications, registry.LOCAL_MACHINE, APPS32BITS, ""); err != nil {
-		log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKLM", APPS32BITS, err)
+		if debug {
+			log.Printf("[DEBUG]: could not get apps information from HKLM (32 bits), reason: %v", err)
+		}
 	} else {
 		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKLM", APPS32BITS)
 	}
@@ -77,7 +75,7 @@ func getApplications(debug bool) (map[string]openuem_nats.Application, error) {
 	// Users
 	sids, err := GetSIDs()
 	if err != nil {
-		log.Println("[WARN]: could not get user SIDs")
+		log.Println("[ERROR]: could not get user SIDs")
 		return nil, err
 	}
 
@@ -86,19 +84,23 @@ func getApplications(debug bool) (map[string]openuem_nats.Application, error) {
 			log.Printf("[DEBUG]: apps information has been requested for %s", "HKCU\\APPS")
 		}
 		if err := getApplicationsFromRegistry(applications, registry.USERS, APPS, s.SID); err != nil {
-			log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKCU", APPS, err)
+			if debug {
+				log.Printf("[DEBUG]: could not get apps information from HKEY_USERS for sid %s, reason: %v", s, err)
+			}
 			continue
 		}
-		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKCU", APPS)
+		log.Printf("[DEBUG]: apps information retrieved from HKEY_USERS for sid %s\n", s)
 
 		if debug {
 			log.Printf("[DEBUG]: apps information has been requested for %s", "HKCU\\APPS32BITS")
 		}
 		if err := getApplicationsFromRegistry(applications, registry.USERS, APPS32BITS, s.SID); err != nil {
-			log.Printf("[WARN]: could not get apps information from %s\\%s: %v", "HKCU", APPS32BITS, err)
+			if debug {
+				log.Printf("[DEBUG]: could not get apps information from HKEY_USERS (32bits) for sid %s, reason: %v", s, err)
+			}
 			continue
 		}
-		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKCU", APPS32BITS)
+		log.Printf("[DEBUG]: apps information retrieved from HKEY_USERS (32 bits) for sid %s\n", s)
 	}
 
 	return applications, nil
