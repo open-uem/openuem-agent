@@ -3,13 +3,17 @@ package report
 import (
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/doncicuto/comshim"
 	"github.com/doncicuto/openuem_nats"
+	"github.com/doncicuto/openuem_utils"
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
 type Report struct {
@@ -47,6 +51,19 @@ func RunReport(agentId string, debug bool, vncProxyPort, sftpPort string) (*Repo
 	report.OS = "windows"
 	report.SFTPPort = sftpPort
 	report.VNCProxyPort = vncProxyPort
+	report.CertificateReady = isCertificateReady()
+
+	// Check if a restart is still required
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\OpenUEM\Agent`, registry.QUERY_VALUE)
+	if err != nil {
+		log.Println("[ERROR]: agent cannot read the agent hive")
+	}
+	defer k.Close()
+
+	restartValue, _, err := k.GetIntegerValue("RestartRequired")
+	if err == nil {
+		report.RestartRequired = restartValue == 1
+	}
 
 	// TODO - Set real release information
 	report.Release = openuem_nats.Release{
@@ -215,4 +232,26 @@ func (r *Report) Print() {
 	r.logSystemUpdate()
 	r.logNetworkAdapters()
 	r.logApplications()
+}
+
+func isCertificateReady() bool {
+	wd, err := openuem_utils.GetWd()
+	if err != nil {
+		log.Println("[ERROR]: could not get working directory")
+		return false
+	}
+
+	certPath := filepath.Join(wd, "certificates", "server.cer")
+	_, err = os.Stat(certPath)
+	if err != nil {
+		return false
+	}
+
+	keyPath := filepath.Join(wd, "certificates", "server.key")
+	_, err = os.Stat(keyPath)
+	if err != nil {
+		return false
+	}
+
+	return true
 }

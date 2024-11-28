@@ -132,6 +132,18 @@ func (c *Config) WriteConfig() {
 	log.Println("[INFO]: agent has updated its registry keys")
 }
 
+func (c *Config) ResetRestartRequiredFlag() {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\OpenUEM\Agent`, registry.SET_VALUE)
+	if err != nil {
+		log.Println("[ERROR]: agent cannot read the agent hive")
+	}
+	defer k.Close()
+
+	if err := k.SetDWordValue("RestartRequired", 0); err != nil {
+		log.Println("[ERROR]: we could not reset the restart required flag")
+	}
+}
+
 func (a *Agent) SetInitialConfig() {
 	id := uuid.New()
 	a.Config.UUID = id.String()

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
@@ -22,22 +23,27 @@ import (
 	"github.com/doncicuto/openuem_utils"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
+	"golang.org/x/sys/windows/registry"
 )
 
 type Agent struct {
-	Config         Config
-	TaskScheduler  gocron.Scheduler
-	ReportJob      gocron.Job
-	NATSConnectJob gocron.Job
-	MessageServer  *openuem_nats.MessageServer
-	CertPath       string
-	KeyPath        string
-	CACertPath     string
-	CACert         *x509.Certificate
-	ConsoleCert    *x509.Certificate
-	VNCServer      *vnc.VNCServer
-	BadgerDB       *badger.DB
-	SFTPServer     *sftp.SFTP
+	Config                 Config
+	TaskScheduler          gocron.Scheduler
+	ReportJob              gocron.Job
+	NATSConnectJob         gocron.Job
+	MessageServer          *openuem_nats.MessageServer
+	CertPath               string
+	KeyPath                string
+	ServerCertPath         string
+	ServerKeyPath          string
+	CACertPath             string
+	CACert                 *x509.Certificate
+	ConsoleCert            *x509.Certificate
+	VNCServer              *vnc.VNCServer
+	BadgerDB               *badger.DB
+	SFTPServer             *sftp.SFTP
+	JetstreamContextCancel context.CancelFunc
 }
 
 type JSONActions struct {
@@ -115,6 +121,9 @@ func (a *Agent) Start() {
 
 	a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN
 	a.Config.WriteConfig()
+
+	// Agent started so reset restart required flag
+	a.Config.ResetRestartRequiredFlag()
 
 	// Start task scheduler
 	a.TaskScheduler.Start()
@@ -233,7 +242,19 @@ func (a *Agent) RunReport() *report.Report {
 	}
 
 	if r.IP == "" {
-		log.Println("[WARN]: agent has no IP address, report won't be sent")
+		log.Println("[WARN]: agent has no IP address, report won't be sent and we're flagging this so the watchdog can restart the service")
+
+		k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\OpenUEM\Agent`, registry.SET_VALUE)
+		if err != nil {
+			log.Println("[ERROR]: agent cannot read the agent hive")
+		}
+		defer k.Close()
+
+		if err := k.SetDWordValue("RestartRequired", 1); err != nil {
+			log.Println("[ERROR]: we could not set the restart required flag")
+		}
+
+		log.Println("[WARN]: the flag to restart the service by the watchdog has been raised")
 		return nil
 	}
 
@@ -383,96 +404,137 @@ func (a *Agent) RescheduleReportRunTask() {
 	a.startReportJob()
 }
 
-func (a *Agent) EnableAgentSubscribe() error {
-	_, err := a.MessageServer.Connection.QueueSubscribe("agent.enable."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
-		a.ReadConfig()
+func (a *Agent) EnableAgentHandler(msg jetstream.Msg) {
+	a.ReadConfig()
 
-		if !a.Config.Enabled {
-			// Run report async
-			go func() {
-				r := a.RunReport()
-				if r == nil {
-					return
-				}
+	if !a.Config.Enabled {
+		// Run report async
+		go func() {
+			r := a.RunReport()
+			if r == nil {
+				return
+			}
 
-				// Send report to NATS
-				if err := a.SendReport(r); err != nil {
-					log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
-					a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN
-				} else {
-					// Use default frequency
-					a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
-				}
+			// Send report to NATS
+			if err := a.SendReport(r); err != nil {
+				log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
+				a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN
+			} else {
+				// Use default frequency
+				a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
+			}
 
-				a.Config.Enabled = true
-				a.Config.WriteConfig()
-				a.startReportJob()
-			}()
-
-			// Save property to file
 			a.Config.Enabled = true
 			a.Config.WriteConfig()
+			a.startReportJob()
+		}()
 
-			if err := msg.Respond([]byte("Agent Enabled!")); err != nil {
-				log.Printf("❌ could not respond to agent enable message, reason: %s\n", err.Error())
-			}
+		// Save property to file
+		a.Config.Enabled = true
+		a.Config.WriteConfig()
+
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not respond to agent enable message, reason: %s\n", err.Error())
 		}
-	})
-
-	if err != nil {
-		return fmt.Errorf("could not subscribe to agent enable subject, reason: %v", err)
 	}
-	return nil
 }
 
-func (a *Agent) DisableAgentSubscribe() error {
-	_, err := a.MessageServer.Connection.QueueSubscribe("agent.disable."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
-		a.ReadConfig()
+func (a *Agent) DisableAgentHandler(msg jetstream.Msg) {
+	a.ReadConfig()
 
-		if a.Config.Enabled {
-			// Stop reporting job
-			if err := a.TaskScheduler.RemoveJob(a.ReportJob.ID()); err != nil {
-				log.Printf("[INFO]: could not stop report task, reason: %v\n", err)
-			} else {
-				log.Printf("[INFO]: report task has been removed\n")
-			}
-
-			// Save property to file
-			a.Config.Enabled = false
-			a.Config.WriteConfig()
-
-			if err := msg.Respond([]byte("Agent Disabled!")); err != nil {
-				log.Printf("❌ could not respond to agent disable message, reason: %v\n", err)
-			}
+	if a.Config.Enabled {
+		// Stop reporting job
+		if err := a.TaskScheduler.RemoveJob(a.ReportJob.ID()); err != nil {
+			log.Printf("[INFO]: could not stop report task, reason: %v\n", err)
+		} else {
+			log.Printf("[INFO]: report task has been removed\n")
 		}
-	})
 
-	if err != nil {
-		return fmt.Errorf("[ERROR]: could not subscribe to agent disable subject, reason: %v", err)
+		// Save property to file
+		a.Config.Enabled = false
+		a.Config.WriteConfig()
+
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not respond to agent disable message, reason: %v\n", err)
+		}
 	}
-	return nil
 }
 
-func (a *Agent) RunReportSubscribe() error {
-	_, err := a.MessageServer.Connection.QueueSubscribe("agent.report."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
-		a.ReadConfig()
-		r := a.RunReport()
-		if r == nil {
-			return
-		}
-
-		if err := a.SendReport(r); err != nil {
-			log.Printf("[ERROR]: report could not be send to NATS server!, reason: %v\n", err)
-			if err := msg.Respond([]byte("Agent Run Report failed!")); err != nil {
-				log.Printf("[ERROR]: could not respond to agent force report run, reason: %v\n", err)
-			}
-		}
-	})
-
-	if err != nil {
-		return fmt.Errorf("[ERROR]: could not subscribe to agent report subject, reason: %v", err)
+func (a *Agent) RunReportHandler(msg jetstream.Msg) {
+	a.ReadConfig()
+	r := a.RunReport()
+	if r == nil {
+		return
 	}
-	return nil
+
+	if err := a.SendReport(r); err != nil {
+		log.Printf("[ERROR]: report could not be send to NATS server!, reason: %v\n", err)
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not respond to agent force report run, reason: %v\n", err)
+		}
+	}
+}
+
+func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
+
+	data := openuem_nats.AgentCertificateData{}
+
+	if err := json.Unmarshal(msg.Data(), &data); err != nil {
+		log.Printf("[ERROR]: could not unmarshal agent certificate data, reason: %v\n", err)
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not respond to agent force report run, reason: %v\n", err)
+		}
+		return
+	}
+
+	wd, err := openuem_utils.GetWd()
+	if err != nil {
+		log.Printf("[ERROR]: could not get working directory, reason: %v\n", err)
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not respond to agent force report run, reason: %v\n", err)
+		}
+	}
+
+	keyPath := filepath.Join(wd, "certificates", "server.key")
+
+	privateKey, err := x509.ParsePKCS1PrivateKey(data.PrivateKeyBytes)
+	if err != nil {
+		log.Printf("[ERROR]: could not get private key, reason: %v\n", err)
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not respond to agent force report run, reason: %v\n", err)
+		}
+	}
+
+	err = openuem_utils.SavePrivateKey(privateKey, keyPath)
+	if err != nil {
+		log.Printf("[ERROR]: could not save agent private key, reason: %v\n", err)
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not respond to agent force report run, reason: %v\n", err)
+		}
+		return
+	}
+	log.Printf("[INFO]: Agent private key saved in %s", keyPath)
+
+	certPath := filepath.Join(wd, "certificates", "server.cer")
+	err = openuem_utils.SaveCertificate(data.CertBytes, certPath)
+	if err != nil {
+		log.Printf("[ERROR]: could not save agent certificate, reason: %v\n", err)
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not respond to agent force report run, reason: %v\n", err)
+		}
+		return
+	}
+	log.Printf("[INFO]: Agent certificate saved in %s", keyPath)
+
+	if err := msg.Ack(); err != nil {
+		log.Printf("[ERROR]: could not respond to agent force report run, reason: %v\n", err)
+	}
+
+	// Finally run a new report to inform that the certificate is ready
+	r := a.RunReport()
+	if r == nil {
+		return
+	}
 }
 
 func (a *Agent) StartVNCSubscribe() error {
@@ -490,8 +552,14 @@ func (a *Agent) StartVNCSubscribe() error {
 			return
 		}
 
-		// Instantiate new vnc server
-		v, err := vnc.New(a.CertPath, a.KeyPath, sid, a.Config.VNCProxyPort)
+		// Instantiate new vnc server, but first try to check if certificates are there
+		a.GetServerCertificate()
+		if a.ServerCertPath == "" || a.ServerKeyPath == "" {
+			log.Println("[ERROR]: VNC requires a server certificate that it's not ready")
+			return
+		}
+
+		v, err := vnc.New(a.ServerCertPath, a.ServerKeyPath, sid, a.Config.VNCProxyPort)
 		if err != nil {
 			log.Println("[ERROR]: could not get a VNC server")
 			return
@@ -802,21 +870,43 @@ func SaveDeploymentNotACK(action openuem_nats.DeployAction) error {
 }
 
 func (a *Agent) SubscribeToNATSSubjects() {
-	// Subscribe to NATS subjects
-	err := a.EnableAgentSubscribe()
+	var ctx context.Context
+
+	js, err := jetstream.New(a.MessageServer.Connection)
 	if err != nil {
-		log.Printf("[ERROR]: %v\n", err)
+		log.Printf("[ERROR]: could not intantiate JetStream: %v", err)
+		return
 	}
 
-	err = a.DisableAgentSubscribe()
+	ctx, a.JetstreamContextCancel = context.WithTimeout(context.Background(), 60*time.Minute)
+	s, err := js.CreateStream(ctx, jetstream.StreamConfig{
+		Name:     fmt.Sprintf("AGENT_%s_STREAM", a.Config.UUID),
+		Subjects: []string{"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID, "agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID},
+	})
+
 	if err != nil {
-		log.Printf("[ERROR]: %v\n", err)
+		log.Printf("[ERROR]: could not create or update stream: %v\n", err)
+		return
 	}
 
-	err = a.RunReportSubscribe()
+	c1, err := s.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
+		Durable:   "AgentConsumer",
+		AckPolicy: jetstream.AckExplicitPolicy,
+	})
 	if err != nil {
-		log.Printf("[ERROR]: %v\n", err)
+		log.Printf("[ERROR]: could not create Jetstream consumer: %v", err)
+		return
 	}
+
+	// TODO stop consume context ()
+	_, err = c1.Consume(a.JetStreamAgentHandler, jetstream.ConsumeErrHandler(func(consumeCtx jetstream.ConsumeContext, err error) {
+		log.Printf("[ERROR]: consumer error: %v", err)
+	}))
+	if err != nil {
+		log.Printf("[ERROR]: could not start Agent consumer: %v", err)
+		return
+	}
+	log.Println("[INFO]: Agent consumer is ready to serve")
 
 	// Subscribe to VNC only if port is set
 	if a.Config.VNCProxyPort != "" {
@@ -882,4 +972,45 @@ func (a *Agent) GetRemoteConfig() error {
 		}
 	}
 	return nil
+}
+
+func (a *Agent) JetStreamAgentHandler(msg jetstream.Msg) {
+	if strings.Contains(msg.Subject(), "agent.enable") {
+		a.EnableAgentHandler(msg)
+	}
+
+	if strings.Contains(msg.Subject(), "agent.disable") {
+		a.DisableAgentHandler(msg)
+	}
+
+	if strings.Contains(msg.Subject(), "agent.disable") {
+		a.RunReportHandler(msg)
+	}
+
+	if strings.Contains(msg.Subject(), "agent.certificate.") {
+		a.AgentCertificateHandler(msg)
+	}
+}
+
+func (a *Agent) GetServerCertificate() {
+
+	cwd, err := openuem_utils.GetWd()
+	if err != nil {
+		log.Println("[ERROR]: could not get current working directory")
+	}
+	serverCertPath := filepath.Join(cwd, "certificates", "server.cer")
+	_, err = openuem_utils.ReadPEMCertificate(serverCertPath)
+	if err != nil {
+		log.Printf("[ERROR]: could not read server certificate")
+	} else {
+		a.ServerCertPath = serverCertPath
+	}
+
+	serverKeyPath := filepath.Join(cwd, "certificates", "server.key")
+	_, err = openuem_utils.ReadPEMPrivateKey(serverKeyPath)
+	if err != nil {
+		log.Printf("[ERROR]: could not read server private key")
+	} else {
+		a.ServerKeyPath = serverKeyPath
+	}
 }

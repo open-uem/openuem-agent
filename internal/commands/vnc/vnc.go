@@ -62,8 +62,7 @@ func (vnc *VNCServer) Start() {
 
 	// Show PIN to user
 	go func() {
-		message := fmt.Sprintf("This is the PIN for your remote assistance: %s", pin)
-		if err := RunAsUser(filepath.Join(cwd, "openuem_message.exe"), []string{"info", "--message", message, "--title", "OpenUEM - Remote Assistance"}); err != nil {
+		if err := RunAsUser(filepath.Join(cwd, "openuem-message.exe"), []string{"info", "--message", pin, "--type", "pin"}); err != nil {
 			log.Printf("[ERROR]: could not show test message to user, reason: %v\n", err)
 		}
 	}()
@@ -141,7 +140,7 @@ func (vnc *VNCServer) StartProxy() {
 		fmt.Println("[INFO]: NoVNC proxy server started")
 
 		if err := vnc.Proxy.StartTLS(":"+vnc.ProxyPort, vnc.ProxyCert, vnc.ProxyKey); err != http.ErrServerClosed {
-			log.Fatal(err)
+			log.Printf("[ERROR]: could not start VNC proxy\n, %v", err)
 		}
 	}
 
