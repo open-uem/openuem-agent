@@ -67,7 +67,7 @@ func RunReport(agentId string, debug bool, vncProxyPort, sftpPort string) (*Repo
 
 	// TODO - Set real release information
 	report.Release = openuem_nats.Release{
-		Version:      "0.1.1",
+		Version:      "0.1.0",
 		Channel:      "stable",
 		Summary:      "the initial version for OpenUEM agents",
 		ReleaseNotes: "http://lothlorien.openuem.eu:8888/docs/release-note-0.1.0.html",

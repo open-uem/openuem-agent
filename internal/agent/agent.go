@@ -436,9 +436,7 @@ func (a *Agent) EnableAgentHandler(msg jetstream.Msg) {
 		a.Config.Enabled = true
 		a.Config.WriteConfig()
 
-		if err := msg.Ack(); err != nil {
-			log.Printf("[ERROR]: could not respond to agent enable message, reason: %s\n", err.Error())
-		}
+		msg.Ack()
 	}
 }
 
@@ -457,9 +455,7 @@ func (a *Agent) DisableAgentHandler(msg jetstream.Msg) {
 		a.Config.Enabled = false
 		a.Config.WriteConfig()
 
-		if err := msg.Ack(); err != nil {
-			log.Printf("[ERROR]: could not respond to agent disable message, reason: %v\n", err)
-		}
+		msg.Ack()
 	}
 }
 
@@ -472,9 +468,7 @@ func (a *Agent) RunReportHandler(msg jetstream.Msg) {
 
 	if err := a.SendReport(r); err != nil {
 		log.Printf("[ERROR]: report could not be send to NATS server!, reason: %v\n", err)
-		if err := msg.Ack(); err != nil {
-			log.Printf("[ERROR]: could not respond to agent force report run, reason: %v\n", err)
-		}
+		msg.Ack()
 	}
 }
 
@@ -484,18 +478,14 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 
 	if err := json.Unmarshal(msg.Data(), &data); err != nil {
 		log.Printf("[ERROR]: could not unmarshal agent certificate data, reason: %v\n", err)
-		if err := msg.Ack(); err != nil {
-			log.Printf("[ERROR]: could not respond to agent force report run, reason: %v\n", err)
-		}
+		msg.Ack()
 		return
 	}
 
 	wd, err := openuem_utils.GetWd()
 	if err != nil {
 		log.Printf("[ERROR]: could not get working directory, reason: %v\n", err)
-		if err := msg.Ack(); err != nil {
-			log.Printf("[ERROR]: could not respond to agent force report run, reason: %v\n", err)
-		}
+		msg.Ack()
 	}
 
 	keyPath := filepath.Join(wd, "certificates", "server.key")
@@ -503,17 +493,13 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 	privateKey, err := x509.ParsePKCS1PrivateKey(data.PrivateKeyBytes)
 	if err != nil {
 		log.Printf("[ERROR]: could not get private key, reason: %v\n", err)
-		if err := msg.Ack(); err != nil {
-			log.Printf("[ERROR]: could not respond to agent force report run, reason: %v\n", err)
-		}
+		msg.Ack()
 	}
 
 	err = openuem_utils.SavePrivateKey(privateKey, keyPath)
 	if err != nil {
 		log.Printf("[ERROR]: could not save agent private key, reason: %v\n", err)
-		if err := msg.Ack(); err != nil {
-			log.Printf("[ERROR]: could not respond to agent force report run, reason: %v\n", err)
-		}
+		msg.Ack()
 		return
 	}
 	log.Printf("[INFO]: Agent private key saved in %s", keyPath)
@@ -522,16 +508,12 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 	err = openuem_utils.SaveCertificate(data.CertBytes, certPath)
 	if err != nil {
 		log.Printf("[ERROR]: could not save agent certificate, reason: %v\n", err)
-		if err := msg.Ack(); err != nil {
-			log.Printf("[ERROR]: could not respond to agent force report run, reason: %v\n", err)
-		}
+		msg.Ack()
 		return
 	}
 	log.Printf("[INFO]: Agent certificate saved in %s", keyPath)
 
-	if err := msg.Ack(); err != nil {
-		log.Printf("[ERROR]: could not respond to agent force report run, reason: %v\n", err)
-	}
+	msg.Ack()
 
 	// Finally run a new report to inform that the certificate is ready
 	r := a.RunReport()
@@ -883,8 +865,8 @@ func (a *Agent) SubscribeToNATSSubjects() {
 
 	ctx, a.JetstreamContextCancel = context.WithTimeout(context.Background(), 60*time.Minute)
 	s, err := js.CreateStream(ctx, jetstream.StreamConfig{
-		Name:     "AGENTS_STREAM",
-		Subjects: []string{"agent.certificate.*", "agent.enable.*", "agent.disable.*", "agent.report.*", "agent.update.updater", "agent.rollback.updater"},
+		Name:     "AGENTS_STREAM_" + a.Config.UUID,
+		Subjects: []string{"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID, "agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID, "agent.update.updater." + a.Config.UUID, "agent.rollback.updater." + a.Config.UUID},
 	})
 
 	if err != nil {
@@ -893,8 +875,7 @@ func (a *Agent) SubscribeToNATSSubjects() {
 	}
 
 	c1, err := s.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-		AckPolicy:      jetstream.AckExplicitPolicy,
-		FilterSubjects: []string{"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID, "agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID, "agent.update.updater", "agent.rollback.updater"},
+		AckPolicy: jetstream.AckExplicitPolicy,
 	})
 	if err != nil {
 		log.Printf("[ERROR]: could not create Jetstream consumer: %v", err)
@@ -983,25 +964,19 @@ func (a *Agent) UpdateUpdaterHandler(msg jetstream.Msg) {
 	cwd, err := openuem_utils.GetWd()
 	if err != nil {
 		log.Printf("[ERROR]: could get working directory, reason: %v", err)
-		if err := msg.Ack(); err != nil {
-			log.Println("[ERROR]: could not send ACK for updater updated")
-		}
+		msg.Ack()
 		return
 	}
 
 	if err := json.Unmarshal(msg.Data(), &r); err != nil {
 		log.Printf("[ERROR]: could not unmarshal release info, reason: %v", err)
-		if err := msg.Ack(); err != nil {
-			log.Println("[ERROR]: could not send ACK for updater updated")
-		}
+		msg.Ack()
 		return
 	}
 
 	if r.Version == "" {
 		log.Printf("[ERROR]: could not get latest version from update request, reason: %v", err)
-		if err := msg.Ack(); err != nil {
-			log.Println("[ERROR]: could not send ACK for updater updated")
-		}
+		msg.Ack()
 		return
 	}
 
@@ -1017,9 +992,7 @@ func (a *Agent) UpdateUpdaterHandler(msg jetstream.Msg) {
 
 	if downloadFrom == "" || downloadHash == "" {
 		log.Printf("[ERROR]: could not get applicable download information from release, reason: %v", err)
-		if err := msg.Ack(); err != nil {
-			log.Println("[ERROR]: could not send ACK for updater updated")
-		}
+		msg.Ack()
 		return
 	}
 
@@ -1048,7 +1021,7 @@ func (a *Agent) UpdateUpdaterHandler(msg jetstream.Msg) {
 		if err := openuem_utils.DownloadFile(downloadFrom, downloadPath, downloadHash); err != nil {
 			log.Printf("[ERROR]: could not download new updater to directory, reason %v", err)
 			if err := msg.Ack(); err != nil {
-				log.Println("[ERROR]: could not send ACK for updater updated")
+				log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
 			}
 			return
 		}
@@ -1072,7 +1045,7 @@ func (a *Agent) UpdateUpdaterHandler(msg jetstream.Msg) {
 			if err := os.Rename(updaterPath, rollbackPath); err != nil {
 				log.Printf("[ERROR]: could not rename file for rollback, reason: %v", err)
 				if err := msg.Ack(); err != nil {
-					log.Println("[ERROR]: could not send ACK for updater updated")
+					log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
 				}
 				return
 			}
@@ -1082,7 +1055,7 @@ func (a *Agent) UpdateUpdaterHandler(msg jetstream.Msg) {
 		if err := os.Rename(downloadPath, updaterPath); err != nil {
 			log.Printf("[ERROR]: could not rename file for replacement, reason: %v", err)
 			if err := msg.Ack(); err != nil {
-				log.Println("[ERROR]: could not send ACK for updater updated")
+				log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
 			}
 			return
 		}
@@ -1096,7 +1069,7 @@ func (a *Agent) UpdateUpdaterHandler(msg jetstream.Msg) {
 				if err := os.Rename(rollbackPath, updaterPath); err != nil {
 					log.Printf("[ERROR]: could not overwrite the updater with the rollback %v", err)
 					if err := msg.Ack(); err != nil {
-						log.Println("[ERROR]: could not send ACK for updater updated")
+						log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
 					}
 					return
 				}
@@ -1105,14 +1078,14 @@ func (a *Agent) UpdateUpdaterHandler(msg jetstream.Msg) {
 				if err := openuem_utils.WindowsStartService("openuem-updater-service"); err != nil {
 					log.Printf("[FATAL]: could not restart the updater with the rollback %v", err)
 					if err := msg.Ack(); err != nil {
-						log.Println("[ERROR]: could not send ACK for updater updated")
+						log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
 					}
 					return
 				}
 			} else {
 				log.Println("[FATAL]: no rollback was found to try to revert the situation")
 				if err := msg.Ack(); err != nil {
-					log.Println("[ERROR]: could not send ACK for updater updated")
+					log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
 				}
 				return
 			}
@@ -1122,20 +1095,20 @@ func (a *Agent) UpdateUpdaterHandler(msg jetstream.Msg) {
 		if err != nil {
 			log.Println("[ERROR]: agent could not save UpdaterVersion entry")
 			if err := msg.Ack(); err != nil {
-				log.Println("[ERROR]: could not send ACK for updater updated")
+				log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
 			}
 			return
 		}
 
 		log.Println("[INFO]: updater has been updated")
 		if err := msg.Ack(); err != nil {
-			log.Println("[ERROR]: could not send ACK for updater updated")
+			log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
 		}
 		return
 	}
 
 	if err := msg.Ack(); err != nil {
-		log.Println("[ERROR]: could not send ACK for updater updated")
+		log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
 	}
 	log.Println("[INFO]: no need to update the Updater :-)")
 

@@ -89,7 +89,7 @@ func getApplications(debug bool) (map[string]openuem_nats.Application, error) {
 			}
 			continue
 		}
-		log.Printf("[DEBUG]: apps information retrieved from HKEY_USERS for sid %s\n", s)
+		log.Printf("[INFO]: apps information retrieved from HKEY_USERS for sid %s\n", s)
 
 		if debug {
 			log.Printf("[DEBUG]: apps information has been requested for %s", "HKCU\\APPS32BITS")
@@ -100,7 +100,7 @@ func getApplications(debug bool) (map[string]openuem_nats.Application, error) {
 			}
 			continue
 		}
-		log.Printf("[DEBUG]: apps information retrieved from HKEY_USERS (32 bits) for sid %s\n", s)
+		log.Printf("[INFO]: apps information retrieved from HKEY_USERS (32 bits) for sid %s\n", s)
 	}
 
 	return applications, nil

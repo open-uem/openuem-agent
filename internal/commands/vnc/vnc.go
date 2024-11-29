@@ -62,7 +62,7 @@ func (vnc *VNCServer) Start() {
 
 	// Show PIN to user
 	go func() {
-		if err := RunAsUser(filepath.Join(cwd, "openuem-message.exe"), []string{"info", "--message", pin, "--type", "pin"}); err != nil {
+		if err := RunAsUser(filepath.Join(cwd, "openuem-messenger.exe"), []string{"info", "--message", pin, "--type", "pin"}); err != nil {
 			log.Printf("[ERROR]: could not show test message to user, reason: %v\n", err)
 		}
 	}()
