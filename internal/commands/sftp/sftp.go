@@ -50,19 +50,19 @@ func New() *SFTP {
 	return &s
 }
 
-func (s *SFTP) Serve(address string, consoleCert, caCert *x509.Certificate, db *badger.DB) error {
+func (s *SFTP) Serve(address string, sftpCert, caCert *x509.Certificate, db *badger.DB) error {
 	s.Server = ssh.Server{
 		Addr: address,
 		PublicKeyHandler: func(ctx ssh.Context, key ssh.PublicKey) bool {
 			log.Printf("[INFO]: SSH session opened by %s", ctx.User())
 
 			// Validate certificate against OCSP
-			if !isCertValidFromCache(consoleCert, caCert, db) {
+			if !isCertValidFromCache(sftpCert, caCert, db) {
 				return false
 			}
 
 			// Check that the public key used is authorized
-			rsaPublicKey := consoleCert.PublicKey.(*rsa.PublicKey)
+			rsaPublicKey := sftpCert.PublicKey.(*rsa.PublicKey)
 			authorizedKey, err := gossh.NewPublicKey(rsaPublicKey)
 			if err != nil {
 				log.Println("[ERROR]: Could not parse SSH public key from RSA public key")
@@ -79,16 +79,16 @@ func (s *SFTP) Serve(address string, consoleCert, caCert *x509.Certificate, db *
 	return s.Server.ListenAndServe()
 }
 
-func isCertValidFromCache(consoleCert, caCert *x509.Certificate, db *badger.DB) bool {
+func isCertValidFromCache(sftpCert, caCert *x509.Certificate, db *badger.DB) bool {
 	var ocspStatus bool
-	certSerial := consoleCert.SerialNumber
+	certSerial := sftpCert.SerialNumber
 
 	if err := db.View(
 		func(tx *badger.Txn) error {
 			item, err := tx.Get(certSerial.Bytes())
 			if err != nil {
 				if errors.Is(err, badger.ErrKeyNotFound) {
-					ocspStatus = isCertValid(consoleCert, caCert)
+					ocspStatus = isCertValid(sftpCert, caCert)
 					if err := db.Update(func(txn *badger.Txn) error {
 						var e *badger.Entry
 						if ocspStatus {
@@ -127,19 +127,19 @@ func isCertValidFromCache(consoleCert, caCert *x509.Certificate, db *badger.DB) 
 	return ocspStatus
 }
 
-func isCertValid(consoleCert, caCert *x509.Certificate) bool {
-	ocspRequest, err := ocsp.CreateRequest(consoleCert, caCert, &ocsp.RequestOptions{Hash: crypto.SHA256})
+func isCertValid(sftpCert, caCert *x509.Certificate) bool {
+	ocspRequest, err := ocsp.CreateRequest(sftpCert, caCert, &ocsp.RequestOptions{Hash: crypto.SHA256})
 	if err != nil {
 		log.Println("[ERROR]: Could not create OCSP Request")
 		return false
 	}
 
-	if len(consoleCert.OCSPServer) == 0 {
+	if len(sftpCert.OCSPServer) == 0 {
 		log.Println("[ERROR]: No OCSP server found in certificate")
 		return false
 	}
 
-	ocspServer := consoleCert.OCSPServer[0]
+	ocspServer := sftpCert.OCSPServer[0]
 	ocspURL, err := url.Parse(ocspServer)
 	if err != nil {
 		log.Println("[ERROR]: Could not parse OCSP Responder URL")

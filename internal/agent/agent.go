@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -24,7 +25,9 @@ import (
 	"github.com/go-co-op/gocron/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"golang.org/x/mod/semver"
 	"golang.org/x/sys/windows/registry"
+	"golang.org/x/sys/windows/svc"
 )
 
 type Agent struct {
@@ -39,7 +42,7 @@ type Agent struct {
 	ServerKeyPath          string
 	CACertPath             string
 	CACert                 *x509.Certificate
-	ConsoleCert            *x509.Certificate
+	SFTPCert               *x509.Certificate
 	VNCServer              *vnc.VNCServer
 	BadgerDB               *badger.DB
 	SFTPServer             *sftp.SFTP
@@ -97,10 +100,10 @@ func New() Agent {
 	agent.CACertPath = clientCAPath
 	agent.CACert = caCert
 
-	consoleCertPath := filepath.Join(cwd, "certificates", "console.cer")
-	agent.ConsoleCert, err = openuem_utils.ReadPEMCertificate(consoleCertPath)
+	sftpCertPath := filepath.Join(cwd, "certificates", "sftp.cer")
+	agent.SFTPCert, err = openuem_utils.ReadPEMCertificate(sftpCertPath)
 	if err != nil {
-		log.Fatalf("[FATAL]: could not read console certificate")
+		log.Fatalf("[FATAL]: could not read sftp certificate")
 	}
 
 	agent.MessageServer = openuem_nats.New(agent.Config.NATSHost, agent.Config.NATSPort, clientCertPath, clientCertKeyPath, agent.CACert)
@@ -155,7 +158,7 @@ func (a *Agent) Start() {
 
 		go func() {
 			a.SFTPServer = sftp.New()
-			err = a.SFTPServer.Serve(":"+a.Config.SFTPPort, a.ConsoleCert, a.CACert, a.BadgerDB)
+			err = a.SFTPServer.Serve(":"+a.Config.SFTPPort, a.SFTPCert, a.CACert, a.BadgerDB)
 			if err != nil {
 				log.Printf("[ERROR]: %v", err)
 			}
@@ -880,8 +883,8 @@ func (a *Agent) SubscribeToNATSSubjects() {
 
 	ctx, a.JetstreamContextCancel = context.WithTimeout(context.Background(), 60*time.Minute)
 	s, err := js.CreateStream(ctx, jetstream.StreamConfig{
-		Name:     fmt.Sprintf("AGENT_%s_STREAM", a.Config.UUID),
-		Subjects: []string{"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID, "agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID},
+		Name:     "AGENTS_STREAM",
+		Subjects: []string{"agent.certificate.*", "agent.enable.*", "agent.disable.*", "agent.report.*", "agent.update.updater", "agent.rollback.updater"},
 	})
 
 	if err != nil {
@@ -890,8 +893,8 @@ func (a *Agent) SubscribeToNATSSubjects() {
 	}
 
 	c1, err := s.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-		Durable:   "AgentConsumer",
-		AckPolicy: jetstream.AckExplicitPolicy,
+		AckPolicy:      jetstream.AckExplicitPolicy,
+		FilterSubjects: []string{"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID, "agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID, "agent.update.updater", "agent.rollback.updater"},
 	})
 	if err != nil {
 		log.Printf("[ERROR]: could not create Jetstream consumer: %v", err)
@@ -974,21 +977,246 @@ func (a *Agent) GetRemoteConfig() error {
 	return nil
 }
 
+func (a *Agent) UpdateUpdaterHandler(msg jetstream.Msg) {
+	r := openuem_nats.OpenUEMRelease{}
+
+	cwd, err := openuem_utils.GetWd()
+	if err != nil {
+		log.Printf("[ERROR]: could get working directory, reason: %v", err)
+		if err := msg.Ack(); err != nil {
+			log.Println("[ERROR]: could not send ACK for updater updated")
+		}
+		return
+	}
+
+	if err := json.Unmarshal(msg.Data(), &r); err != nil {
+		log.Printf("[ERROR]: could not unmarshal release info, reason: %v", err)
+		if err := msg.Ack(); err != nil {
+			log.Println("[ERROR]: could not send ACK for updater updated")
+		}
+		return
+	}
+
+	if r.Version == "" {
+		log.Printf("[ERROR]: could not get latest version from update request, reason: %v", err)
+		if err := msg.Ack(); err != nil {
+			log.Println("[ERROR]: could not send ACK for updater updated")
+		}
+		return
+	}
+
+	downloadFrom := ""
+	downloadHash := ""
+	for _, f := range r.Files {
+		if f.Arch == runtime.GOARCH && f.Os == runtime.GOOS {
+			downloadFrom = f.FileURL
+			downloadHash = f.Checksum
+			break
+		}
+	}
+
+	if downloadFrom == "" || downloadHash == "" {
+		log.Printf("[ERROR]: could not get applicable download information from release, reason: %v", err)
+		if err := msg.Ack(); err != nil {
+			log.Println("[ERROR]: could not send ACK for updater updated")
+		}
+		return
+	}
+
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\OpenUEM\Agent`, registry.QUERY_VALUE|registry.SET_VALUE)
+	if err != nil {
+		log.Println("[ERROR]: agent cannot read the agent hive")
+		if err := msg.Ack(); err != nil {
+			log.Println("[ERROR]: could not send ACK for updater updated")
+		}
+		return
+	}
+	defer k.Close()
+
+	updaterVersion, _, err := k.GetStringValue("UpdaterVersion")
+	if err != nil {
+		log.Println("[ERROR]: agent could not read UpdaterVersion entry")
+		if err := msg.Ack(); err != nil {
+			log.Println("[ERROR]: could not send ACK for updater updated")
+		}
+	}
+
+	if semver.Compare("v"+updaterVersion, "v"+r.Version) < 0 {
+		downloadPath := filepath.Join(cwd, "updater", "updater.exe")
+
+		// Download new updater
+		if err := openuem_utils.DownloadFile(downloadFrom, downloadPath, downloadHash); err != nil {
+			log.Printf("[ERROR]: could not download new updater to directory, reason %v", err)
+			if err := msg.Ack(); err != nil {
+				log.Println("[ERROR]: could not send ACK for updater updated")
+			}
+			return
+		}
+
+		// Stop service
+		if err := openuem_utils.WindowsSvcControl("openuem-updater-service", svc.Stop, svc.Stopped); err != nil {
+			log.Printf("[ERROR]: could not stop the updater service, reason %v", err)
+		}
+
+		// Preparing for rollback
+		updaterPath := filepath.Join(cwd, "openuem-updater-service.exe")
+		updaterWasFound := true
+		if _, err := os.Stat(updaterPath); err != nil {
+			log.Printf("[ERROR]: could not find previous OpenUEM updater, reason: %v", err)
+			updaterWasFound = false
+		}
+
+		if updaterWasFound {
+			// Copy updater
+			rollbackPath := filepath.Join(cwd, "updater", "updater-rollback.exe")
+			if err := os.Rename(updaterPath, rollbackPath); err != nil {
+				log.Printf("[ERROR]: could not rename file for rollback, reason: %v", err)
+				if err := msg.Ack(); err != nil {
+					log.Println("[ERROR]: could not send ACK for updater updated")
+				}
+				return
+			}
+		}
+
+		// Rename updater as the new exe
+		if err := os.Rename(downloadPath, updaterPath); err != nil {
+			log.Printf("[ERROR]: could not rename file for replacement, reason: %v", err)
+			if err := msg.Ack(); err != nil {
+				log.Println("[ERROR]: could not send ACK for updater updated")
+			}
+			return
+		}
+
+		// Start service
+		if err := openuem_utils.WindowsStartService("openuem-updater-service"); err != nil {
+			// We couldn't start service maybe we should rollback
+			// but only if we had a previous exe
+			if updaterWasFound {
+				rollbackPath := filepath.Join(cwd, "openuem-updater-service.exe")
+				if err := os.Rename(rollbackPath, updaterPath); err != nil {
+					log.Printf("[ERROR]: could not overwrite the updater with the rollback %v", err)
+					if err := msg.Ack(); err != nil {
+						log.Println("[ERROR]: could not send ACK for updater updated")
+					}
+					return
+				}
+
+				// try to start this exe now
+				if err := openuem_utils.WindowsStartService("openuem-updater-service"); err != nil {
+					log.Printf("[FATAL]: could not restart the updater with the rollback %v", err)
+					if err := msg.Ack(); err != nil {
+						log.Println("[ERROR]: could not send ACK for updater updated")
+					}
+					return
+				}
+			} else {
+				log.Println("[FATAL]: no rollback was found to try to revert the situation")
+				if err := msg.Ack(); err != nil {
+					log.Println("[ERROR]: could not send ACK for updater updated")
+				}
+				return
+			}
+		}
+
+		err := k.SetStringValue("UpdaterVersion", r.Version)
+		if err != nil {
+			log.Println("[ERROR]: agent could not save UpdaterVersion entry")
+			if err := msg.Ack(); err != nil {
+				log.Println("[ERROR]: could not send ACK for updater updated")
+			}
+			return
+		}
+
+		log.Println("[INFO]: updater has been updated")
+		if err := msg.Ack(); err != nil {
+			log.Println("[ERROR]: could not send ACK for updater updated")
+		}
+		return
+	}
+
+	if err := msg.Ack(); err != nil {
+		log.Println("[ERROR]: could not send ACK for updater updated")
+	}
+	log.Println("[INFO]: no need to update the Updater :-)")
+
+}
+
+func (a *Agent) RollbackUpdaterHandler(msg jetstream.Msg) {
+	cwd, err := openuem_utils.GetWd()
+	if err != nil {
+		log.Printf("[ERROR]: could get working directory, reason: %v", err)
+		return
+	}
+
+	// Preparing for return to rollback
+	updaterPath := filepath.Join(cwd, "openuem-updater-service.exe")
+	rollbackPath := filepath.Join(cwd, "updater", "updater-rollback.exe")
+
+	rollbackWasFound := true
+	if _, err := os.Stat(rollbackPath); err != nil {
+		log.Printf("[ERROR]: could not find previous OpenUEM updater, reason: %v", err)
+		rollbackWasFound = false
+		if err := msg.Ack(); err != nil {
+			log.Println("[ERROR]: could not send ACK for updater updated")
+		}
+		return
+	}
+
+	// Stop service
+	if err := openuem_utils.WindowsSvcControl("openuem-updater-service", svc.Stop, svc.Stopped); err != nil {
+		log.Printf("[ERROR]: could not stop the updater service, reason %v", err)
+	}
+
+	if rollbackWasFound {
+		// Copy rollback to updater
+		if err := os.Rename(rollbackPath, updaterPath); err != nil {
+			log.Printf("[ERROR]: could not rename file for rollback, reason: %v", err)
+			if err := msg.Ack(); err != nil {
+				log.Println("[ERROR]: could not send ACK for updater updated")
+			}
+			return
+		}
+	}
+
+	// Start service
+	if err := openuem_utils.WindowsStartService("openuem-updater-service"); err != nil {
+		log.Printf("[FATAL]: could not restart the updater after the rollback %v", err)
+		if err := msg.Ack(); err != nil {
+			log.Println("[ERROR]: could not send ACK for updater updated")
+		}
+		return
+	}
+
+	// UpdaterVersion won't be overwritten in registry to prevent update-rollback loop
+	log.Println("[INFO]: updater has been rolled back")
+	if err := msg.Ack(); err != nil {
+		log.Println("[ERROR]: could not send ACK for updater updated")
+	}
+}
+
 func (a *Agent) JetStreamAgentHandler(msg jetstream.Msg) {
-	if strings.Contains(msg.Subject(), "agent.enable") {
+	if msg.Subject() == "agent.enable."+a.Config.UUID {
 		a.EnableAgentHandler(msg)
 	}
 
-	if strings.Contains(msg.Subject(), "agent.disable") {
+	if msg.Subject() == "agent.disable."+a.Config.UUID {
 		a.DisableAgentHandler(msg)
 	}
 
-	if strings.Contains(msg.Subject(), "agent.disable") {
+	if msg.Subject() == "agent.report."+a.Config.UUID {
 		a.RunReportHandler(msg)
 	}
 
-	if strings.Contains(msg.Subject(), "agent.certificate.") {
+	if msg.Subject() == "agent.certificate."+a.Config.UUID {
 		a.AgentCertificateHandler(msg)
+	}
+
+	if msg.Subject() == "agent.update.updater" {
+		a.UpdateUpdaterHandler(msg)
+	}
+
+	if msg.Subject() == "agent.rollback.updater" {
+		a.RollbackUpdaterHandler(msg)
 	}
 }
 
