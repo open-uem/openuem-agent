@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
+	"runtime"
 	"sync"
 	"time"
 
@@ -65,17 +65,11 @@ func RunReport(agentId string, debug bool, vncProxyPort, sftpPort string) (*Repo
 		report.RestartRequired = restartValue == 1
 	}
 
-	// TODO - Set real release information
 	report.Release = openuem_nats.Release{
-		Version:      "0.1.0",
-		Channel:      "stable",
-		Summary:      "the initial version for OpenUEM agents",
-		ReleaseNotes: "http://lothlorien.openuem.eu:8888/docs/release-note-0.1.0.html",
-		FileURL:      "http://lothlorien.openuem.eu:8888/downloads/openuem-agent-0.1.0.exe",
-		Checksum:     strings.ToLower("EBF59B5E859EAA1D5F07E2925D25079FDC95AAD46B558846C011625B401151FF"),
-		IsCritical:   false,
-		Arch:         "amd64",
-		Os:           "windows",
+		Version: VERSION,
+		Arch:    runtime.GOARCH,
+		Os:      runtime.GOOS,
+		Channel: CHANNEL,
 	}
 	report.ExecutionTime = time.Now()
 
