@@ -1027,12 +1027,12 @@ func (a *Agent) UpdateUpdaterHandler(msg jetstream.Msg) {
 		}
 
 		// Stop service
-		if err := openuem_utils.WindowsSvcControl("openuem-updater-service", svc.Stop, svc.Stopped); err != nil {
+		if err := openuem_utils.WindowsSvcControl("openuem-agent-updater", svc.Stop, svc.Stopped); err != nil {
 			log.Printf("[ERROR]: could not stop the updater service, reason %v", err)
 		}
 
 		// Preparing for rollback
-		updaterPath := filepath.Join(cwd, "openuem-updater-service.exe")
+		updaterPath := filepath.Join(cwd, "openuem-agent-updater.exe")
 		updaterWasFound := true
 		if _, err := os.Stat(updaterPath); err != nil {
 			log.Printf("[ERROR]: could not find previous OpenUEM updater, reason: %v", err)
@@ -1061,11 +1061,11 @@ func (a *Agent) UpdateUpdaterHandler(msg jetstream.Msg) {
 		}
 
 		// Start service
-		if err := openuem_utils.WindowsStartService("openuem-updater-service"); err != nil {
+		if err := openuem_utils.WindowsStartService("openuem-agent-updater"); err != nil {
 			// We couldn't start service maybe we should rollback
 			// but only if we had a previous exe
 			if updaterWasFound {
-				rollbackPath := filepath.Join(cwd, "openuem-updater-service.exe")
+				rollbackPath := filepath.Join(cwd, "openuem-agent-updater.exe")
 				if err := os.Rename(rollbackPath, updaterPath); err != nil {
 					log.Printf("[ERROR]: could not overwrite the updater with the rollback %v", err)
 					if err := msg.Ack(); err != nil {
@@ -1075,7 +1075,7 @@ func (a *Agent) UpdateUpdaterHandler(msg jetstream.Msg) {
 				}
 
 				// try to start this exe now
-				if err := openuem_utils.WindowsStartService("openuem-updater-service"); err != nil {
+				if err := openuem_utils.WindowsStartService("openuem-agent-updater"); err != nil {
 					log.Printf("[FATAL]: could not restart the updater with the rollback %v", err)
 					if err := msg.Ack(); err != nil {
 						log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
@@ -1122,7 +1122,7 @@ func (a *Agent) RollbackUpdaterHandler(msg jetstream.Msg) {
 	}
 
 	// Preparing for return to rollback
-	updaterPath := filepath.Join(cwd, "openuem-updater-service.exe")
+	updaterPath := filepath.Join(cwd, "openuem-agent-updater.exe")
 	rollbackPath := filepath.Join(cwd, "updater", "updater-rollback.exe")
 
 	rollbackWasFound := true
@@ -1136,7 +1136,7 @@ func (a *Agent) RollbackUpdaterHandler(msg jetstream.Msg) {
 	}
 
 	// Stop service
-	if err := openuem_utils.WindowsSvcControl("openuem-updater-service", svc.Stop, svc.Stopped); err != nil {
+	if err := openuem_utils.WindowsSvcControl("openuem-agent-updater", svc.Stop, svc.Stopped); err != nil {
 		log.Printf("[ERROR]: could not stop the updater service, reason %v", err)
 	}
 
@@ -1152,7 +1152,7 @@ func (a *Agent) RollbackUpdaterHandler(msg jetstream.Msg) {
 	}
 
 	// Start service
-	if err := openuem_utils.WindowsStartService("openuem-updater-service"); err != nil {
+	if err := openuem_utils.WindowsStartService("openuem-agent-updater"); err != nil {
 		log.Printf("[FATAL]: could not restart the updater after the rollback %v", err)
 		if err := msg.Ack(); err != nil {
 			log.Println("[ERROR]: could not send ACK for updater updated")
