@@ -13,7 +13,7 @@ import (
 	"github.com/doncicuto/openuem_nats"
 	"github.com/doncicuto/openuem_utils"
 	"golang.org/x/sys/windows"
-	"golang.org/x/sys/windows/registry"
+	"gopkg.in/ini.v1"
 )
 
 type Report struct {
@@ -54,15 +54,25 @@ func RunReport(agentId string, debug bool, vncProxyPort, sftpPort string) (*Repo
 	report.CertificateReady = isCertificateReady()
 
 	// Check if a restart is still required
-	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\OpenUEM\Agent`, registry.QUERY_VALUE)
-	if err != nil {
-		log.Println("[ERROR]: agent cannot read the agent hive")
-	}
-	defer k.Close()
+	// Get conf file
+	configFile := openuem_utils.GetConfigFile()
 
-	restartValue, _, err := k.GetIntegerValue("RestartRequired")
-	if err == nil {
-		report.RestartRequired = restartValue == 1
+	// Open ini file
+	cfg, err := ini.Load(configFile)
+	if err != nil {
+		return nil, err
+	}
+
+	key, err := cfg.Section("Agent").GetKey("RestartRequired")
+	if err != nil {
+		log.Println("[ERROR]: could not read RestartRequired from INI")
+		return nil, err
+	}
+
+	report.RestartRequired, err = key.Bool()
+	if err != nil {
+		log.Println("[ERROR]: could not parse RestartRequired")
+		return nil, err
 	}
 
 	report.Release = openuem_nats.Release{

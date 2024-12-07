@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -25,9 +24,7 @@ import (
 	"github.com/go-co-op/gocron/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
-	"golang.org/x/mod/semver"
-	"golang.org/x/sys/windows/registry"
-	"golang.org/x/sys/windows/svc"
+	"gopkg.in/ini.v1"
 )
 
 type Agent struct {
@@ -35,12 +32,9 @@ type Agent struct {
 	TaskScheduler          gocron.Scheduler
 	ReportJob              gocron.Job
 	NATSConnectJob         gocron.Job
-	MessageServer          *openuem_nats.MessageServer
-	CertPath               string
-	KeyPath                string
+	NATSConnection         *nats.Conn
 	ServerCertPath         string
 	ServerKeyPath          string
-	CACertPath             string
 	CACert                 *x509.Certificate
 	SFTPCert               *x509.Certificate
 	VNCServer              *vnc.VNCServer
@@ -63,50 +57,29 @@ func New() Agent {
 		log.Fatalf("[FATAL]: could not create the scheduler: %v", err)
 	}
 
-	// Read Agent Config from file
-	agent.ReadConfig()
+	// Read Agent Config from registry
+	if err := agent.ReadConfig(); err != nil {
+		log.Fatalf("[FATAL]: could not read agent config: %v", err)
+	}
 
 	// If it's the initial config, set it and write it
 	if agent.Config.UUID == "" {
 		agent.SetInitialConfig()
-		agent.Config.WriteConfig()
+		if err := agent.Config.WriteConfig(); err != nil {
+			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+		}
 	}
 
-	// Read required certificates and private key
-	cwd, err := Getwd()
-	if err != nil {
-		log.Fatalf("[FATAL]: could not get current working directory")
-	}
-
-	clientCertPath := filepath.Join(cwd, "certificates", "agent.cer")
-	_, err = openuem_utils.ReadPEMCertificate(clientCertPath)
-	if err != nil {
-		log.Fatalf("[FATAL]: could not read agent certificate")
-	}
-	agent.CertPath = clientCertPath
-
-	clientCertKeyPath := filepath.Join(cwd, "certificates", "agent.key")
-	_, err = openuem_utils.ReadPEMPrivateKey(clientCertKeyPath)
-	if err != nil {
-		log.Fatalf("[FATAL]: could not read agent private key")
-	}
-	agent.KeyPath = clientCertKeyPath
-
-	clientCAPath := filepath.Join(cwd, "certificates", "ca.cer")
-	caCert, err := openuem_utils.ReadPEMCertificate(clientCAPath)
+	caCert, err := openuem_utils.ReadPEMCertificate(agent.Config.CACert)
 	if err != nil {
 		log.Fatalf("[FATAL]: could not read CA certificate")
 	}
-	agent.CACertPath = clientCAPath
 	agent.CACert = caCert
 
-	sftpCertPath := filepath.Join(cwd, "certificates", "sftp.cer")
-	agent.SFTPCert, err = openuem_utils.ReadPEMCertificate(sftpCertPath)
+	agent.SFTPCert, err = openuem_utils.ReadPEMCertificate(agent.Config.SFTPCert)
 	if err != nil {
 		log.Fatalf("[FATAL]: could not read sftp certificate")
 	}
-
-	agent.MessageServer = openuem_nats.New(agent.Config.NATSHost, agent.Config.NATSPort, clientCertPath, clientCertKeyPath, agent.CACert)
 
 	return agent
 }
@@ -123,10 +96,14 @@ func (a *Agent) Start() {
 	log.Printf("[INFO]: agent is run as %s", currentUser.Username)
 
 	a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN
-	a.Config.WriteConfig()
+	if err := a.Config.WriteConfig(); err != nil {
+		log.Fatalf("[FATAL]: could not write agent config: %v", err)
+	}
 
 	// Agent started so reset restart required flag
-	a.Config.ResetRestartRequiredFlag()
+	if err := a.Config.ResetRestartRequiredFlag(); err != nil {
+		log.Fatalf("[FATAL]: could not reset restart required flag, reason: %v", err)
+	}
 
 	// Start task scheduler
 	a.TaskScheduler.Start()
@@ -167,7 +144,8 @@ func (a *Agent) Start() {
 	}
 
 	// Try to connect to NATS server and start a reconnect job if failed
-	if err := a.MessageServer.Connect(); err != nil {
+	a.NATSConnection, err = openuem_nats.ConnectWithNATS(a.Config.NATSServers, a.Config.AgentCert, a.Config.AgentKey, a.Config.CACert)
+	if err != nil {
 		log.Printf("[ERROR]: %v", err)
 		a.startNATSConnectJob()
 		return
@@ -197,7 +175,9 @@ func (a *Agent) Start() {
 			a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
 		}
 
-		a.Config.WriteConfig()
+		if err := a.Config.WriteConfig(); err != nil {
+			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+		}
 		a.startReportJob()
 	}
 
@@ -211,10 +191,8 @@ func (a *Agent) Stop() {
 		}
 	}
 
-	if a.MessageServer != nil {
-		if err := a.MessageServer.Close(); err != nil {
-			log.Printf("[ERROR]: could not close NATS connection, reason: %s\n", err.Error())
-		}
+	if a.NATSConnection != nil {
+		a.NATSConnection.Close()
 	}
 
 	if a.SFTPServer != nil {
@@ -247,15 +225,17 @@ func (a *Agent) RunReport() *report.Report {
 	if r.IP == "" {
 		log.Println("[WARN]: agent has no IP address, report won't be sent and we're flagging this so the watchdog can restart the service")
 
-		k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\OpenUEM\Agent`, registry.SET_VALUE)
-		if err != nil {
-			log.Println("[ERROR]: agent cannot read the agent hive")
-		}
-		defer k.Close()
+		// Get conf file
+		configFile := openuem_utils.GetConfigFile()
 
-		if err := k.SetDWordValue("RestartRequired", 1); err != nil {
-			log.Println("[ERROR]: we could not set the restart required flag")
+		// Open ini file
+		cfg, err := ini.Load(configFile)
+		if err != nil {
+			log.Println("[ERROR]: could not read config file")
+			return nil
 		}
+
+		cfg.Section("Agent").Key("RestartRequired").SetValue("true")
 
 		log.Println("[WARN]: the flag to restart the service by the watchdog has been raised")
 		return nil
@@ -275,10 +255,10 @@ func (a *Agent) SendReport(r *report.Report) error {
 		return err
 	}
 
-	if a.MessageServer.Connection == nil {
+	if a.NATSConnection == nil {
 		return fmt.Errorf("NATS connection is not ready")
 	}
-	_, err = a.MessageServer.Connection.Request("report", data, 4*time.Minute)
+	_, err = a.NATSConnection.Request("report", data, 4*time.Minute)
 	if err != nil {
 		return err
 	}
@@ -329,7 +309,7 @@ func (a *Agent) startNATSConnectJob() error {
 		),
 		gocron.NewTask(
 			func() {
-				err := a.MessageServer.Connect()
+				a.NATSConnection, err = openuem_nats.ConnectWithNATS(a.Config.NATSServers, a.Config.AgentCert, a.Config.AgentKey, a.Config.CACert)
 				if err != nil {
 					return
 				}
@@ -363,7 +343,9 @@ func (a *Agent) ReportTask() {
 	}
 	if err := a.SendReport(r); err != nil {
 		a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN
-		a.Config.WriteConfig()
+		if err := a.Config.WriteConfig(); err != nil {
+			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+		}
 		a.RescheduleReportRunTask()
 		log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
 		return
@@ -371,7 +353,9 @@ func (a *Agent) ReportTask() {
 
 	// Report run and sent! Use default frequency
 	a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
-	a.Config.WriteConfig()
+	if err := a.Config.WriteConfig(); err != nil {
+		log.Fatalf("[FATAL]: could not write agent config: %v", err)
+	}
 	a.RescheduleReportRunTask()
 }
 
@@ -428,13 +412,17 @@ func (a *Agent) EnableAgentHandler(msg jetstream.Msg) {
 			}
 
 			a.Config.Enabled = true
-			a.Config.WriteConfig()
+			if err := a.Config.WriteConfig(); err != nil {
+				log.Fatalf("[FATAL]: could not write agent config: %v", err)
+			}
 			a.startReportJob()
 		}()
 
 		// Save property to file
 		a.Config.Enabled = true
-		a.Config.WriteConfig()
+		if err := a.Config.WriteConfig(); err != nil {
+			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+		}
 
 		msg.Ack()
 	}
@@ -453,7 +441,9 @@ func (a *Agent) DisableAgentHandler(msg jetstream.Msg) {
 
 		// Save property to file
 		a.Config.Enabled = false
-		a.Config.WriteConfig()
+		if err := a.Config.WriteConfig(); err != nil {
+			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+		}
 
 		msg.Ack()
 	}
@@ -463,13 +453,17 @@ func (a *Agent) RunReportHandler(msg jetstream.Msg) {
 	a.ReadConfig()
 	r := a.RunReport()
 	if r == nil {
+		log.Println("[ERROR]: report could not be generated, report has nil value")
+		msg.Ack()
 		return
 	}
 
 	if err := a.SendReport(r); err != nil {
 		log.Printf("[ERROR]: report could not be send to NATS server!, reason: %v\n", err)
 		msg.Ack()
+		return
 	}
+	msg.Ack()
 }
 
 func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
@@ -485,6 +479,11 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 	wd, err := openuem_utils.GetWd()
 	if err != nil {
 		log.Printf("[ERROR]: could not get working directory, reason: %v\n", err)
+		msg.Ack()
+	}
+
+	if err := os.MkdirAll(filepath.Join(wd, "certificates"), 0660); err != nil {
+		log.Printf("[ERROR]: could not create certificates folder, reason: %v\n", err)
 		msg.Ack()
 	}
 
@@ -523,7 +522,7 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 }
 
 func (a *Agent) StartVNCSubscribe() error {
-	_, err := a.MessageServer.Connection.QueueSubscribe("agent.startvnc."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+	_, err := a.NATSConnection.QueueSubscribe("agent.startvnc."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
 
 		loggedOnUser, err := report.GetLoggedOnUsername()
 		if err != nil {
@@ -566,7 +565,7 @@ func (a *Agent) StartVNCSubscribe() error {
 }
 
 func (a *Agent) StopVNCSubscribe() error {
-	_, err := a.MessageServer.Connection.QueueSubscribe("agent.stopvnc."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+	_, err := a.NATSConnection.QueueSubscribe("agent.stopvnc."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
 		if err := msg.Respond([]byte("VNC Stopped!")); err != nil {
 			log.Printf("[ERROR]: could not respond to agent stop vnc message, reason: %v\n", err)
 		}
@@ -584,7 +583,7 @@ func (a *Agent) StopVNCSubscribe() error {
 }
 
 func (a *Agent) InstallPackageSubscribe() error {
-	_, err := a.MessageServer.Connection.Subscribe("agent.installpackage."+a.Config.UUID, func(msg *nats.Msg) {
+	_, err := a.NATSConnection.Subscribe("agent.installpackage."+a.Config.UUID, func(msg *nats.Msg) {
 
 		action := openuem_nats.DeployAction{}
 		err := json.Unmarshal(msg.Data, &action)
@@ -624,7 +623,7 @@ func (a *Agent) InstallPackageSubscribe() error {
 }
 
 func (a *Agent) UpdatePackageSubscribe() error {
-	_, err := a.MessageServer.Connection.Subscribe("agent.updatepackage."+a.Config.UUID, func(msg *nats.Msg) {
+	_, err := a.NATSConnection.Subscribe("agent.updatepackage."+a.Config.UUID, func(msg *nats.Msg) {
 
 		action := openuem_nats.DeployAction{}
 		err := json.Unmarshal(msg.Data, &action)
@@ -670,7 +669,7 @@ func (a *Agent) UpdatePackageSubscribe() error {
 }
 
 func (a *Agent) UninstallPackageSubscribe() error {
-	_, err := a.MessageServer.Connection.Subscribe("agent.uninstallpackage."+a.Config.UUID, func(msg *nats.Msg) {
+	_, err := a.NATSConnection.Subscribe("agent.uninstallpackage."+a.Config.UUID, func(msg *nats.Msg) {
 
 		action := openuem_nats.DeployAction{}
 		err := json.Unmarshal(msg.Data, &action)
@@ -711,7 +710,7 @@ func (a *Agent) UninstallPackageSubscribe() error {
 }
 
 func (a *Agent) NewConfigSubscribe() error {
-	_, err := a.MessageServer.Connection.Subscribe("agent.newconfig", func(msg *nats.Msg) {
+	_, err := a.NATSConnection.Subscribe("agent.newconfig", func(msg *nats.Msg) {
 
 		config := openuem_nats.Config{}
 		err := json.Unmarshal(msg.Data, &config)
@@ -728,7 +727,9 @@ func (a *Agent) NewConfigSubscribe() error {
 			a.RescheduleReportRunTask()
 		}
 
-		a.Config.WriteConfig()
+		if err := a.Config.WriteConfig(); err != nil {
+			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+		}
 		log.Println("[INFO]: new config has been set from console")
 	})
 
@@ -744,7 +745,7 @@ func (a *Agent) SendDeployResult(r *openuem_nats.DeployAction) error {
 		return err
 	}
 
-	response, err := a.MessageServer.Connection.Request("deployresult", data, 2*time.Minute)
+	response, err := a.NATSConnection.Request("deployresult", data, 2*time.Minute)
 	if err != nil {
 		return err
 	}
@@ -857,25 +858,23 @@ func SaveDeploymentNotACK(action openuem_nats.DeployAction) error {
 func (a *Agent) SubscribeToNATSSubjects() {
 	var ctx context.Context
 
-	js, err := jetstream.New(a.MessageServer.Connection)
+	js, err := jetstream.New(a.NATSConnection)
 	if err != nil {
 		log.Printf("[ERROR]: could not intantiate JetStream: %v", err)
 		return
 	}
 
 	ctx, a.JetstreamContextCancel = context.WithTimeout(context.Background(), 60*time.Minute)
-	s, err := js.CreateStream(ctx, jetstream.StreamConfig{
-		Name:     "AGENTS_STREAM_" + a.Config.UUID,
-		Subjects: []string{"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID, "agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID, "agent.update.updater." + a.Config.UUID, "agent.rollback.updater." + a.Config.UUID},
-	})
+	s, err := js.Stream(ctx, "AGENTS_STREAM")
 
 	if err != nil {
-		log.Printf("[ERROR]: could not create or update stream: %v\n", err)
+		log.Printf("[ERROR]: could not get stream AGENTS_STREAM: %v\n", err)
 		return
 	}
 
 	c1, err := s.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-		AckPolicy: jetstream.AckExplicitPolicy,
+		Durable:        "AgentConsumer" + a.Config.UUID,
+		FilterSubjects: []string{"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID, "agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID, "agent.update.updater." + a.Config.UUID, "agent.rollback.updater." + a.Config.UUID},
 	})
 	if err != nil {
 		log.Printf("[ERROR]: could not create Jetstream consumer: %v", err)
@@ -928,11 +927,11 @@ func (a *Agent) SubscribeToNATSSubjects() {
 }
 
 func (a *Agent) GetRemoteConfig() error {
-	if a.MessageServer.Connection == nil {
+	if a.NATSConnection == nil {
 		return fmt.Errorf("NATS connection is not ready")
 	}
 
-	msg, err := a.MessageServer.Connection.Request("agentconfig", nil, 10*time.Minute)
+	msg, err := a.NATSConnection.Request("agentconfig", nil, 10*time.Minute)
 	if err != nil {
 		return err
 	}
@@ -949,222 +948,15 @@ func (a *Agent) GetRemoteConfig() error {
 
 	if config.Ok {
 		a.Config.DefaultFrequency = config.AgentFrequency
-		a.Config.WriteConfig()
+		if err := a.Config.WriteConfig(); err != nil {
+			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+		}
 
 		if a.Config.Debug {
 			log.Printf("[DEBUG]: new default frequency is %d", a.Config.DefaultFrequency)
 		}
 	}
 	return nil
-}
-
-func (a *Agent) UpdateUpdaterHandler(msg jetstream.Msg) {
-	r := openuem_nats.OpenUEMRelease{}
-
-	cwd, err := openuem_utils.GetWd()
-	if err != nil {
-		log.Printf("[ERROR]: could get working directory, reason: %v", err)
-		msg.Ack()
-		return
-	}
-
-	if err := json.Unmarshal(msg.Data(), &r); err != nil {
-		log.Printf("[ERROR]: could not unmarshal release info, reason: %v", err)
-		msg.Ack()
-		return
-	}
-
-	if r.Version == "" {
-		log.Printf("[ERROR]: could not get latest version from update request, reason: %v", err)
-		msg.Ack()
-		return
-	}
-
-	downloadFrom := ""
-	downloadHash := ""
-	for _, f := range r.Files {
-		if f.Arch == runtime.GOARCH && f.Os == runtime.GOOS {
-			downloadFrom = f.FileURL
-			downloadHash = f.Checksum
-			break
-		}
-	}
-
-	if downloadFrom == "" || downloadHash == "" {
-		log.Printf("[ERROR]: could not get applicable download information from release, reason: %v", err)
-		msg.Ack()
-		return
-	}
-
-	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\OpenUEM\Agent`, registry.QUERY_VALUE|registry.SET_VALUE)
-	if err != nil {
-		log.Println("[ERROR]: agent cannot read the agent hive")
-		if err := msg.Ack(); err != nil {
-			log.Println("[ERROR]: could not send ACK for updater updated")
-		}
-		return
-	}
-	defer k.Close()
-
-	updaterVersion, _, err := k.GetStringValue("UpdaterVersion")
-	if err != nil {
-		log.Println("[ERROR]: agent could not read UpdaterVersion entry")
-		if err := msg.Ack(); err != nil {
-			log.Println("[ERROR]: could not send ACK for updater updated")
-		}
-	}
-
-	if semver.Compare("v"+updaterVersion, "v"+r.Version) < 0 {
-		downloadPath := filepath.Join(cwd, "updater", "updater.exe")
-
-		// Download new updater
-		if err := openuem_utils.DownloadFile(downloadFrom, downloadPath, downloadHash); err != nil {
-			log.Printf("[ERROR]: could not download new updater to directory, reason %v", err)
-			if err := msg.Ack(); err != nil {
-				log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
-			}
-			return
-		}
-
-		// Stop service
-		if err := openuem_utils.WindowsSvcControl("openuem-agent-updater", svc.Stop, svc.Stopped); err != nil {
-			log.Printf("[ERROR]: could not stop the updater service, reason %v", err)
-		}
-
-		// Preparing for rollback
-		updaterPath := filepath.Join(cwd, "openuem-agent-updater.exe")
-		updaterWasFound := true
-		if _, err := os.Stat(updaterPath); err != nil {
-			log.Printf("[ERROR]: could not find previous OpenUEM updater, reason: %v", err)
-			updaterWasFound = false
-		}
-
-		if updaterWasFound {
-			// Copy updater
-			rollbackPath := filepath.Join(cwd, "updater", "updater-rollback.exe")
-			if err := os.Rename(updaterPath, rollbackPath); err != nil {
-				log.Printf("[ERROR]: could not rename file for rollback, reason: %v", err)
-				if err := msg.Ack(); err != nil {
-					log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
-				}
-				return
-			}
-		}
-
-		// Rename updater as the new exe
-		if err := os.Rename(downloadPath, updaterPath); err != nil {
-			log.Printf("[ERROR]: could not rename file for replacement, reason: %v", err)
-			if err := msg.Ack(); err != nil {
-				log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
-			}
-			return
-		}
-
-		// Start service
-		if err := openuem_utils.WindowsStartService("openuem-agent-updater"); err != nil {
-			// We couldn't start service maybe we should rollback
-			// but only if we had a previous exe
-			if updaterWasFound {
-				rollbackPath := filepath.Join(cwd, "openuem-agent-updater.exe")
-				if err := os.Rename(rollbackPath, updaterPath); err != nil {
-					log.Printf("[ERROR]: could not overwrite the updater with the rollback %v", err)
-					if err := msg.Ack(); err != nil {
-						log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
-					}
-					return
-				}
-
-				// try to start this exe now
-				if err := openuem_utils.WindowsStartService("openuem-agent-updater"); err != nil {
-					log.Printf("[FATAL]: could not restart the updater with the rollback %v", err)
-					if err := msg.Ack(); err != nil {
-						log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
-					}
-					return
-				}
-			} else {
-				log.Println("[FATAL]: no rollback was found to try to revert the situation")
-				if err := msg.Ack(); err != nil {
-					log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
-				}
-				return
-			}
-		}
-
-		err := k.SetStringValue("UpdaterVersion", r.Version)
-		if err != nil {
-			log.Println("[ERROR]: agent could not save UpdaterVersion entry")
-			if err := msg.Ack(); err != nil {
-				log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
-			}
-			return
-		}
-
-		log.Println("[INFO]: updater has been updated")
-		if err := msg.Ack(); err != nil {
-			log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
-		}
-		return
-	}
-
-	if err := msg.Ack(); err != nil {
-		log.Printf("[ERROR]: could not send ACK for updater updated, reason %v\n", err)
-	}
-	log.Println("[INFO]: no need to update the Updater :-)")
-
-}
-
-func (a *Agent) RollbackUpdaterHandler(msg jetstream.Msg) {
-	cwd, err := openuem_utils.GetWd()
-	if err != nil {
-		log.Printf("[ERROR]: could get working directory, reason: %v", err)
-		return
-	}
-
-	// Preparing for return to rollback
-	updaterPath := filepath.Join(cwd, "openuem-agent-updater.exe")
-	rollbackPath := filepath.Join(cwd, "updater", "updater-rollback.exe")
-
-	rollbackWasFound := true
-	if _, err := os.Stat(rollbackPath); err != nil {
-		log.Printf("[ERROR]: could not find previous OpenUEM updater, reason: %v", err)
-		rollbackWasFound = false
-		if err := msg.Ack(); err != nil {
-			log.Println("[ERROR]: could not send ACK for updater updated")
-		}
-		return
-	}
-
-	// Stop service
-	if err := openuem_utils.WindowsSvcControl("openuem-agent-updater", svc.Stop, svc.Stopped); err != nil {
-		log.Printf("[ERROR]: could not stop the updater service, reason %v", err)
-	}
-
-	if rollbackWasFound {
-		// Copy rollback to updater
-		if err := os.Rename(rollbackPath, updaterPath); err != nil {
-			log.Printf("[ERROR]: could not rename file for rollback, reason: %v", err)
-			if err := msg.Ack(); err != nil {
-				log.Println("[ERROR]: could not send ACK for updater updated")
-			}
-			return
-		}
-	}
-
-	// Start service
-	if err := openuem_utils.WindowsStartService("openuem-agent-updater"); err != nil {
-		log.Printf("[FATAL]: could not restart the updater after the rollback %v", err)
-		if err := msg.Ack(); err != nil {
-			log.Println("[ERROR]: could not send ACK for updater updated")
-		}
-		return
-	}
-
-	// UpdaterVersion won't be overwritten in registry to prevent update-rollback loop
-	log.Println("[INFO]: updater has been rolled back")
-	if err := msg.Ack(); err != nil {
-		log.Println("[ERROR]: could not send ACK for updater updated")
-	}
 }
 
 func (a *Agent) JetStreamAgentHandler(msg jetstream.Msg) {
@@ -1182,14 +974,6 @@ func (a *Agent) JetStreamAgentHandler(msg jetstream.Msg) {
 
 	if msg.Subject() == "agent.certificate."+a.Config.UUID {
 		a.AgentCertificateHandler(msg)
-	}
-
-	if msg.Subject() == "agent.update.updater" {
-		a.UpdateUpdaterHandler(msg)
-	}
-
-	if msg.Subject() == "agent.rollback.updater" {
-		a.RollbackUpdaterHandler(msg)
 	}
 }
 
