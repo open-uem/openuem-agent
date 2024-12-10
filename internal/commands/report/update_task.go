@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/doncicuto/openuem_utils"
-	"golang.org/x/sys/windows/registry"
+	"gopkg.in/ini.v1"
 )
 
 func (r *Report) getUpdateTaskInfo(debug bool) error {
@@ -13,35 +13,34 @@ func (r *Report) getUpdateTaskInfo(debug bool) error {
 		log.Println("[DEBUG]: update task info has been requested")
 	}
 
-	k, err := openuem_utils.OpenRegistryForQuery(registry.LOCAL_MACHINE, `SOFTWARE\OpenUEM\Agent`)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		k.Close()
-	}()
-
-	executionTime, err := openuem_utils.GetValueFromRegistry(k, "UpdaterLastExecutionTime")
+	// Open ini file
+	configFile := openuem_utils.GetConfigFile()
+	cfg, err := ini.Load(configFile)
 	if err != nil {
 		return err
 	}
 
-	if executionTime != "" {
-		r.AgentReport.LastUpdateTaskExecutionTime, err = time.ParseInLocation("2006-01-02T15:04:05", executionTime, time.Local)
-		if err != nil {
-			return err
-		}
-	}
-
-	r.AgentReport.LastUpdateTaskStatus, err = openuem_utils.GetValueFromRegistry(k, "UpdaterLastExecutionStatus")
+	key, err := cfg.Section("Agent").GetKey("UpdaterLastExecutionTime")
 	if err != nil {
 		return err
 	}
 
-	r.AgentReport.LastUpdateTaskResult, err = openuem_utils.GetValueFromRegistry(k, "UpdaterLastExecutionResult")
+	r.AgentReport.LastUpdateTaskExecutionTime, err = time.ParseInLocation("2006-01-02T15:04:05", key.String(), time.Local)
 	if err != nil {
 		return err
 	}
+
+	key, err = cfg.Section("Agent").GetKey("UpdaterLastExecutionStatus")
+	if err != nil {
+		return err
+	}
+	r.AgentReport.LastUpdateTaskStatus = key.String()
+
+	key, err = cfg.Section("Agent").GetKey("UpdaterLastExecutionResult")
+	if err != nil {
+		return err
+	}
+	r.AgentReport.LastUpdateTaskResult = key.String()
 
 	return nil
 }
