@@ -217,7 +217,7 @@ func (a *Agent) RunReport() *report.Report {
 	}
 
 	log.Println("[INFO]: agent is running a report...")
-	r, err := report.RunReport(a.Config.UUID, a.Config.Debug, a.Config.VNCProxyPort, a.Config.SFTPPort)
+	r, err := report.RunReport(a.Config.UUID, a.Config.Enabled, a.Config.Debug, a.Config.VNCProxyPort, a.Config.SFTPPort)
 	if err != nil {
 		return nil
 	}

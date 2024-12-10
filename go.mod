@@ -51,7 +51,6 @@ require (
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8 // indirect
-	golang.org/x/mod v0.22.0 // indirect
 	golang.org/x/text v0.18.0 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
 )

@@ -20,7 +20,7 @@ type Report struct {
 	openuem_nats.AgentReport
 }
 
-func RunReport(agentId string, debug bool, vncProxyPort, sftpPort string) (*Report, error) {
+func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort string) (*Report, error) {
 	var wg sync.WaitGroup
 	var err error
 
@@ -52,6 +52,7 @@ func RunReport(agentId string, debug bool, vncProxyPort, sftpPort string) (*Repo
 	report.SFTPPort = sftpPort
 	report.VNCProxyPort = vncProxyPort
 	report.CertificateReady = isCertificateReady()
+	report.Enabled = enabled
 
 	// Check if a restart is still required
 	// Get conf file
