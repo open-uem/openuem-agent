@@ -32,10 +32,12 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort strin
 		log.Printf("[ERROR]: run report could not add initial thread, %v", err)
 		return nil, err
 	}
+	log.Println("[INFO]: comshim added")
 	defer func() {
 		if err := comshim.Done(); err != nil {
 			log.Printf("[ERROR]: run report got en error in comshim Done, %v", err)
 		}
+		log.Println("[INFO]: comshim done")
 	}()
 
 	if debug {

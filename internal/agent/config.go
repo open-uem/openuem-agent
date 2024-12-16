@@ -36,6 +36,7 @@ func (a *Agent) ReadConfig() error {
 	// Open ini file
 	cfg, err := ini.Load(configFile)
 	if err != nil {
+		log.Println("[ERROR]: could not read INI file")
 		return err
 	}
 

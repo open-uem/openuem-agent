@@ -123,6 +123,7 @@ func (vnc *VNCServer) Stop() {
 }
 
 func (vnc *VNCServer) StartProxy() {
+	log.Printf("[INFO]: starting VNC proxy on port %s\n", vnc.ProxyPort)
 	// Launch proxy only if port is available
 	_, err := net.DialTimeout("tcp", ":"+vnc.ProxyPort, 5*time.Second)
 	if err != nil {
@@ -137,13 +138,16 @@ func (vnc *VNCServer) StartProxy() {
 			h.ServeHTTP(ctx.Response().Writer, ctx.Request())
 			return nil
 		})
-		fmt.Println("[INFO]: NoVNC proxy server started")
+
+		log.Println("[INFO]: NoVNC proxy server started")
 
 		if err := vnc.Proxy.StartTLS(":"+vnc.ProxyPort, vnc.ProxyCert, vnc.ProxyKey); err != http.ErrServerClosed {
 			log.Printf("[ERROR]: could not start VNC proxy\n, %v", err)
 		}
-	}
 
+	} else {
+		log.Printf("[ERROR]: VNC proxy port %s is not available\n", vnc.ProxyPort)
+	}
 }
 
 func GetSupportedVNCServer(sid string) (*VNCServer, error) {

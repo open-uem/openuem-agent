@@ -212,9 +212,7 @@ func (a *Agent) Stop() {
 func (a *Agent) RunReport() *report.Report {
 	start := time.Now()
 
-	if a.Config.Debug {
-		log.Println("========================================================================")
-	}
+	log.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 
 	log.Println("[INFO]: agent is running a report...")
 	r, err := report.RunReport(a.Config.UUID, a.Config.Enabled, a.Config.Debug, a.Config.VNCProxyPort, a.Config.SFTPPort)
@@ -236,6 +234,10 @@ func (a *Agent) RunReport() *report.Report {
 		}
 
 		cfg.Section("Agent").Key("RestartRequired").SetValue("true")
+		if err := cfg.SaveTo(configFile); err != nil {
+			log.Println("[ERROR]: could not save RestartRequired flag to config file")
+			return nil
+		}
 
 		log.Println("[WARN]: the flag to restart the service by the watchdog has been raised")
 		return nil
@@ -243,9 +245,7 @@ func (a *Agent) RunReport() *report.Report {
 
 	log.Printf("[INFO]: agent report run took %v\n", time.Since(start))
 
-	if a.Config.Debug {
-		log.Println("========================================================================")
-	}
+	log.Println("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 	return r
 }
 
@@ -393,8 +393,16 @@ func (a *Agent) RescheduleReportRunTask() {
 
 func (a *Agent) EnableAgentHandler(msg jetstream.Msg) {
 	a.ReadConfig()
+	msg.Ack()
 
 	if !a.Config.Enabled {
+		// Save property to file
+		a.Config.Enabled = true
+		if err := a.Config.WriteConfig(); err != nil {
+			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+		}
+		log.Println("[INFO]: agent has been enabled!")
+
 		// Run report async
 		go func() {
 			r := a.RunReport()
@@ -411,27 +419,19 @@ func (a *Agent) EnableAgentHandler(msg jetstream.Msg) {
 				a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
 			}
 
-			a.Config.Enabled = true
-			if err := a.Config.WriteConfig(); err != nil {
-				log.Fatalf("[FATAL]: could not write agent config: %v", err)
-			}
+			// Start report job
 			a.startReportJob()
 		}()
-
-		// Save property to file
-		a.Config.Enabled = true
-		if err := a.Config.WriteConfig(); err != nil {
-			log.Fatalf("[FATAL]: could not write agent config: %v", err)
-		}
-
-		msg.Ack()
 	}
 }
 
 func (a *Agent) DisableAgentHandler(msg jetstream.Msg) {
 	a.ReadConfig()
+	msg.Ack()
 
 	if a.Config.Enabled {
+		log.Println("[INFO]: agent has been disabled!")
+
 		// Stop reporting job
 		if err := a.TaskScheduler.RemoveJob(a.ReportJob.ID()); err != nil {
 			log.Printf("[INFO]: could not stop report task, reason: %v\n", err)
@@ -444,8 +444,6 @@ func (a *Agent) DisableAgentHandler(msg jetstream.Msg) {
 		if err := a.Config.WriteConfig(); err != nil {
 			log.Fatalf("[FATAL]: could not write agent config: %v", err)
 		}
-
-		msg.Ack()
 	}
 }
 
