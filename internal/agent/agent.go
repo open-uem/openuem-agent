@@ -878,11 +878,16 @@ func (a *Agent) SubscribeToNATSSubjects() {
 		return
 	}
 
-	c1, err := s.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
+	consumerConfig := jetstream.ConsumerConfig{
 		Durable:        "AgentConsumer" + a.Config.UUID,
 		FilterSubjects: []string{"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID, "agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID, "agent.update.updater." + a.Config.UUID, "agent.rollback.updater." + a.Config.UUID},
-		Replicas:       int(math.Min(float64(len(strings.Split(a.Config.NATSServers, ","))), 5)),
-	})
+	}
+
+	if len(strings.Split(a.Config.NATSServers, ",")) > 1 {
+		consumerConfig.Replicas = int(math.Min(float64(len(strings.Split(a.Config.NATSServers, ","))), 5))
+	}
+
+	c1, err := s.CreateOrUpdateConsumer(ctx, consumerConfig)
 	if err != nil {
 		log.Printf("[ERROR]: could not create Jetstream consumer: %v", err)
 		return
