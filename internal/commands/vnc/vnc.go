@@ -45,27 +45,21 @@ func New(certPath, keyPath, sid, proxyPort string) (*VNCServer, error) {
 	return server, nil
 }
 
-func (vnc *VNCServer) Start() {
-
-	// Create PIN
-	pin, err := GenerateRandomPIN()
-	if err != nil {
-		log.Printf("[ERROR]: could not generate random PIN, reason: %v\n", err)
-		return
-	}
-
+func (vnc *VNCServer) Start(pin string, notifyUser bool) {
 	cwd, err := openuem_utils.GetWd()
 	if err != nil {
 		log.Printf("[ERROR]: could not get working directory, reason: %v\n", err)
 		return
 	}
 
-	// Show PIN to user
-	go func() {
-		if err := RunAsUser(filepath.Join(cwd, "openuem-messenger.exe"), []string{"info", "--message", pin, "--type", "pin"}); err != nil {
-			log.Printf("[ERROR]: could not show test message to user, reason: %v\n", err)
-		}
-	}()
+	// Show PIN to user if needed
+	if notifyUser {
+		go func() {
+			if err := RunAsUser(filepath.Join(cwd, "openuem-messenger.exe"), []string{"info", "--message", pin, "--type", "pin"}); err != nil {
+				log.Printf("[ERROR]: could not show test message to user, reason: %v\n", err)
+			}
+		}()
+	}
 
 	// Configure VNC server
 	if err := vnc.Configure(); err != nil {
@@ -93,7 +87,7 @@ func (vnc *VNCServer) Stop() {
 	}
 
 	// Create new random PIN
-	pin, err := GenerateRandomPIN()
+	pin, err := openuem_utils.GenerateRandomPIN()
 	if err != nil {
 		log.Printf("[ERROR]: could not generate random PIN, reason: %v\n", err)
 		return

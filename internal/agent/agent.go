@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -547,9 +548,16 @@ func (a *Agent) StartVNCSubscribe() error {
 			return
 		}
 
+		// Unmarshal data
+		var vncConn openuem_nats.VNCConnection
+		if err := json.Unmarshal(msg.Data, &vncConn); err != nil {
+			log.Println("[ERROR]: could not unmarshall VNC connection")
+			return
+		}
+
 		// Start VNC server
 		a.VNCServer = v
-		v.Start()
+		v.Start(vncConn.PIN, vncConn.NotifyUser)
 
 		if err := msg.Respond([]byte("VNC Started!")); err != nil {
 			log.Printf("[ERROR]: could not respond to agent start vnc message, reason: %v\n", err)
@@ -873,6 +881,7 @@ func (a *Agent) SubscribeToNATSSubjects() {
 	c1, err := s.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
 		Durable:        "AgentConsumer" + a.Config.UUID,
 		FilterSubjects: []string{"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID, "agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID, "agent.update.updater." + a.Config.UUID, "agent.rollback.updater." + a.Config.UUID},
+		Replicas:       int(math.Min(float64(len(strings.Split(a.Config.NATSServers, ","))), 5)),
 	})
 	if err != nil {
 		log.Printf("[ERROR]: could not create Jetstream consumer: %v", err)

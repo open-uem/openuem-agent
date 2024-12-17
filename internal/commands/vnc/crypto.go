@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"crypto/cipher"
 	"crypto/des"
-	"crypto/rand"
 	"encoding/hex"
 	"log"
-	"math/big"
 )
 
 // Ref: https://stackoverflow.com/questions/41579325/golang-how-do-i-decrypt-with-des-cbc-and-pkcs7
@@ -56,20 +54,4 @@ func UltraVNCEncrypt(pin string) string {
 	encryptedPassword = append(encryptedPassword, 0)
 	// Return encrypted password as a hex-encoded string.
 	return hex.EncodeToString(encryptedPassword)
-}
-
-// Ref: https://gist.github.com/dopey/c69559607800d2f2f90b1b1ed4e550fb
-func GenerateRandomPIN() (string, error) {
-	const numbers = "0123456789"
-	pin := make([]byte, 6)
-
-	for i := 0; i < 6; i++ {
-		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(numbers))))
-		if err != nil {
-			return "", err
-		}
-		pin[i] = numbers[num.Int64()]
-	}
-
-	return string(pin), nil
 }
