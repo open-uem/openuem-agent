@@ -1,6 +1,6 @@
 module github.com/doncicuto/openuem-agent
 
-go 1.23.3
+go 1.23.4
 
 require (
 	github.com/ceshihao/windowsupdate v0.0.4
