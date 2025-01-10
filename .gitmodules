@@ -1,6 +1,0 @@
-[submodule "internal/nats"]
-	path = internal/nats
-	url = git@github.com:doncicuto/openuem-nats.git
-[submodule "internal/utils"]
-	path = internal/utils
-	url = git@github.com:doncicuto/openuem-utils.git
