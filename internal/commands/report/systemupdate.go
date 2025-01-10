@@ -7,9 +7,9 @@ import (
 	"time"
 
 	wu "github.com/ceshihao/windowsupdate"
-	"github.com/doncicuto/openuem_nats"
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
+	openuem_nats "github.com/open-uem/nats"
 )
 
 // Ref: https://learn.microsoft.com/en-us/windows/win32/api/wuapi/ne-wuapi-automaticupdatesnotificationlevel

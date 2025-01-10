@@ -4,8 +4,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/doncicuto/openuem-agent/internal/agent"
-	"github.com/doncicuto/openuem-agent/internal/logger"
+	"github.com/open-uem/openuem-agent/internal/agent"
+	"github.com/open-uem/openuem-agent/internal/logger"
 	"golang.org/x/sys/windows/svc"
 )
 

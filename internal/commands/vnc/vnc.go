@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/doncicuto/openuem_utils"
 	"github.com/evangwt/go-vncproxy"
 	"github.com/labstack/echo/v4"
+	openuem_utils "github.com/open-uem/utils"
 	"golang.org/x/net/websocket"
 	"golang.org/x/sys/windows/registry"
 	"gopkg.in/ini.v1"

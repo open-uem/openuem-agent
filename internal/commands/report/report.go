@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/doncicuto/comshim"
-	"github.com/doncicuto/openuem_nats"
-	"github.com/doncicuto/openuem_utils"
+	openuem_nats "github.com/open-uem/nats"
+	openuem_utils "github.com/open-uem/utils"
 	"golang.org/x/sys/windows"
 	"gopkg.in/ini.v1"
 )

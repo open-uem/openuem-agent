@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/doncicuto/openuem_nats"
+	openuem_nats "github.com/open-uem/nats"
 )
 
 type printerStatus uint16

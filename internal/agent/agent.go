@@ -16,15 +16,15 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
-	"github.com/doncicuto/openuem-agent/internal/commands/deploy"
-	"github.com/doncicuto/openuem-agent/internal/commands/report"
-	"github.com/doncicuto/openuem-agent/internal/commands/sftp"
-	"github.com/doncicuto/openuem-agent/internal/commands/vnc"
-	"github.com/doncicuto/openuem_nats"
-	"github.com/doncicuto/openuem_utils"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	openuem_nats "github.com/open-uem/nats"
+	"github.com/open-uem/openuem-agent/internal/commands/deploy"
+	"github.com/open-uem/openuem-agent/internal/commands/report"
+	"github.com/open-uem/openuem-agent/internal/commands/sftp"
+	"github.com/open-uem/openuem-agent/internal/commands/vnc"
+	openuem_utils "github.com/open-uem/utils"
 	"gopkg.in/ini.v1"
 )
 

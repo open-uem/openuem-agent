@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/doncicuto/openuem_nats"
+	openuem_nats "github.com/open-uem/nats"
 )
 
 type networkAdapterInfo struct {

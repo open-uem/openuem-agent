@@ -6,7 +6,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/doncicuto/openuem_nats"
+	openuem_nats "github.com/open-uem/nats"
 	"golang.org/x/sys/windows/registry"
 )
 

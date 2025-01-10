@@ -3,7 +3,7 @@ package report
 import (
 	"log"
 
-	"github.com/doncicuto/openuem-agent/internal/commands/vnc"
+	"github.com/open-uem/openuem-agent/internal/commands/vnc"
 )
 
 func (r *Report) getVNCInfo(debug bool) error {

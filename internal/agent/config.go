@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/doncicuto/openuem_utils"
 	"github.com/google/uuid"
+	openuem_utils "github.com/open-uem/utils"
 	"gopkg.in/ini.v1"
 )
 
