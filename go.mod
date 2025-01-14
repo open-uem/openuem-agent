@@ -22,7 +22,7 @@ require (
 	github.com/open-uem/utils v0.0.0-20250105115248-b0599a18d2b5
 	github.com/pkg/sftp v1.13.6
 	golang.org/x/crypto v0.31.0
-	golang.org/x/net v0.29.0
+	golang.org/x/net v0.33.0
 	gopkg.in/ini.v1 v1.67.0
 )
 
