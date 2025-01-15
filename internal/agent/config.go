@@ -4,6 +4,7 @@ package agent
 
 import (
 	"log"
+	"os"
 	"path/filepath"
 	"strconv"
 
@@ -32,6 +33,16 @@ type Config struct {
 func (a *Agent) ReadConfig() error {
 	// Get conf file
 	configFile := openuem_utils.GetConfigFile()
+
+	f, err := os.Open(configFile)
+	if err != nil {
+		log.Println("[ERROR]: could not open INI file")
+		return err
+	}
+	if err := f.Close(); err != nil {
+		log.Println("[ERROR]: could not close INI file")
+		return err
+	}
 
 	// Open ini file
 	cfg, err := ini.Load(configFile)
