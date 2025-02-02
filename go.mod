@@ -18,7 +18,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/labstack/echo/v4 v4.12.0
 	github.com/nats-io/nats.go v1.38.0
-	github.com/open-uem/nats v0.0.0-20250105132553-e063a8022512
+	github.com/open-uem/nats v0.0.0-20250124054349-0a9058f44dfe
 	github.com/open-uem/utils v0.0.0-20250105115248-b0599a18d2b5
 	github.com/pkg/sftp v1.13.6
 	golang.org/x/crypto v0.31.0
