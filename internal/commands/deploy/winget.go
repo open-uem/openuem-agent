@@ -6,10 +6,13 @@ import (
 	"log"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
+
+	"github.com/open-uem/wingetcfg/wingetcfg"
 )
 
-func InstallPackage(agentId, packageID string) error {
+func InstallPackage(packageID string) error {
 	wgPath, err := locateWinGet()
 	if err != nil {
 		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
@@ -36,32 +39,32 @@ func InstallPackage(agentId, packageID string) error {
 	return nil
 }
 
-func UpdatePackage(agentId, packageID string) error {
+func UpdatePackage(packageID string) error {
 	wgPath, err := locateWinGet()
 	if err != nil {
 		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
 		return err
 	}
 
-	cmd := exec.Command(wgPath, "update", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	cmd := exec.Command(wgPath, "upgrade", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
 	err = cmd.Start()
 	if err != nil {
 		log.Printf("[ERROR]: could not start winget.exe command %v", err)
 		return err
 	}
 
-	log.Printf("[INFO]: winget.exe is updating an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	log.Printf("[INFO]: winget.exe is upgrading an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
 	err = cmd.Wait()
 	if err != nil {
 		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", err)
 		return err
 	}
-	log.Println("[INFO]: winget.exe has updated an application", wgPath)
+	log.Println("[INFO]: winget.exe has upgrade an application", wgPath)
 
 	return nil
 }
 
-func UninstallPackage(agentId, packageID string) error {
+func UninstallPackage(packageID string) error {
 	wgPath, err := locateWinGet()
 	if err != nil {
 		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
@@ -75,13 +78,13 @@ func UninstallPackage(agentId, packageID string) error {
 		return err
 	}
 
-	log.Printf("[INFO]: winget.exe is uninstalling an app, using command %s %s %s\n", wgPath, "remove", packageID)
+	log.Printf("[INFO]: winget.exe is uninstalling the app %s\n", packageID)
 	err = cmd.Wait()
 	if err != nil {
 		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", err)
 		return err
 	}
-	log.Println("[INFO]: winget.exe has uninstalled an application", wgPath)
+	log.Println("[INFO]: winget.exe has uninstalled an application")
 
 	return nil
 }
@@ -90,12 +93,14 @@ func locateWinGet() (string, error) {
 	// We must find the location for winget.exe for local system user
 	// Ref: https://github.com/microsoft/winget-cli/discussions/962#discussioncomment-1561274
 	desktopAppInstallerPath := ""
-	filepath.WalkDir("C:\\Program Files\\WindowsApps", func(path string, d fs.DirEntry, err error) error {
+	if err := filepath.WalkDir("C:\\Program Files\\WindowsApps", func(path string, d fs.DirEntry, err error) error {
 		if d.IsDir() && strings.HasPrefix(d.Name(), "Microsoft.DesktopAppInstaller_") && strings.HasSuffix(d.Name(), "_x64__8wekyb3d8bbwe") {
 			desktopAppInstallerPath = path
 		}
 		return nil
-	})
+	}); err != nil {
+		return "", err
+	}
 
 	if desktopAppInstallerPath == "" {
 		return "", fmt.Errorf("desktopAppInstaller path not found")
@@ -108,4 +113,54 @@ func locateWinGet() (string, error) {
 	}
 
 	return wgPath, nil
+}
+
+func GetExplicitelyDeletedPackages(deployments []string) []string {
+	deleted := []string{}
+
+	for _, d := range deployments {
+		if !IsWinGetPackageInstalled(d) {
+			deleted = append(deleted, d)
+		}
+	}
+
+	return deleted
+}
+
+func IsWinGetPackageInstalled(packageID string) bool {
+	wgPath, err := locateWinGet()
+	if err != nil {
+		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
+		return false
+	}
+
+	if err := exec.Command(wgPath, "list", "-q", packageID).Run(); err != nil {
+		if !strings.Contains(err.Error(), "0x8a150014") {
+			log.Printf("[ERROR]: an error was found running winget.exe list command %v", err)
+		}
+		return false
+	}
+
+	return true
+}
+
+func RemovePackagesFromCfg(cfg *wingetcfg.WinGetCfg, exclusions []string) error {
+	if len(exclusions) == 0 {
+		return nil
+	}
+
+	validResources := []*wingetcfg.WinGetResource{}
+	for _, r := range cfg.Properties.Resources {
+		if r.Resource == wingetcfg.WinGetPackageResource {
+			if !slices.Contains(exclusions, r.Settings["id"].(string)) || (slices.Contains(exclusions, r.Settings["id"].(string)) && r.Settings["Ensure"].(string) == "Absent") {
+				validResources = append(validResources, r)
+			}
+		} else {
+			validResources = append(validResources, r)
+		}
+	}
+
+	cfg.Properties.Resources = validResources
+
+	return nil
 }

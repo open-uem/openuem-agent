@@ -180,14 +180,15 @@ func GetLoggedOnUsername() (string, error) {
 	return strings.TrimSpace(v.Username), nil
 }
 
-func (r *Report) isWindowsServer() bool {
-	return strings.HasPrefix(r.OperatingSystem.Version, "Windows Server")
-}
+// func (r *Report) isWindowsServer() bool {
+// 	return strings.HasPrefix(r.OperatingSystem.Version, "Windows Server")
+// }
 
 func getWindowsVersion(version string) *windowsVersion {
 	var windowsVersions = map[string]windowsVersion{}
 
 	// Windows 11
+	windowsVersions["10.0.26100"] = windowsVersion{name: "Windows 11", version: "24H2"}
 	windowsVersions["10.0.22631"] = windowsVersion{name: "Windows 11", version: "23H2"}
 	windowsVersions["10.0.22621"] = windowsVersion{name: "Windows 11", version: "22H2"}
 	windowsVersions["10.0.22000"] = windowsVersion{name: "Windows 11", version: "21H2"}
@@ -227,7 +228,6 @@ func getWindowsVersion(version string) *windowsVersion {
 	windowsVersions["5.1.2600"] = windowsVersion{name: "Windows XP", version: ""}
 
 	// Windows Server 2025
-	windowsVersions["10.0.26100"] = windowsVersion{name: "Windows Server 2025", version: "24H2"}
 
 	// Windows Server 2022
 	windowsVersions["10.0.25398"] = windowsVersion{name: "Windows Server 2022", version: "23H2"}
