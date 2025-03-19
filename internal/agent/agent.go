@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/go-co-op/gocron/v2"
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	openuem_nats "github.com/open-uem/nats"
@@ -27,7 +29,10 @@ import (
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
 	"github.com/open-uem/openuem-agent/internal/commands/vnc"
 	openuem_utils "github.com/open-uem/utils"
+	"github.com/open-uem/wingetcfg/wingetcfg"
+	"golang.org/x/mod/semver"
 	"gopkg.in/ini.v1"
+	"gopkg.in/yaml.v3"
 )
 
 type Agent struct {
@@ -44,10 +49,18 @@ type Agent struct {
 	BadgerDB               *badger.DB
 	SFTPServer             *sftp.SFTP
 	JetstreamContextCancel context.CancelFunc
+	WingetConfigureJob     gocron.Job
 }
 
 type JSONActions struct {
 	Actions []openuem_nats.DeployAction `json:"actions"`
+}
+
+type ProfileConfig struct {
+	ProfileID   int                  `yaml:"profileID"`
+	Exclusions  []string             `yaml:"exclusions"`
+	Deployments []string             `yaml:"deployments"`
+	Config      *wingetcfg.WinGetCfg `yaml:"config"`
 }
 
 func New() Agent {
@@ -181,10 +194,13 @@ func (a *Agent) Start() {
 		if err := a.Config.WriteConfig(); err != nil {
 			log.Fatalf("[FATAL]: could not write agent config: %v", err)
 		}
+
 		a.startReportJob()
 	}
 
+	// Start other jobs associated
 	a.startPendingACKJob()
+	a.startCheckForWinGetProfilesJob()
 }
 
 func (a *Agent) Stop() {
@@ -271,6 +287,10 @@ func (a *Agent) SendReport(r *report.Report) error {
 func (a *Agent) startReportJob() error {
 	var err error
 	// Create task for running the agent
+	if a.Config.ExecuteTaskEveryXMinutes == 0 {
+		a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN
+	}
+
 	a.ReportJob, err = a.TaskScheduler.NewJob(
 		gocron.DurationJob(
 			time.Duration(a.Config.ExecuteTaskEveryXMinutes)*time.Minute,
@@ -305,6 +325,10 @@ func (a *Agent) startPendingACKJob() error {
 func (a *Agent) startNATSConnectJob() error {
 	var err error
 
+	if a.Config.ExecuteTaskEveryXMinutes == 0 {
+		a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN
+	}
+
 	// Create task for running the agent
 	a.NATSConnectJob, err = a.TaskScheduler.NewJob(
 		gocron.DurationJob(
@@ -322,6 +346,7 @@ func (a *Agent) startNATSConnectJob() error {
 				a.SubscribeToNATSSubjects()
 				a.startReportJob()
 				a.startPendingACKJob()
+				a.startCheckForWinGetProfilesJob()
 
 				// Get remote config
 				if err := a.GetRemoteConfig(); err != nil {
@@ -336,6 +361,28 @@ func (a *Agent) startNATSConnectJob() error {
 		return err
 	}
 	log.Printf("[INFO]: new NATS connect job has been scheduled every %d minutes", a.Config.ExecuteTaskEveryXMinutes)
+	return nil
+}
+
+func (a *Agent) startCheckForWinGetProfilesJob() error {
+	var err error
+	// Create task for running the agent
+
+	if a.Config.WingetConfigureFrequency == 0 {
+		a.Config.WingetConfigureFrequency = SCHEDULETIME_30MIN
+	}
+
+	a.WingetConfigureJob, err = a.TaskScheduler.NewJob(
+		gocron.DurationJob(
+			time.Duration(a.Config.WingetConfigureFrequency)*time.Minute,
+		),
+		gocron.NewTask(a.GetWingetConfigureProfiles),
+	)
+	if err != nil {
+		log.Fatalf("[FATAL]: could not start the check for WinGet profiles job, reason: %v", err)
+		return err
+	}
+	log.Printf("[INFO]: new check for WinGet profiles job has been scheduled every %d minutes", a.Config.WingetConfigureFrequency)
 	return nil
 }
 
@@ -392,6 +439,11 @@ func (a *Agent) PendingACKTask() {
 func (a *Agent) RescheduleReportRunTask() {
 	a.TaskScheduler.RemoveJob(a.ReportJob.ID())
 	a.startReportJob()
+}
+
+func (a *Agent) RescheduleWingetConfigureTask() {
+	a.TaskScheduler.RemoveJob(a.WingetConfigureJob.ID())
+	a.startCheckForWinGetProfilesJob()
 }
 
 func (a *Agent) EnableAgentHandler(msg jetstream.Msg) {
@@ -603,7 +655,7 @@ func (a *Agent) RebootSubscribe() error {
 			return
 		}
 
-		when := int(action.Date.Sub(time.Now()).Seconds())
+		when := int(time.Until(time.Now()).Seconds())
 		if when > 0 {
 			if err := exec.Command("cmd", "/C", "shutdown", "/r", "/t", strconv.Itoa(when)).Run(); err != nil {
 				fmt.Printf("[ERROR]: could not initiate power off, reason: %v", err)
@@ -635,7 +687,7 @@ func (a *Agent) PowerOffSubscribe() error {
 			return
 		}
 
-		when := int(action.Date.Sub(time.Now()).Seconds())
+		when := int(time.Until(time.Now()).Seconds())
 		if when > 0 {
 			if err := exec.Command("cmd", "/C", "shutdown", "/s", "/t", strconv.Itoa(when)).Run(); err != nil {
 				fmt.Printf("[ERROR]: could not initiate power off, reason: %v", err)
@@ -663,7 +715,7 @@ func (a *Agent) InstallPackageSubscribe() error {
 			return
 		}
 
-		if err := deploy.InstallPackage(action.AgentId, action.PackageId); err != nil {
+		if err := deploy.InstallPackage(action.PackageId); err != nil {
 			log.Printf("[ERROR]: could not deploy package using winget, reason: %v\n", err)
 			return
 		}
@@ -705,7 +757,7 @@ func (a *Agent) UpdatePackageSubscribe() error {
 
 		action.When = time.Now()
 
-		if err := deploy.UpdatePackage(action.AgentId, action.PackageId); err != nil {
+		if err := deploy.UpdatePackage(action.PackageId); err != nil {
 			if strings.Contains(err.Error(), strings.ToLower("0x8A15002B")) {
 				log.Println("[INFO]: could not update package using winget, no updates found", err)
 			} else {
@@ -749,7 +801,7 @@ func (a *Agent) UninstallPackageSubscribe() error {
 			return
 		}
 
-		if err := deploy.UninstallPackage(action.AgentId, action.PackageId); err != nil {
+		if err := deploy.UninstallPackage(action.PackageId); err != nil {
 			log.Printf("[ERROR]: could not uninstall package using winget, reason: %v\n", err)
 			return
 		}
@@ -796,6 +848,12 @@ func (a *Agent) NewConfigSubscribe() error {
 		if a.Config.ExecuteTaskEveryXMinutes != SCHEDULETIME_5MIN {
 			a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
 			a.RescheduleReportRunTask()
+		}
+
+		// Should we re-schedule winget configure task?
+		if config.WinGetFrequency != 0 {
+			a.Config.WingetConfigureFrequency = config.WinGetFrequency
+			a.RescheduleWingetConfigureTask()
 		}
 
 		if err := a.Config.WriteConfig(); err != nil {
@@ -944,8 +1002,12 @@ func (a *Agent) SubscribeToNATSSubjects() {
 	}
 
 	consumerConfig := jetstream.ConsumerConfig{
-		Durable:        "AgentConsumer" + a.Config.UUID,
-		FilterSubjects: []string{"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID, "agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID, "agent.update.updater." + a.Config.UUID, "agent.rollback.updater." + a.Config.UUID},
+		Durable: "AgentConsumer" + a.Config.UUID,
+		FilterSubjects: []string{
+			"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID,
+			"agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID,
+			"agent.update.updater." + a.Config.UUID, "agent.rollback.updater." + a.Config.UUID,
+		},
 	}
 
 	if len(strings.Split(a.Config.NATSServers, ",")) > 1 {
@@ -1034,6 +1096,7 @@ func (a *Agent) GetRemoteConfig() error {
 
 	if config.Ok {
 		a.Config.DefaultFrequency = config.AgentFrequency
+		a.Config.WingetConfigureFrequency = config.WinGetFrequency
 		if err := a.Config.WriteConfig(); err != nil {
 			log.Fatalf("[FATAL]: could not write agent config: %v", err)
 		}
@@ -1083,5 +1146,300 @@ func (a *Agent) GetServerCertificate() {
 		log.Printf("[ERROR]: could not read server private key")
 	} else {
 		a.ServerKeyPath = serverKeyPath
+	}
+}
+
+func (a *Agent) GetWingetConfigureProfiles() {
+	if a.Config.Debug {
+		log.Println("[DEBUG]: running task WinGet profiles job")
+	}
+
+	profiles := []ProfileConfig{}
+
+	profileRequest := openuem_nats.WingetCfgProfiles{
+		AgentID: a.Config.UUID,
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: going to send a wingetcfg.profile request")
+	}
+
+	data, err := json.Marshal(profileRequest)
+	if err != nil {
+		log.Printf("[ERROR]: could not marshal profile request, reason: %v", err)
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: wingetcfg.profile sending request")
+	}
+
+	msg, err := a.NATSConnection.Request("wingetcfg.profiles", data, 5*time.Minute)
+	if err != nil {
+		log.Printf("[ERROR]: could not send request to agent worker, reason: %v", err)
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: wingetcfg.profile request sent")
+		if msg.Data != nil {
+			log.Println("[DEBUG]: received wingetcfg.profile response")
+		}
+	}
+
+	if err := yaml.Unmarshal(msg.Data, &profiles); err != nil {
+		log.Printf("[ERROR]: could not unmarshal profiles response from agent worker, reason: %v", err)
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: wingetcfg.profile response unmarshalled")
+	}
+
+	for _, p := range profiles {
+		if a.Config.Debug {
+			log.Println("[DEBUG]: wingetcfg.profile to be unmarshalled")
+		}
+
+		cfg, err := yaml.Marshal(p.Config)
+		if err != nil {
+			log.Printf("[ERROR]: could not marshal YAML file with winget configuration, reason: %v", err)
+			continue
+		}
+
+		if a.Config.Debug {
+			log.Println("[DEBUG]: we're going to apply the configuration")
+		}
+
+		if err := a.ApplyConfiguration(p.ProfileID, cfg, p.Exclusions, p.Deployments); err != nil {
+			// TODO inform that this profile has an error to agent worker
+			log.Printf("[ERROR]: could not apply YAML configuration file with winget, reason: %v", err)
+			continue
+		}
+	}
+}
+
+func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, deployments []string) error {
+	var cfg wingetcfg.WinGetCfg
+
+	if err := yaml.Unmarshal(config, &cfg); err != nil {
+		return err
+	}
+
+	cwd, err := openuem_utils.GetWd()
+	if err != nil {
+		log.Printf("[ERROR]: could not get working directory, reason %v", err)
+		return err
+	}
+
+	powershellPath := "C:\\Program Files\\PowerShell\\7\\pwsh.exe"
+
+	// If PowerShell 7 is not installed install it with winget
+	if _, err := os.Stat(powershellPath); errors.Is(err, os.ErrNotExist) {
+		if err := deploy.InstallPackage("Microsoft.PowerShell"); err != nil {
+			log.Printf("[ERROR]: WinGet configuration requires PowerShell 7 and it could not be installed, reason %v", err)
+			return err
+		}
+
+		// Notify, OpenUEM that a new package has been deployed due to winget configure
+		if err := a.SendWinGetCfgDeploymentReport("Microsoft.PowerShell", "PowerShell 7-x64", "install"); err != nil {
+			return err
+		}
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: PowerShell 7 is installed")
+	}
+
+	// Check PowerShell 7 version
+	// Ref: https://stackoverflow.com/questions/1825585/determine-installed-powershell-version
+	out, err := exec.Command(powershellPath, "-Command", "Get-ItemPropertyValue", "-Path", "HKLM:\\SOFTWARE\\Microsoft\\PowerShellCore\\InstalledVersions\\*", "-Name", "SemanticVersion").Output()
+	if err != nil {
+		log.Printf("[ERROR]: could not get PowerShell 7 version with %s %s %s %s %s %s %s, reason %v", powershellPath, "-Command", "Get-ItemPropertyValue", "-Path", "HKLM:\\SOFTWARE\\Microsoft\\PowerShellCore\\InstalledVersions\\*", "-Name", "SemanticVersion", err)
+		return err
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: got PowerShell 7 version")
+	}
+
+	// if PowerShell version 7 is lower than 7.4.6 upgrade it
+	if semver.Compare("v"+strings.TrimSpace(string(out)), "v7.4.6") < 0 {
+		if _, err := os.Stat(powershellPath); errors.Is(err, os.ErrNotExist) {
+			if err := deploy.UpdatePackage("Microsoft.PowerShell"); err != nil {
+				log.Printf("[ERROR]: WinGet configuration requires PowerShell 7 and it could not be installed, reason %v", err)
+				return err
+			}
+
+			// Notify, OpenUEM that a new package has been deployed due to winget configure
+			if err := a.SendWinGetCfgDeploymentReport("Microsoft.PowerShell", "PowerShell 7-x64", "install"); err != nil {
+				return err
+			}
+		}
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: PowerShell 7 version was compared")
+	}
+
+	// Check if packages were explicitely deleted and profile tries to install it again
+	explicitelyDeleted := deploy.GetExplicitelyDeletedPackages(deployments)
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: explicitely deleted packages", explicitelyDeleted)
+	}
+
+	if err := deploy.RemovePackagesFromCfg(&cfg, explicitelyDeleted); err != nil {
+		log.Printf("[ERROR]: could not remove explicitely deleted from config file, reason: %v", err)
+	}
+
+	if a.Config.Debug {
+		log.Printf("[DEBUG]: config after removing explicitely deleted: +%v", cfg.Properties.Resources)
+	}
+
+	// Notify which packages has been explicitely deleted to remove it from console
+	a.SendWinGetCfgExcludedPackage(explicitelyDeleted)
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: exclusions received from worker", exclusions)
+	}
+
+	// Remove exclusions to avoid reinstalling of explicitely deleted packages
+	if err := deploy.RemovePackagesFromCfg(&cfg, exclusions); err != nil {
+		log.Printf("[ERROR]: could not remove exclusions from config file, reason: %v", err)
+	}
+
+	if a.Config.Debug {
+		log.Printf("[DEBUG]: config after removing exclusions: +%v", cfg)
+	}
+
+	// Run configuration
+	scriptPath := filepath.Join(cwd, "powershell", "configure.ps1")
+	configPath := filepath.Join(cwd, "powershell", fmt.Sprintf("openuem.%s.winget", uuid.New()))
+	if err := cfg.WriteConfigFile(configPath); err != nil {
+		return err
+	}
+
+	// Remove powershell configuration file if debug is not enabled
+	defer func() {
+		if !a.Config.Debug {
+			if err := os.Remove(configPath); err != nil {
+				log.Printf("[ERROR]: could not remove %s", configPath)
+			}
+		}
+	}()
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: Configure file was created")
+	}
+
+	log.Println("[INFO]: received a request to apply a configuration profile")
+
+	cmd := exec.Command(powershellPath, scriptPath, configPath)
+
+	executeErr := cmd.Run()
+	errData := ""
+	if executeErr != nil {
+		log.Println("[ERROR]: configuration profile could not be applied")
+		data, err := os.ReadFile("C:\\Program Files\\OpenUEM Agent\\logs\\wingetcfg.txt")
+		if err != nil {
+			log.Println("[ERROR]: could not read wingetcfg.txt log")
+		}
+		errData = string(data)
+	} else {
+		log.Println("[INFO]: winget configuration have finished successfully")
+	}
+
+	// Report if application was successful or not
+	if err := a.SendWinGetCfgProfileApplicationReport(profileID, a.Config.UUID, executeErr == nil, errData); err != nil {
+		log.Println("[ERROR]: could not report if application was applied succesfully or no")
+	}
+
+	// Check if packages have been installed (or uninstalled) and notify the agent worker
+	a.CheckIfCfgPackagesInstalled(cfg)
+
+	return nil
+}
+
+func (a *Agent) CheckIfCfgPackagesInstalled(cfg wingetcfg.WinGetCfg) {
+	for _, r := range cfg.Properties.Resources {
+		if r.Resource == wingetcfg.WinGetPackageResource {
+			packageID := r.Settings["id"].(string)
+			packageName := r.Directives.Description
+			if r.Settings["Ensure"].(string) == "Present" {
+				if deploy.IsWinGetPackageInstalled(packageID) {
+					if err := a.SendWinGetCfgDeploymentReport(packageID, packageName, "install"); err != nil {
+						log.Printf("[ERROR]: could not send WinGetCfg deployment report, reason: %v", err)
+						continue
+					}
+				}
+			} else {
+				if !deploy.IsWinGetPackageInstalled(packageID) {
+					if err := a.SendWinGetCfgDeploymentReport(packageID, packageName, "uninstall"); err != nil {
+						log.Printf("[ERROR]: could not send WinGetCfg deployment report, reason: %v", err)
+						continue
+					}
+				}
+			}
+		}
+	}
+}
+
+func (a *Agent) SendWinGetCfgDeploymentReport(packageID, packageName, action string) error {
+	// Notify, OpenUEM that a new package has been deployed
+	deployment := openuem_nats.DeployAction{
+		AgentId:     a.Config.UUID,
+		PackageId:   packageID,
+		PackageName: packageName,
+		When:        time.Now(),
+		Action:      action,
+	}
+
+	data, err := json.Marshal(deployment)
+	if err != nil {
+		return err
+	}
+
+	if _, err := a.NATSConnection.Request("wingetcfg.deploy", data, 2*time.Minute); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (a *Agent) SendWinGetCfgProfileApplicationReport(profileID int, agentID string, success bool, errData string) error {
+	// Notify worker if application was succesful or not
+	deployment := openuem_nats.WingetCfgReport{
+		ProfileID: profileID,
+		AgentID:   agentID,
+		Success:   success,
+		Error:     errData,
+	}
+
+	data, err := json.Marshal(deployment)
+	if err != nil {
+		return err
+	}
+
+	if _, err := a.NATSConnection.Request("wingetcfg.report", data, 2*time.Minute); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (a *Agent) SendWinGetCfgExcludedPackage(packageIDs []string) {
+	for _, id := range packageIDs {
+		deployment := openuem_nats.DeployAction{
+			AgentId:   a.Config.UUID,
+			PackageId: id,
+		}
+
+		data, err := json.Marshal(deployment)
+		if err != nil {
+			log.Printf("[ERROR]: could not marshal package exclude for package %s and agent %s", id, a.Config.UUID)
+			return
+		}
+
+		if _, err := a.NATSConnection.Request("wingetcfg.exclude", data, 2*time.Minute); err != nil {
+			log.Printf("[ERROR]: could not send package exclude for package %s and agent %s", id, a.Config.UUID)
+		}
 	}
 }

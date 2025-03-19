@@ -181,7 +181,7 @@ func GetSIDs() ([]struct{ SID string }, error) {
 	// index value retrieved by WMI it's not user generated input
 	namespace := `root\cimv2`
 
-	qSID := fmt.Sprintf("SELECT SID FROM Win32_UserAccount")
+	qSID := "SELECT SID FROM Win32_UserAccount"
 
 	ctx := context.Background()
 	err := WMIQueryWithContext(ctx, qSID, &response, namespace)

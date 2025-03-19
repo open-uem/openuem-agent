@@ -14,6 +14,7 @@ import (
 )
 
 const SCHEDULETIME_5MIN = 5
+const SCHEDULETIME_30MIN = 30
 
 type Config struct {
 	NATSServers              string
@@ -28,6 +29,7 @@ type Config struct {
 	AgentCert                string
 	AgentKey                 string
 	SFTPCert                 string
+	WingetConfigureFrequency int
 }
 
 func (a *Agent) ReadConfig() error {
@@ -161,6 +163,17 @@ func (a *Agent) ReadConfig() error {
 		log.Fatalf("[FATAL]: could not read sftp certificate")
 	}
 
+	key, err = cfg.Section("Agent").GetKey("WingetConfigureFrequency")
+	if err != nil {
+		a.Config.WingetConfigureFrequency = SCHEDULETIME_30MIN
+	} else {
+		a.Config.WingetConfigureFrequency, err = key.Int()
+		if err != nil {
+			log.Println("[ERROR]: could not parse WingetConfigureFrequency")
+			return err
+		}
+	}
+
 	log.Println("[INFO]: agent has read its settings from the INI file")
 	return nil
 }
@@ -179,6 +192,8 @@ func (c *Config) WriteConfig() error {
 	cfg.Section("Agent").Key("Enabled").SetValue(strconv.FormatBool(c.Enabled))
 	cfg.Section("Agent").Key("DefaultFrequency").SetValue(strconv.Itoa(c.DefaultFrequency))
 	cfg.Section("Agent").Key("ExecuteTaskEveryXMinutes").SetValue(strconv.Itoa(c.ExecuteTaskEveryXMinutes))
+	cfg.Section("Agent").Key("WingetConfigureFrequency").SetValue(strconv.Itoa(c.WingetConfigureFrequency))
+
 	if err := cfg.SaveTo(configFile); err != nil {
 		log.Fatalf("[FATAL]: could not save config file, reason: %v", err)
 	}

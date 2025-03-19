@@ -256,9 +256,5 @@ func isCertificateReady() bool {
 
 	keyPath := filepath.Join(wd, "certificates", "server.key")
 	_, err = os.Stat(keyPath)
-	if err != nil {
-		return false
-	}
-
-	return true
+	return err == nil
 }
