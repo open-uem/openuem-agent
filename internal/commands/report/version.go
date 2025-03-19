@@ -1,4 +1,4 @@
 package report
 
-const VERSION = "0.2.1"
+const VERSION = "0.3.0"
 const CHANNEL = "stable"
