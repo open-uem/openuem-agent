@@ -55,6 +55,7 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort strin
 	report.VNCProxyPort = vncProxyPort
 	report.CertificateReady = isCertificateReady()
 	report.Enabled = enabled
+	report.DebugMode = debug
 
 	// Check if a restart is still required
 	// Get conf file

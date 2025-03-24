@@ -193,6 +193,7 @@ func (c *Config) WriteConfig() error {
 	cfg.Section("Agent").Key("DefaultFrequency").SetValue(strconv.Itoa(c.DefaultFrequency))
 	cfg.Section("Agent").Key("ExecuteTaskEveryXMinutes").SetValue(strconv.Itoa(c.ExecuteTaskEveryXMinutes))
 	cfg.Section("Agent").Key("WingetConfigureFrequency").SetValue(strconv.Itoa(c.WingetConfigureFrequency))
+	cfg.Section("Agent").Key("Debug").SetValue(strconv.FormatBool(c.Debug))
 
 	if err := cfg.SaveTo(configFile); err != nil {
 		log.Fatalf("[FATAL]: could not save config file, reason: %v", err)

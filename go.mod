@@ -18,7 +18,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/labstack/echo/v4 v4.12.0
 	github.com/nats-io/nats.go v1.39.1
-	github.com/open-uem/nats v0.0.0-20250319091503-aed56409cb42
+	github.com/open-uem/nats v0.0.0-20250324100902-e34b427bb2cf
 	github.com/open-uem/utils v0.0.0-20250105115248-b0599a18d2b5
 	github.com/open-uem/wingetcfg v0.0.0-20250317130843-80896d796f35
 	github.com/pkg/sftp v1.13.6
