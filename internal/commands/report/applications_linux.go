@@ -4,11 +4,126 @@ package report
 
 import (
 	"errors"
+	"log"
+	"os/exec"
+	"regexp"
+	"strings"
 
 	openuem_nats "github.com/open-uem/nats"
 )
 
 // TODO LINUX - Get applications installed
-func getApplications(debug bool) (map[string]openuem_nats.Application, error) {
-	return nil, errors.New("not implemented in Linux, yet")
+func (r *Report) getApplicationsInfo(debug bool) error {
+	command := ""
+
+	if debug {
+		log.Println("[DEBUG]: applications info has been requested")
+	}
+
+	os := r.OS
+	if os == "" {
+		return errors.New("operating system version is empty")
+	}
+
+	switch os {
+	case "debian", "ubuntu":
+		command = `dpkg --search '*.desktop' | awk '{print $1}' | cut -f 1 -d ':'  | sort --unique`
+	case "opensuse-leap":
+		command = `zypper --quiet search -i -f --provides "*.desktop" | awk '{print $3}' | sort --unique`
+	default:
+		return errors.New("unsupported operating system version")
+	}
+
+	out, err := exec.Command("bash", "-c", command).Output()
+	if err != nil {
+		return err
+	}
+
+	for p := range strings.SplitSeq(string(out), "\n") {
+		if p != "" && strings.TrimSpace(p) != "Name" {
+			app := openuem_nats.Application{}
+			app.Name = strings.TrimSpace(p)
+			switch os {
+			case "debian", "ubuntu":
+				app.Version, app.Publisher = getDpkgInfo(app.Name)
+			case "opensuse-leap":
+				app.Version, app.Publisher = getRPMInfo(app.Name)
+			}
+
+			// TODO LINUX app.InstallDate
+			r.Applications = append(r.Applications, app)
+		}
+	}
+
+	return nil
+}
+
+func getDpkgInfo(packageName string) (version string, publisher string) {
+	version = ""
+	publisher = ""
+
+	out, err := exec.Command("dpkg", "-s", packageName).Output()
+	if err != nil {
+		return version, publisher
+	}
+
+	reg := regexp.MustCompile(`Version: \s*(.*?)\s`)
+	matches := reg.FindAllStringSubmatch(string(out), -1)
+	for _, v := range matches {
+		version = v[1]
+		break
+	}
+
+	reg = regexp.MustCompile(`Original-Maintainer: \s*(.*?)\s<`)
+	matches = reg.FindAllStringSubmatch(string(out), -1)
+	for _, v := range matches {
+		publisher = v[1]
+		break
+	}
+
+	if publisher == "" {
+		reg = regexp.MustCompile(`Vendor: \s*(.*?)\s<`)
+		matches = reg.FindAllStringSubmatch(string(out), -1)
+		for _, v := range matches {
+			publisher = v[1]
+			break
+		}
+	}
+
+	if publisher == "" {
+		reg = regexp.MustCompile(`Maintainer: \s*(.*?)\s<`)
+		matches = reg.FindAllStringSubmatch(string(out), -1)
+		for _, v := range matches {
+			publisher = v[1]
+			break
+		}
+	}
+
+	return version, publisher
+}
+
+func getRPMInfo(packageName string) (version string, publisher string) {
+	version = ""
+	publisher = ""
+
+	out, err := exec.Command("rpm", "-qi", packageName).Output()
+	if err != nil {
+		return version, publisher
+	}
+
+	reg := regexp.MustCompile(`Version     : \s*(.*?)\s`)
+	matches := reg.FindAllStringSubmatch(string(out), -1)
+	for _, v := range matches {
+		version = v[1]
+		break
+	}
+
+	reg = regexp.MustCompile(`Vendor      : \s*(.*?)\s`)
+	matches = reg.FindAllStringSubmatch(string(out), -1)
+	for _, v := range matches {
+		publisher = v[1]
+		break
+	}
+
+	return version, publisher
 }

@@ -12,6 +12,26 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
+func (r *Report) getApplicationsInfo(debug bool) error {
+	if debug {
+		log.Println("[DEBUG]: applications info has been requested")
+	}
+	r.Applications = []openuem_nats.Application{}
+	myApps, err := getApplications(debug)
+	if err != nil {
+		return err
+	}
+	for k, v := range myApps {
+		app := openuem_nats.Application{}
+		app.Name = strings.TrimSpace(k)
+		app.Version = strings.TrimSpace(v.Version)
+		app.InstallDate = strings.TrimSpace(v.InstallDate)
+		app.Publisher = strings.TrimSpace(v.Publisher)
+		r.Applications = append(r.Applications, app)
+	}
+	return nil
+}
+
 // TODO - Microsoft Store Apps can't be retrieved from registry
 func getApplications(debug bool) (map[string]openuem_nats.Application, error) {
 	applications := make(map[string]openuem_nats.Application)

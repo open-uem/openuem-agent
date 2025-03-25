@@ -3,6 +3,9 @@
 package main
 
 import (
+	"log"
+
+	"github.com/open-uem/openuem-agent/internal/commands/report"
 	"github.com/open-uem/openuem-agent/internal/logger"
 )
 
@@ -15,9 +18,9 @@ func main() {
 
 	s.Execute()
 
-	// r, err := report.RunReport("", true, false, "", "")
-	// if err != nil {
-	// 	log.Println("error running report")
-	// }
-	// r.Print()
+	r, err := report.RunReport("", true, false, "", "")
+	if err != nil {
+		log.Println("error running report")
+	}
+	r.Print()
 }

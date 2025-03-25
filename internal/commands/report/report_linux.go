@@ -34,28 +34,6 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort strin
 	report.CertificateReady = isCertificateReady()
 	report.Enabled = enabled
 
-	// Check if a restart is still required
-	// Get conf file
-	// configFile := openuem_utils.GetAgentConfigFile()
-
-	// Open ini file
-	// cfg, err := ini.Load(configFile)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// key, err := cfg.Section("Agent").GetKey("RestartRequired")
-	// if err != nil {
-	// 	log.Println("[ERROR]: could not read RestartRequired from INI")
-	// 	return nil, err
-	// }
-
-	// report.RestartRequired, err = key.Bool()
-	// if err != nil {
-	// 	log.Println("[ERROR]: could not parse RestartRequired")
-	// 	return nil, err
-	// }
-
 	report.Release = openuem_nats.Release{
 		Version: VERSION,
 		Arch:    runtime.GOARCH,
@@ -106,14 +84,14 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort strin
 	// 	}
 	// }()
 
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getMonitorsInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getMonitorsInfo(debug)
-	// 	}
-	// }()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.getMonitorsInfo(debug); err != nil {
+			// Retry
+			report.getMonitorsInfo(debug)
+		}
+	}()
 
 	// wg.Add(1)
 	// go func() {
@@ -159,14 +137,14 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort strin
 		}
 	}()
 
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getApplicationsInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getApplicationsInfo(debug)
-	// 	}
-	// }()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.getApplicationsInfo(debug); err != nil {
+			// Retry
+			report.getApplicationsInfo(debug)
+		}
+	}()
 
 	// wg.Add(1)
 	// go func() {
@@ -210,7 +188,7 @@ func (r *Report) Print() {
 	r.logComputer()
 	r.logOS()
 	// r.logLogicalDisks()
-	// r.logMonitors()
+	r.logMonitors()
 	// r.logPrinters()
 	// r.logShares()
 	// r.logAntivirus()
