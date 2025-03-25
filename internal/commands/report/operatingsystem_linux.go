@@ -22,7 +22,12 @@ func (r *Report) getOperatingSystemInfo(debug bool) error {
 		log.Println("[DEBUG]: operating system info has been requested")
 	}
 
-	r.OperatingSystem.Version = si.OS.Vendor + " " + si.OS.Release
+	if si.OS.Release == "" {
+		r.OperatingSystem.Version = si.OS.Vendor + " " + si.OS.Version
+	} else {
+		r.OperatingSystem.Version = si.OS.Vendor + " " + si.OS.Release
+	}
+
 	if r.OperatingSystem.Version == "" {
 		r.OperatingSystem.Version = "Undetected"
 	}
