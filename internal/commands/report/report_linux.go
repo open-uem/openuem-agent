@@ -93,14 +93,14 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort strin
 		}
 	}()
 
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getPrintersInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getPrintersInfo(debug)
-	// 	}
-	// }()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.getPrintersInfo(debug); err != nil {
+			// Retry
+			report.getPrintersInfo(debug)
+		}
+	}()
 
 	// wg.Add(1)
 	// go func() {

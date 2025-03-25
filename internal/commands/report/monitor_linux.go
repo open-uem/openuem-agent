@@ -50,6 +50,6 @@ func (r *Report) getMonitorsInfo(debug bool) error {
 		}
 	}
 
-	log.Printf("[INFO]: monitors information has been retrieved from WMI WmiMonitorID")
+	log.Printf("[INFO]: monitors information has been retrieved from Linux hwinfo")
 	return nil
 }

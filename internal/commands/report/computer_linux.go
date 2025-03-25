@@ -3,11 +3,45 @@
 package report
 
 import (
+	"log"
 	"strings"
 	"syscall"
 
 	"github.com/zcalusic/sysinfo"
 )
+
+func (r *Report) getComputerInfo(debug bool) error {
+	if debug {
+		log.Println("[DEBUG]: computer system info has been requested")
+	}
+	if err := r.getComputerSystemInfo(); err != nil {
+		log.Printf("[ERROR]: could not get information from SysInfo: %v", err)
+		return err
+	} else {
+		log.Printf("[INFO]: computer system info has been retrieved from SysInfo")
+	}
+
+	if debug {
+		log.Println("[DEBUG]: serial number has been requested")
+	}
+	if err := r.getSerialNumber(); err != nil {
+		log.Printf("[ERROR]: could not get information from SysInfo: %v", err)
+		return err
+	} else {
+		log.Printf("[INFO]: serial number info has been retrieved from SysInfo")
+	}
+
+	if debug {
+		log.Println("[DEBUG]: processor info has been requested")
+	}
+	if err := r.getProcessorInfo(); err != nil {
+		log.Printf("[ERROR]: could not get information from SysInfo: %v", err)
+		return err
+	} else {
+		log.Printf("[INFO]: processor info has been retrieved from SysInfo")
+	}
+	return nil
+}
 
 func (r *Report) getComputerSystemInfo() error {
 	var si sysinfo.SysInfo
