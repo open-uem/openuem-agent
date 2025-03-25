@@ -1,5 +1,3 @@
-//go:build windows
-
 package agent
 
 import (
@@ -34,7 +32,7 @@ type Config struct {
 
 func (a *Agent) ReadConfig() error {
 	// Get conf file
-	configFile := openuem_utils.GetConfigFile()
+	configFile := openuem_utils.GetAgentConfigFile()
 
 	f, err := os.Open(configFile)
 	if err != nil {
@@ -180,7 +178,7 @@ func (a *Agent) ReadConfig() error {
 
 func (c *Config) WriteConfig() error {
 	// Get conf file
-	configFile := openuem_utils.GetConfigFile()
+	configFile := openuem_utils.GetAgentConfigFile()
 
 	// Open ini file
 	cfg, err := ini.Load(configFile)
@@ -204,7 +202,7 @@ func (c *Config) WriteConfig() error {
 
 func (c *Config) ResetRestartRequiredFlag() error {
 	// Get conf file
-	configFile := openuem_utils.GetConfigFile()
+	configFile := openuem_utils.GetAgentConfigFile()
 
 	// Open ini file
 	cfg, err := ini.Load(configFile)

@@ -1,24 +1,18 @@
-//go:build windows
+//go:build linux
 
 package logger
 
 import (
 	"log"
 	"os"
-	"path/filepath"
 )
 
 func New() *OpenUEMLogger {
+	var err error
+
 	logger := OpenUEMLogger{}
 
-	// Get executable path to store logs
-	ex, err := os.Executable()
-	if err != nil {
-		log.Fatalf("could not get executable info: %v", err)
-	}
-	wd := filepath.Dir(ex)
-
-	logPath := filepath.Join(wd, "logs", "openuem-log.txt")
+	logPath := "/var/log/openuem-agent"
 	logger.LogFile, err = os.OpenFile(logPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		log.Fatalf("could not create log file: %v", err)

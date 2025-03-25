@@ -1,12 +1,9 @@
-//go:build windows
+//go:build linux
 
 package main
 
 import (
-	"log"
-
 	"github.com/open-uem/openuem-agent/internal/logger"
-	"golang.org/x/sys/windows/svc"
 )
 
 func main() {
@@ -16,9 +13,11 @@ func main() {
 	// Instantiate service
 	s := NewService(l)
 
-	// Run service
-	err := svc.Run("openuem-agent", s)
-	if err != nil {
-		log.Fatalf("could not run service: %v", err)
-	}
+	s.Execute()
+
+	// r, err := report.RunReport("", true, false, "", "")
+	// if err != nil {
+	// 	log.Println("error running report")
+	// }
+	// r.Print()
 }
