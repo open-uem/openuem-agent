@@ -82,7 +82,7 @@ func (r *Report) getUsername() error {
 
 func (r *Report) getOSInstallationDate() error {
 	// Ref: https://unix.stackexchange.com/questions/9971/how-do-i-find-how-long-ago-a-linux-system-was-installed
-	cmd := "ls -alct --time-style=iso /|tail -1|awk '{print $6}'"
+	cmd := "ls -alct --full-time /|tail -1|awk '{print $6}'"
 	out, err := exec.Command("bash", "-c", cmd).Output()
 	if err != nil {
 		return err

@@ -75,15 +75,6 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort strin
 		}
 	}()
 
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getOSInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getOSInfo(debug)
-	// 	}
-	// }()
-
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -171,10 +162,10 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort strin
 	// 	report.getSystemUpdateInfo(debug)
 	// }
 
-	// if err := report.getLogicalDisksInfo(debug); err != nil {
-	// 	// Retry
-	// 	report.getLogicalDisksInfo(debug)
-	// }
+	if err := report.getLogicalDisksInfo(debug); err != nil {
+		// Retry
+		report.getLogicalDisksInfo(debug)
+	}
 
 	return &report, nil
 }
@@ -187,12 +178,12 @@ func (r *Report) Print() {
 
 	r.logComputer()
 	r.logOS()
-	// r.logLogicalDisks()
+	r.logLogicalDisks()
 	r.logMonitors()
-	// r.logPrinters()
+	r.logPrinters()
 	// r.logShares()
 	// r.logAntivirus()
 	// r.logSystemUpdate()
 	r.logNetworkAdapters()
-	// r.logApplications()
+	r.logApplications()
 }
