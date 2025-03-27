@@ -5,3 +5,4 @@ openuem.json
 *.log
 certificates
 agent-test
+pending_acks.json
