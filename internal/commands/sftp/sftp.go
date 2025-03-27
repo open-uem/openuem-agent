@@ -57,7 +57,14 @@ func (s *SFTP) Serve(address string, sftpCert, caCert *x509.Certificate, db *bad
 			log.Printf("[INFO]: SSH session opened by %s", ctx.User())
 
 			// Validate certificate against OCSP
-			if !isCertValidFromCache(sftpCert, caCert, db) {
+			isValid, err := isCertValidFromCache(sftpCert, caCert, db)
+			if err != nil {
+				log.Println("[ERROR]: found and error trying to validate cert against cache")
+				return false
+			}
+
+			if !isValid {
+				log.Println("[ERROR]: cert it not valid according to cache")
 				return false
 			}
 
@@ -65,7 +72,7 @@ func (s *SFTP) Serve(address string, sftpCert, caCert *x509.Certificate, db *bad
 			rsaPublicKey := sftpCert.PublicKey.(*rsa.PublicKey)
 			authorizedKey, err := gossh.NewPublicKey(rsaPublicKey)
 			if err != nil {
-				log.Println("[ERROR]: Could not parse SSH public key from RSA public key")
+				log.Println("[ERROR]: could not parse SSH public key from RSA public key")
 				return false
 			}
 
@@ -79,8 +86,9 @@ func (s *SFTP) Serve(address string, sftpCert, caCert *x509.Certificate, db *bad
 	return s.Server.ListenAndServe()
 }
 
-func isCertValidFromCache(sftpCert, caCert *x509.Certificate, db *badger.DB) bool {
+func isCertValidFromCache(sftpCert, caCert *x509.Certificate, db *badger.DB) (bool, error) {
 	var ocspStatus bool
+
 	certSerial := sftpCert.SerialNumber
 
 	if err := db.View(
@@ -88,7 +96,11 @@ func isCertValidFromCache(sftpCert, caCert *x509.Certificate, db *badger.DB) boo
 			item, err := tx.Get(certSerial.Bytes())
 			if err != nil {
 				if errors.Is(err, badger.ErrKeyNotFound) {
-					ocspStatus = isCertValid(sftpCert, caCert)
+					ocspStatus, err = isCertValid(sftpCert, caCert)
+					if err != nil {
+						return err
+					}
+
 					if err := db.Update(func(txn *badger.Txn) error {
 						var e *badger.Entry
 						if ocspStatus {
@@ -101,7 +113,7 @@ func isCertValidFromCache(sftpCert, caCert *x509.Certificate, db *badger.DB) boo
 						}
 						return nil
 					}); err != nil {
-						log.Println("[ERROR]: Could not add cert OCSP status in cache")
+						log.Println("[ERROR]: could not add cert OCSP status in cache")
 						return err
 					}
 					return nil
@@ -122,34 +134,35 @@ func isCertValidFromCache(sftpCert, caCert *x509.Certificate, db *badger.DB) boo
 
 			return nil
 		}); err != nil {
-		log.Println("[ERROR]: Could not check OCSP status in cache")
+		log.Println("[ERROR]: could not check OCSP status in cache")
+		return false, err
 	}
-	return ocspStatus
+	return ocspStatus, nil
 }
 
-func isCertValid(sftpCert, caCert *x509.Certificate) bool {
+func isCertValid(sftpCert, caCert *x509.Certificate) (bool, error) {
 	ocspRequest, err := ocsp.CreateRequest(sftpCert, caCert, &ocsp.RequestOptions{Hash: crypto.SHA256})
 	if err != nil {
-		log.Println("[ERROR]: Could not create OCSP Request")
-		return false
+		log.Println("[ERROR]: could not create OCSP Request")
+		return false, err
 	}
 
 	if len(sftpCert.OCSPServer) == 0 {
-		log.Println("[ERROR]: No OCSP server found in certificate")
-		return false
+		log.Println("[ERROR]: no OCSP server found in certificate")
+		return false, err
 	}
 
 	ocspServer := sftpCert.OCSPServer[0]
 	ocspURL, err := url.Parse(ocspServer)
 	if err != nil {
-		log.Println("[ERROR]: Could not parse OCSP Responder URL")
-		return false
+		log.Println("[ERROR]: could not parse OCSP Responder URL")
+		return false, err
 	}
 
 	httpRequest, err := http.NewRequest(http.MethodPost, ocspServer, bytes.NewBuffer(ocspRequest))
 	if err != nil {
-		log.Println("[ERROR]: Could not create HTTP request to OCSP Responder")
-		return false
+		log.Println("[ERROR]: could not create HTTP request to OCSP Responder")
+		return false, err
 	}
 
 	httpRequest.Header.Add("Content-Type", "application/ocsp-request")
@@ -159,30 +172,30 @@ func isCertValid(sftpCert, caCert *x509.Certificate) bool {
 	httpClient := &http.Client{}
 	httpResponse, err := httpClient.Do(httpRequest)
 	if err != nil {
-		log.Println("[ERROR]: Could not send request to OCSP Responder")
-		return false
+		log.Println("[ERROR]: could not send request to OCSP Responder")
+		return false, err
 	}
 	defer httpResponse.Body.Close()
 	output, err := io.ReadAll(httpResponse.Body)
 	if err != nil {
-		log.Println("[ERROR]: Could not read response from OCSP Responder")
-		return false
+		log.Println("[ERROR]: could not read response from OCSP Responder")
+		return false, err
 	}
 
 	ocspResponse, err := ocsp.ParseResponse(output, caCert)
 	if err != nil {
-		log.Println("[ERROR]: Could not parse OCSP Response")
-		return false
+		log.Println("[ERROR]: could not parse OCSP Response")
+		return false, err
 	}
 
 	if ocspResponse.Status == 2 {
-		log.Println("[ERROR]: Could not check OCSP status, try again later")
-		return false
+		log.Println("[ERROR]: could not check OCSP status, try again later")
+		return false, err
 	}
 
 	if ocspResponse.Status == 1 {
-		log.Println("[ERROR]: Unauthorized. Your certificate has been revoked")
-		return false
+		log.Println("[ERROR]: unauthorized. Your certificate has been revoked")
+		return false, err
 	}
-	return true
+	return true, nil
 }
