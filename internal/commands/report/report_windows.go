@@ -16,7 +16,7 @@ import (
 	"gopkg.in/ini.v1"
 )
 
-func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort string) (*Report, error) {
+func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAddress string) (*Report, error) {
 	var wg sync.WaitGroup
 	var err error
 
@@ -171,7 +171,11 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort strin
 		// Get network adapter with default gateway and set its ip address and MAC as the report IP/MAC address
 		for _, n := range report.NetworkAdapters {
 			if n.DefaultGateway != "" {
-				report.IP = n.Addresses
+				if n.Addresses == "" {
+					report.IP = ipAddress
+				} else {
+					report.IP = n.Addresses
+				}
 				report.MACAddress = n.MACAddress
 				break
 			}

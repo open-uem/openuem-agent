@@ -18,7 +18,7 @@ func main() {
 
 	s.Execute()
 
-	r, err := report.RunReport("", true, false, "", "")
+	r, err := report.RunReport("", true, false, "", "", "")
 	if err != nil {
 		log.Println("error running report")
 	}

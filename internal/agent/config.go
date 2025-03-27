@@ -28,6 +28,7 @@ type Config struct {
 	AgentKey                 string
 	SFTPCert                 string
 	WingetConfigureFrequency int
+	IPAddress                string
 }
 
 func (a *Agent) ReadConfig() error {
@@ -169,6 +170,15 @@ func (a *Agent) ReadConfig() error {
 		if err != nil {
 			log.Println("[ERROR]: could not parse WingetConfigureFrequency")
 			return err
+		}
+	}
+
+	key, err = cfg.Section("Agent").GetKey("IPAddress")
+	if err == nil {
+		ip := key.String()
+		if ip != "" {
+			a.Config.IPAddress = ip
+			log.Println("[INFO]: IP address has been set from configuration file")
 		}
 	}
 
