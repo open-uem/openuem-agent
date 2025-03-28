@@ -53,6 +53,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/safchain/ethtool v0.5.10 // indirect
+	github.com/taigrr/systemctl v1.0.10 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/zcalusic/sysinfo v1.1.3 // indirect

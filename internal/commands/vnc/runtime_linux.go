@@ -13,7 +13,8 @@ import (
 func RunAsUser(cmdPath string, args []string, env bool) error {
 	cmd := exec.Command(cmdPath, args...)
 
-	log.Println("[INFO]: command to execute is ", cmdPath, args)
+	// TODO DEBUG
+	// log.Println("[INFO]: command to execute is ", cmdPath, args)
 
 	uid, gid, err := getLoggedInUserIDs()
 	if err != nil {
@@ -59,7 +60,7 @@ func RunAsUser(cmdPath string, args []string, env bool) error {
 	return nil
 }
 
-func getLoggedInUser() (string, error) {
+func GetLoggedInUser() (string, error) {
 	username := ""
 
 	cmd := "loginctl list-sessions --no-legend | grep seat0 | awk '{ print $2,$3 }'"
@@ -73,7 +74,7 @@ func getLoggedInUser() (string, error) {
 		return "", nil
 	}
 
-	for _, u := range strings.Split(loginCtlOut, "\n") {
+	for u := range strings.SplitSeq(loginCtlOut, "\n") {
 		userInfo := strings.Split(u, " ")
 		if len(userInfo) == 2 {
 			uid, err := strconv.Atoi(userInfo[0])
@@ -93,7 +94,7 @@ func getLoggedInUser() (string, error) {
 }
 
 func getLoggedInUserIDs() (int, int, error) {
-	username, err := getLoggedInUser()
+	username, err := GetLoggedInUser()
 	if err != nil {
 		log.Println("[ERROR]: could not get current logged in username")
 		return -1, -1, err
@@ -134,7 +135,7 @@ func getXAuthority() (string, error) {
 	}
 	envOut, err := envCmd.Output()
 	if err != nil {
-		log.Println("[ERROR]: could not execute systemctl --user show-environment")
+		log.Println("[ERROR]: could not execute bash script to get XAuthority")
 		return "", err
 	}
 	xauthority := string(envOut)
@@ -156,7 +157,7 @@ func getDisplay() (string, error) {
 	}
 	envOut, err := envCmd.Output()
 	if err != nil {
-		log.Println("[ERROR]: could not execute systemctl --user show-environment")
+		log.Println("[ERROR]: could not execute bash script to get Display")
 		return "", err
 	}
 	xauthority := string(envOut)

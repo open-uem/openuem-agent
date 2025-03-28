@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -51,6 +52,12 @@ func (vnc *VNCServer) Start(pin string, notifyUser bool) {
 
 	// Start VNC server
 	go func() {
+		// Get logged in username
+		username, err := GetLoggedInUser()
+		if err != nil {
+			log.Printf("[ERROR]: could not get logged in Username, reason: %v\n", err)
+		}
+
 		xauthorityEnv, err := getXAuthority()
 		if err != nil {
 			log.Printf("[ERROR]: could not get XAUTHORITY env, reason: %v\n", err)
@@ -58,8 +65,17 @@ func (vnc *VNCServer) Start(pin string, notifyUser bool) {
 
 		xauthority := strings.TrimPrefix(xauthorityEnv, "XAUTHORITY=")
 
-		if err := RunAsUser(vnc.StartCommand, vnc.StartCommandArgsFunc(port, xauthority), true); err != nil {
-			log.Printf("[ERROR]: could not start VNC server, reason: %v", err)
+		if vnc.SystemctlCommand == "" {
+			if err := RunAsUser(vnc.StartCommand, vnc.StartCommandArgsFunc(username, port, xauthority), true); err != nil {
+				log.Printf("[ERROR]: could not start VNC server, reason: %v", err)
+			}
+		} else {
+			command := fmt.Sprintf("%s %s", vnc.SystemctlCommand, strings.Join(vnc.StartCommandArgsFunc(username, port, xauthority), " "))
+			cmd := exec.Command("bash", "-c", command)
+			if err := cmd.Run(); err != nil {
+				log.Println("command to execute: ", vnc.SystemctlCommand, strings.Join(vnc.StartCommandArgsFunc(username, port, xauthority), " "))
+				log.Printf("[ERROR]: could not start VNC server using %s, reason: %v", command, err)
+			}
 		}
 	}()
 
@@ -68,6 +84,12 @@ func (vnc *VNCServer) Start(pin string, notifyUser bool) {
 }
 
 func (vnc *VNCServer) Stop() {
+	// Get logged in username
+	username, err := GetLoggedInUser()
+	if err != nil {
+		log.Printf("[ERROR]: could not get logged in Username, reason: %v\n", err)
+	}
+
 	// Stop proxy
 	if err := vnc.Proxy.Close(); err != nil {
 		log.Printf("[ERROR]: could not stop VNC proxy, reason: %v\n", err)
@@ -82,10 +104,19 @@ func (vnc *VNCServer) Stop() {
 
 	// Stop gracefully VNC server
 	if vnc.StopCommand != "" {
-		err := RunAsUser(vnc.StopCommand, vnc.StopCommandArgs, true)
-		if err != nil {
-			log.Printf("[ERROR]: VNC Stop error, %v\n", err)
-			return
+		if vnc.SystemctlCommand == "" {
+			err := RunAsUser(vnc.StopCommand, vnc.StopCommandArgs, true)
+			if err != nil {
+				log.Printf("[ERROR]: VNC Stop error, %v\n", err)
+				return
+			}
+		} else {
+			command := fmt.Sprintf("%s %s", vnc.SystemctlCommand, strings.Join(vnc.StopCommandArgsFunc(username), " "))
+			cmd := exec.Command("bash", "-c", command)
+			if err := cmd.Run(); err != nil {
+				log.Println("command to execute: ", vnc.SystemctlCommand, strings.Join(vnc.StopCommandArgsFunc(username), " "))
+				log.Printf("[ERROR]: could not stop VNC server using %s, reason: %v", command, err)
+			}
 		}
 	}
 
@@ -96,23 +127,15 @@ func GetSupportedVNCServer(sid, proxyPort string) (*VNCServer, error) {
 	supportedServers := map[string]VNCServer{
 		"X11VNC": {
 			StartCommand: `/usr/bin/x11vnc`,
-			StartCommandArgsFunc: func(port string, xauthority string) []string {
+			StartCommandArgsFunc: func(username string, port string, xauthority string) []string {
 				cmd := []string{"-display", ":0", "-auth", xauthority, "-localhost", "-rfbauth", "/tmp/x11vncpasswd", "-forever", "-rfbport", port}
 				return cmd
 			},
-
 			StopCommand:     "/usr/bin/x11vnc",
 			StopCommandArgs: []string{"-R", "stop"},
 			Configure: func() (string, error) {
-				// Get XAUTHORITY
-				xauthorityEnv, err := getXAuthority()
-				if err != nil {
-					log.Printf("[ERROR]: could not get XAUTHORITY env, reason: %v\n", err)
-				}
-
-				xauthority := strings.TrimPrefix(xauthorityEnv, "XAUTHORITY=")
-				if strings.Contains(xauthority, "wayland") {
-					return "", errors.New("x11vnc cannot be used with Wayland")
+				if isWaylandDisplayServer() {
+					return "", errors.New("x11vnc cannot be used with Wayland display servers")
 				}
 
 				// Get the first available port for VNC server
@@ -154,10 +177,80 @@ func GetSupportedVNCServer(sid, proxyPort string) (*VNCServer, error) {
 				return nil
 			},
 		},
+		"GnomeRemoteDesktop": {
+			StartCommand: "/usr/bin/grdctl",
+			StartCommandArgsFunc: func(username string, port string, xauthority string) []string {
+				cmd := []string{"shell", username + "@", "/usr/bin/systemctl --user enable --now gnome-remote-desktop.service"}
+				return cmd
+			},
+			SystemctlCommand: "machinectl",
+			StopCommand:      "machinectl",
+			StopCommandArgsFunc: func(username string) []string {
+				cmd := []string{"shell", username + "@", "/usr/bin/systemctl --user disable --now gnome-remote-desktop.service"}
+				return cmd
+			},
+			Configure: func() (string, error) {
+				err := RunAsUser("grdctl", []string{"vnc", "set-auth-method", "password"}, true)
+				if err != nil {
+					return "", errors.New("could not set set-auth-method")
+				}
+
+				err = RunAsUser("grdctl", []string{"vnc", "disable-view-only"}, true)
+				if err != nil {
+					return "", errors.New("could not set disable-view-only")
+				}
+
+				err = RunAsUser("grdctl", []string{"vnc", "enable"}, true)
+				if err != nil {
+					return "", errors.New("could not set enable grd")
+				}
+				err = RunAsUser("bash", []string{"-c", `gsettings set org.gnome.desktop.remote-desktop.vnc encryption "['none']"`}, true)
+				if err != nil {
+					log.Println("[INFO]: could not set vnc encryption to none")
+				}
+
+				return "5900", nil
+			},
+			RemovePIN: func() error {
+				err := RunAsUser("grdctl", []string{"vnc", "disable"}, true)
+				if err != nil {
+					return errors.New("could not disable grd")
+				}
+
+				err = RunAsUser("grdctl", []string{"vnc", "enable-view-only"}, true)
+				if err != nil {
+					return errors.New("could not set enable-view-only")
+				}
+
+				err = RunAsUser("grdctl", []string{"vnc", "clear-password"}, true)
+				if err != nil {
+					return errors.New("could not clear password for grd")
+				}
+
+				err = RunAsUser("bash", []string{"-c", `gsettings reset org.gnome.desktop.remote-desktop.vnc encryption`}, true)
+				if err != nil {
+					log.Println("[INFO]: could not set vnc encryption to tls-anon")
+				}
+
+				return nil
+			},
+			SavePIN: func(pin string) error {
+				err := RunAsUser("grdctl", []string{"vnc", "set-password", pin}, true)
+				if err != nil {
+					return errors.New("could not set password")
+				}
+
+				log.Println("[INFO]: gnome remote desktop password saved")
+				return nil
+			},
+		},
 	}
 
 	for name, server := range supportedServers {
 		if _, err := os.Stat(server.StartCommand); err == nil {
+			if name == "X11VNC" && isWaylandDisplayServer() {
+				continue
+			}
 			server.Name = name
 			return &server, nil
 		}
@@ -190,4 +283,20 @@ func (vnc *VNCServer) StartProxy(port string) {
 	} else {
 		log.Printf("[ERROR]: VNC proxy port %s is not available\n", vnc.ProxyPort)
 	}
+}
+
+func isWaylandDisplayServer() bool {
+	// Get XAUTHORITY
+	xauthorityEnv, err := getXAuthority()
+	if err != nil {
+		log.Printf("[ERROR]: could not check if Wayland as I couldn't get XAUTHORITY env, reason: %v\n", err)
+		return false
+	}
+
+	xauthority := strings.TrimPrefix(xauthorityEnv, "XAUTHORITY=")
+	if strings.Contains(xauthority, "wayland") {
+		return true
+	}
+
+	return false
 }

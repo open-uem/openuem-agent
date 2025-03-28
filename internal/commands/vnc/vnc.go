@@ -1,16 +1,16 @@
 package vnc
 
-import (
-	"github.com/labstack/echo/v4"
-)
+import "github.com/labstack/echo/v4"
 
 type VNCServer struct {
 	Name                 string
 	StartCommand         string
+	SystemctlCommand     string
 	StartCommandArgs     []string
-	StartCommandArgsFunc func(port string, xauthority string) []string
+	StartCommandArgsFunc func(username string, port string, xauthority string) []string
 	StopCommand          string
 	StopCommandArgs      []string
+	StopCommandArgsFunc  func(username string) []string
 	KillCommand          string
 	KillCommandArgs      []string
 	Configure            func() (string, error)
@@ -22,6 +22,7 @@ type VNCServer struct {
 	ProxyKey             string
 	ProxyPort            string
 	ServerPort           string
+	Username             string
 }
 
 func New(certPath, keyPath, sid, proxyPort string) (*VNCServer, error) {

@@ -25,7 +25,6 @@ func (a *Agent) StartVNCSubscribe() error {
 			return
 		}
 
-		// TODO linux - pass SID?
 		v, err := vnc.New(a.ServerCertPath, a.ServerKeyPath, "", a.Config.VNCProxyPort)
 		if err != nil {
 			log.Println("[ERROR]: could not get a VNC server")
