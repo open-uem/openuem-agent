@@ -60,6 +60,8 @@ func (r *Report) getApplicationsInfo(debug bool) error {
 		}
 	}
 
+	log.Println("[INFO]: desktop apps information has been retrieved from package manager")
+
 	return nil
 }
 

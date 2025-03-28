@@ -5,13 +5,47 @@ package vnc
 import (
 	"fmt"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/evangwt/go-vncproxy"
+	"github.com/labstack/echo/v4"
 	openuem_utils "github.com/open-uem/utils"
+	"golang.org/x/net/websocket"
 	"golang.org/x/sys/windows/registry"
 	"gopkg.in/ini.v1"
 )
+
+func (vnc *VNCServer) StartProxy() {
+	log.Printf("[INFO]: starting VNC proxy on port %s\n", vnc.ProxyPort)
+	// Launch proxy only if port is available
+	_, err := net.DialTimeout("tcp", ":"+vnc.ProxyPort, 5*time.Second)
+	if err != nil {
+		vncProxy := vncproxy.New(&vncproxy.Config{
+			LogLevel: vncproxy.InfoFlag,
+			TokenHandler: func(r *http.Request) (addr string, err error) {
+				return ":5900", nil
+			},
+		})
+		vnc.Proxy.GET("/ws", func(ctx echo.Context) error {
+			h := websocket.Handler(vncProxy.ServeWS)
+			h.ServeHTTP(ctx.Response().Writer, ctx.Request())
+			return nil
+		})
+
+		log.Println("[INFO]: NoVNC proxy server started")
+
+		if err := vnc.Proxy.StartTLS(":"+vnc.ProxyPort, vnc.ProxyCert, vnc.ProxyKey); err != http.ErrServerClosed {
+			log.Printf("[ERROR]: could not start VNC proxy\n, %v", err)
+		}
+
+	} else {
+		log.Printf("[ERROR]: VNC proxy port %s is not available\n", vnc.ProxyPort)
+	}
+}
 
 func (vnc *VNCServer) Start(pin string, notifyUser bool) {
 	cwd, err := openuem_utils.GetWd()
@@ -24,13 +58,13 @@ func (vnc *VNCServer) Start(pin string, notifyUser bool) {
 	if notifyUser {
 		go func() {
 			if err := RunAsUser(filepath.Join(cwd, "openuem-messenger.exe"), []string{"info", "--message", pin, "--type", "pin"}); err != nil {
-				log.Printf("[ERROR]: could not show test message to user, reason: %v\n", err)
+				log.Printf("[ERROR]: could not show PIN message to user, reason: %v\n", err)
 			}
 		}()
 	}
 
 	// Configure VNC server
-	if err := vnc.Configure(); err != nil {
+	if _, err := vnc.Configure(); err != nil {
 		log.Printf("[ERROR]: could not configure VNC server, reason: %v\n", err)
 		return
 	}
@@ -84,7 +118,7 @@ func (vnc *VNCServer) Stop() {
 	}
 }
 
-func GetSupportedVNCServer(sid string) (*VNCServer, error) {
+func GetSupportedVNCServer(sid, proxyPort string) (*VNCServer, error) {
 	supportedServers := map[string]VNCServer{
 		"TightVNC": {
 			StartCommand:    `C:\Program Files\TightVNC\tvnserver.exe`,
@@ -93,40 +127,40 @@ func GetSupportedVNCServer(sid string) (*VNCServer, error) {
 			KillCommand:     "taskkill",
 			KillCommandArgs: []string{"/F", "/T", "/IM", "tvnserver.exe"},
 			ConfigureAsUser: true,
-			Configure: func() error {
+			Configure: func() (string, error) {
 				k, err := registry.OpenKey(registry.USERS, sid+`\SOFTWARE\TightVNC\Server`, registry.QUERY_VALUE)
 				if err == registry.ErrNotExist {
 					k, err = registry.OpenKey(registry.USERS, sid+`\SOFTWARE`, registry.SET_VALUE)
 					if err != nil {
-						return err
+						return "", err
 					}
 					k, _, err = registry.CreateKey(k, "TightVNC", registry.CREATE_SUB_KEY)
 					if err != nil {
-						return err
+						return "", err
 					}
 
 					k, _, err = registry.CreateKey(k, "Server", registry.CREATE_SUB_KEY)
 					if err != nil {
-						return err
+						return "", err
 					}
 				}
 
 				k, err = registry.OpenKey(registry.USERS, sid+`\SOFTWARE\TightVNC\Server`, registry.SET_VALUE)
 				if err != nil {
-					return err
+					return "", err
 				}
 
 				err = k.SetDWordValue("AllowLoopback", 1)
 				if err != nil {
-					return err
+					return "", err
 				}
 
 				err = k.SetDWordValue("RemoveWallpaper", 0)
 				if err != nil {
-					return err
+					return "", err
 				}
 
-				return nil
+				return "", nil
 			},
 			SavePIN: func(pin string) error {
 				encryptedPIN := DESEncode(pin)
@@ -140,7 +174,7 @@ func GetSupportedVNCServer(sid string) (*VNCServer, error) {
 					return err
 				}
 
-				fmt.Println("[INFO]: PIN saved to registry")
+				log.Println("[INFO]: PIN saved to registry")
 				return nil
 			},
 		},
@@ -149,12 +183,12 @@ func GetSupportedVNCServer(sid string) (*VNCServer, error) {
 			StopCommand:     `C:\Program Files\uvnc bvba\UltraVNC\winvnc.exe`,
 			StopCommandArgs: []string{"-kill"},
 			ConfigureAsUser: false,
-			Configure: func() error {
+			Configure: func() (string, error) {
 				iniFile := `C:\Program Files\uvnc bvba\UltraVNC\ultravnc.ini`
 				cfg, err := ini.Load(iniFile)
 				if err != nil {
 					log.Println(`C:\Program Files\uvnc bvba\UltraVNC\ultravnc.ini cannot be opened`)
-					return err
+					return "", err
 				}
 
 				adminSection := cfg.Section("admin")
@@ -165,10 +199,10 @@ func GetSupportedVNCServer(sid string) (*VNCServer, error) {
 
 				if err := cfg.SaveTo(iniFile); err != nil {
 					log.Printf("[ERROR]: could not save UltraVNC ini file, reason: %v\n", err)
-					return err
+					return "", err
 				}
-				fmt.Println("[INFO]: VNC configured")
-				return nil
+				log.Println("[INFO]: VNC configured")
+				return "", nil
 			},
 			SavePIN: func(pin string) error {
 				iniFile := `C:\Program Files\uvnc bvba\UltraVNC\ultravnc.ini`
@@ -183,7 +217,7 @@ func GetSupportedVNCServer(sid string) (*VNCServer, error) {
 				if err := cfg.SaveTo(iniFile); err != nil {
 					log.Printf("[ERROR]: could not save file, reason: %v\n", err)
 				}
-				fmt.Println("[INFO]: PIN saved to file")
+				log.Println("[INFO]: PIN saved to file")
 				return nil
 			},
 		},
@@ -192,31 +226,31 @@ func GetSupportedVNCServer(sid string) (*VNCServer, error) {
 			StopCommand:     "taskkill",
 			StopCommandArgs: []string{"/F", "/T", "/IM", "winvnc4.exe"},
 			ConfigureAsUser: true,
-			Configure: func() error {
+			Configure: func() (string, error) {
 
 				_, err := registry.OpenKey(registry.USERS, sid+`\SOFTWARE\TigerVNC`, registry.QUERY_VALUE)
 				if err == registry.ErrNotExist {
 					k, err := registry.OpenKey(registry.USERS, sid+`\SOFTWARE`, registry.QUERY_VALUE)
 					if err != nil {
-						return err
+						return "", err
 					}
 					k, _, err = registry.CreateKey(k, "TigerVNC", registry.CREATE_SUB_KEY)
 					if err != nil {
-						return err
+						return "", err
 					}
 
 					k, _, err = registry.CreateKey(k, "WinVNC4", registry.CREATE_SUB_KEY)
 					if err != nil {
-						return err
+						return "", err
 					}
 
 					err = k.SetDWordValue("LocalHost", 1)
 					if err != nil {
-						return err
+						return "", err
 					}
 				}
 
-				return nil
+				return "", nil
 			},
 			SavePIN: func(pin string) error {
 				encryptedPIN := DESEncode(pin)
@@ -229,7 +263,7 @@ func GetSupportedVNCServer(sid string) (*VNCServer, error) {
 				if err != nil {
 					return err
 				}
-				fmt.Println("[INFO]: PIN saved to registry")
+				log.Println("[INFO]: PIN saved to registry")
 				return nil
 			},
 		},
