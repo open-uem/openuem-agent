@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"os/exec"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -63,11 +65,6 @@ func (r *Report) getNetworkAdaptersFromLinux() error {
 			return err
 		}
 
-		// Ignore interfaces that are not attached to a NIC
-		// if i.Name == "lo" || state != 1 || strings.HasPrefix(i.Name, "veth") {
-		// 	continue
-		// }
-
 		if !slices.Contains(detectedNICs, i.Name) || state != 1 {
 			continue
 		}
@@ -112,6 +109,13 @@ func (r *Report) getNetworkAdaptersFromLinux() error {
 			myNetworkAdapter.Addresses = strings.Join(strAddresses, ",")
 			myNetworkAdapter.Subnet = strings.Join(subnets, ",")
 			myNetworkAdapter.DefaultGateway, err = getDefaultGateway()
+			myNetworkAdapter.DNSServers = getDNSservers()
+			myNetworkAdapter.DNSDomain = getDNSDomain()
+
+			if len(strAddresses) > 0 {
+				myNetworkAdapter.DHCPEnabled = isDHCPEnabled(strAddresses[0])
+			}
+
 			if err != nil {
 				log.Printf("[ERROR]: could not get default gateway, %v\n", err)
 			}
@@ -119,59 +123,6 @@ func (r *Report) getNetworkAdaptersFromLinux() error {
 
 		r.NetworkAdapters = append(r.NetworkAdapters, myNetworkAdapter)
 	}
-
-	// for _, v := range networkInfoDst {
-	// 	myNetworkAdapter := openuem_nats.NetworkAdapter{}
-
-	// 	if v.NetConnectionStatus == 2 {
-	// 		var networkAdapterDst []networkAdapterConfiguration
-
-	// 		speed := v.Speed / 1_000_000
-	// 		speedInUnits := "Mbps"
-	// 		isGbps := v.Speed/1000_000_000 > 0
-	// 		if isGbps {
-	// 			speedInUnits = "Gbps"
-	// 			speed = speed / 1000
-	// 		}
-	// 		myNetworkAdapter.Speed = fmt.Sprintf("%d %s", speed, speedInUnits)
-	// 		myNetworkAdapter.Name = v.Name
-	// 		myNetworkAdapter.MACAddress = v.MACAddress
-
-	// 		// This query would not be acceptable in general as it could lead to sql injection, but we're using a where condition using a
-	// 		// index value retrieved by WMI it's not user generated input
-	// 		namespace = `root\cimv2`
-	// 		qNetwork := fmt.Sprintf("SELECT DefaultIPGateway, DHCPEnabled, DHCPLeaseExpires, DHCPLeaseObtained, DNSDomain, DNSServerSearchOrder, IPAddress, IPSubnet FROM Win32_NetworkAdapterConfiguration WHERE Index = %d", v.Index)
-
-	// 		err = WMIQueryWithContext(ctx, qNetwork, &networkAdapterDst, namespace)
-	// 		if err != nil {
-	// 			return err
-	// 		}
-
-	// 		if len(networkAdapterDst) != 1 {
-	// 			return fmt.Errorf("got wrong network adapter configuration result set")
-	// 		}
-	// 		v := &networkAdapterDst[0]
-
-	// 		if len(v.IPAddress) > 0 {
-	// 			myNetworkAdapter.Addresses = v.IPAddress[0]
-	// 		}
-
-	// 		if len(v.IPSubnet) > 0 {
-	// 			myNetworkAdapter.Subnet = v.IPSubnet[0]
-	// 		}
-
-	// 		myNetworkAdapter.DefaultGateway = strings.Join(v.DefaultIPGateway, ", ")
-	// 		myNetworkAdapter.DNSServers = strings.Join(v.DNSServerSearchOrder, ", ")
-	// 		myNetworkAdapter.DNSDomain = v.DNSDomain
-	// 		myNetworkAdapter.DHCPEnabled = v.DHCPEnabled
-	// 		if v.DHCPEnabled {
-	// 			myNetworkAdapter.DHCPLeaseObtained = v.DHCPLeaseObtained.Local()
-	// 			myNetworkAdapter.DHCPLeaseExpired = v.DHCPLeaseExpires.Local()
-	// 		}
-
-	// 		r.NetworkAdapters = append(r.NetworkAdapters, myNetworkAdapter)
-	// 	}
-	// }
 
 	return nil
 }
@@ -191,4 +142,52 @@ func getDefaultGateway() (string, error) {
 		return "", errors.New("could not parse route command response")
 	}
 	return commandOutput, nil
+}
+
+func getDNSservers() string {
+	out, err := exec.Command("resolvectl", "status").Output()
+	if err == nil {
+		reg := regexp.MustCompile(`DNS Servers: (.*)`)
+		matches := reg.FindAllStringSubmatch(string(out), -1)
+		for _, v := range matches {
+			return v[1]
+		}
+	} else {
+		log.Println("[ERROR]: resolvectl status failed or not found")
+	}
+
+	file, err := os.ReadFile("/etc/resolv.conf")
+	if err != nil {
+		log.Println("[ERROR]: could not read /etc/resolv.conf")
+		return ""
+	}
+
+	dnsServers := []string{}
+	reg := regexp.MustCompile(`nameserver \s*(.*?)\s`)
+	matches := reg.FindAllStringSubmatch(string(file), -1)
+	for _, v := range matches {
+		dnsServers = append(dnsServers, v[1])
+	}
+	return strings.Join(dnsServers, ",")
+}
+
+func isDHCPEnabled(ip string) bool {
+	command := fmt.Sprintf("ip -o address | grep %s | grep dynamic | wc -l", ip)
+	out, err := exec.Command("bash", "-c", command).Output()
+	if err != nil {
+		log.Println("[ERROR]: could not check if IP address has been set via DHCP")
+		return false
+	}
+
+	return strings.TrimSpace(string(out)) == "1"
+}
+
+func getDNSDomain() string {
+	out, err := exec.Command("hostname", "-d").Output()
+	if err != nil {
+		log.Println("[ERROR]: could not get the domain")
+		return ""
+	}
+
+	return strings.TrimSpace(string(out))
 }

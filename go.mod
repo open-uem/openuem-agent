@@ -51,6 +51,7 @@ require (
 	github.com/nats-io/nkeys v0.4.10 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/qdm12/dns v1.11.0 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/safchain/ethtool v0.5.10 // indirect
 	github.com/taigrr/systemctl v1.0.10 // indirect

@@ -31,6 +31,11 @@ func New(certPath, keyPath, sid, proxyPort string) (*VNCServer, error) {
 		return nil, err
 	}
 	server.Proxy = echo.New()
+
+	// Hide echo banners
+	server.Proxy.HideBanner = true
+	server.Proxy.HidePort = true
+
 	server.ProxyCert = certPath
 	server.ProxyKey = keyPath
 	server.ProxyPort = proxyPort
