@@ -3,6 +3,7 @@
 package agent
 
 import (
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -16,9 +17,11 @@ import (
 	"github.com/dgraph-io/badger/v4"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	openuem_nats "github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
 	"github.com/open-uem/openuem-agent/internal/commands/vnc"
+	openuem_utils "github.com/open-uem/utils"
 )
 
 func (a *Agent) Start() {
@@ -292,4 +295,55 @@ func (a *Agent) NewConfigSubscribe() error {
 		return fmt.Errorf("[ERROR]: could not subscribe to agent uninstall package, reason: %v", err)
 	}
 	return nil
+}
+
+func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
+
+	data := openuem_nats.AgentCertificateData{}
+
+	if err := json.Unmarshal(msg.Data(), &data); err != nil {
+		log.Printf("[ERROR]: could not unmarshal agent certificate data, reason: %v\n", err)
+		msg.Ack()
+		return
+	}
+
+	wd := "/etc/openuem-agent"
+
+	if err := os.MkdirAll(filepath.Join(wd, "certificates"), 0660); err != nil {
+		log.Printf("[ERROR]: could not create certificates folder, reason: %v\n", err)
+		msg.Ack()
+	}
+
+	keyPath := filepath.Join(wd, "certificates", "server.key")
+
+	privateKey, err := x509.ParsePKCS1PrivateKey(data.PrivateKeyBytes)
+	if err != nil {
+		log.Printf("[ERROR]: could not get private key, reason: %v\n", err)
+		msg.Ack()
+	}
+
+	err = openuem_utils.SavePrivateKey(privateKey, keyPath)
+	if err != nil {
+		log.Printf("[ERROR]: could not save agent private key, reason: %v\n", err)
+		msg.Ack()
+		return
+	}
+	log.Printf("[INFO]: Agent private key saved in %s", keyPath)
+
+	certPath := filepath.Join(wd, "certificates", "server.cer")
+	err = openuem_utils.SaveCertificate(data.CertBytes, certPath)
+	if err != nil {
+		log.Printf("[ERROR]: could not save agent certificate, reason: %v\n", err)
+		msg.Ack()
+		return
+	}
+	log.Printf("[INFO]: Agent certificate saved in %s", keyPath)
+
+	msg.Ack()
+
+	// Finally run a new report to inform that the certificate is ready
+	r := a.RunReport()
+	if r == nil {
+		return
+	}
 }
