@@ -337,7 +337,7 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 		msg.Ack()
 		return
 	}
-	log.Printf("[INFO]: Agent certificate saved in %s", keyPath)
+	log.Printf("[INFO]: Agent certificate saved in %s", certPath)
 
 	msg.Ack()
 
@@ -345,5 +345,26 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 	r := a.RunReport()
 	if r == nil {
 		return
+	}
+}
+
+func (a *Agent) GetServerCertificate() {
+
+	cwd := "/etc/openuem-agent/certificates"
+
+	serverCertPath := filepath.Join(cwd, "certificates", "server.cer")
+	_, err := openuem_utils.ReadPEMCertificate(serverCertPath)
+	if err != nil {
+		log.Printf("[ERROR]: could not read server certificate")
+	} else {
+		a.ServerCertPath = serverCertPath
+	}
+
+	serverKeyPath := filepath.Join(cwd, "certificates", "server.key")
+	_, err = openuem_utils.ReadPEMPrivateKey(serverKeyPath)
+	if err != nil {
+		log.Printf("[ERROR]: could not read server private key")
+	} else {
+		a.ServerKeyPath = serverKeyPath
 	}
 }

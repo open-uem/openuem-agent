@@ -702,3 +702,26 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 		return
 	}
 }
+
+func (a *Agent) GetServerCertificate() {
+
+	cwd, err := openuem_utils.GetWd()
+	if err != nil {
+		log.Println("[ERROR]: could not get current working directory")
+	}
+	serverCertPath := filepath.Join(cwd, "certificates", "server.cer")
+	_, err = openuem_utils.ReadPEMCertificate(serverCertPath)
+	if err != nil {
+		log.Printf("[ERROR]: could not read server certificate")
+	} else {
+		a.ServerCertPath = serverCertPath
+	}
+
+	serverKeyPath := filepath.Join(cwd, "certificates", "server.key")
+	_, err = openuem_utils.ReadPEMPrivateKey(serverKeyPath)
+	if err != nil {
+		log.Printf("[ERROR]: could not read server private key")
+	} else {
+		a.ServerKeyPath = serverKeyPath
+	}
+}
