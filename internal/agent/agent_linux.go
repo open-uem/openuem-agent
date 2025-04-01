@@ -350,7 +350,7 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 
 func (a *Agent) GetServerCertificate() {
 
-	cwd := "/etc/openuem-agent/certificates"
+	cwd := "/etc/openuem-agent"
 
 	serverCertPath := filepath.Join(cwd, "certificates", "server.cer")
 	_, err := openuem_utils.ReadPEMCertificate(serverCertPath)
