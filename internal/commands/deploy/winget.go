@@ -1,3 +1,5 @@
+//go:build windows
+
 package deploy
 
 import (
@@ -59,7 +61,7 @@ func UpdatePackage(packageID string) error {
 		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", err)
 		return err
 	}
-	log.Println("[INFO]: winget.exe has upgrade an application", wgPath)
+	log.Println("[INFO]: winget.exe has upgraded an application", wgPath)
 
 	return nil
 }

@@ -3,3 +3,8 @@ openuem.json
 *.exe
 *-log.txt
 *.log
+certificates
+agent-test
+pending_acks.json
+openuem-messenger
+pin.templ

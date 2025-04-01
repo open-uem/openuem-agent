@@ -14,7 +14,7 @@ func (r *Report) getUpdateTaskInfo(debug bool) error {
 	}
 
 	// Open ini file
-	configFile := openuem_utils.GetConfigFile()
+	configFile := openuem_utils.GetAgentConfigFile()
 	cfg, err := ini.Load(configFile)
 	if err != nil {
 		return err

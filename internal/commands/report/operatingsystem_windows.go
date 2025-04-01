@@ -1,3 +1,5 @@
+//go:build windows
+
 package report
 
 import (
@@ -60,17 +62,6 @@ func (r *Report) getOSInfo(debug bool) error {
 		log.Printf("[INFO]: windows username has been retrieved from WMI Win32_Computer")
 	}
 	return nil
-}
-
-func (r *Report) logOS() {
-	fmt.Printf("\n** 📔 Operating System **********************************************************************************************\n")
-	fmt.Printf("%-40s |  %s \n", "Windows Version", r.OperatingSystem.Version)
-	fmt.Printf("%-40s |  %s \n", "Windows Description", r.OperatingSystem.Description)
-	fmt.Printf("%-40s |  %s \n", "Install Date", r.OperatingSystem.InstallDate)
-	fmt.Printf("%-40s |  %s \n", "Windows Edition", r.OperatingSystem.Edition)
-	fmt.Printf("%-40s |  %s \n", "Windows Architecture", r.OperatingSystem.Arch)
-	fmt.Printf("%-40s |  %s \n", "Last Boot Up Time", r.OperatingSystem.LastBootUpTime)
-	fmt.Printf("%-40s |  %s \n", "User Name", r.OperatingSystem.Username)
 }
 
 func (r *Report) getOperatingSystemInfo(debug bool) error {

@@ -11,7 +11,7 @@ func (r *Report) getVNCInfo(debug bool) error {
 		log.Println("[DEBUG]: vnc info has been requested")
 	}
 
-	v, err := vnc.GetSupportedVNCServer("")
+	v, err := vnc.GetSupportedVNCServer("", "")
 	if err != nil {
 		log.Println("[ERROR]: could not find a supported VNC server")
 		r.SupportedVNCServer = ""

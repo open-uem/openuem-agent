@@ -1,5 +1,3 @@
-//go:build windows
-
 package agent
 
 import (
@@ -30,11 +28,12 @@ type Config struct {
 	AgentKey                 string
 	SFTPCert                 string
 	WingetConfigureFrequency int
+	IPAddress                string
 }
 
 func (a *Agent) ReadConfig() error {
 	// Get conf file
-	configFile := openuem_utils.GetConfigFile()
+	configFile := openuem_utils.GetAgentConfigFile()
 
 	f, err := os.Open(configFile)
 	if err != nil {
@@ -174,13 +173,22 @@ func (a *Agent) ReadConfig() error {
 		}
 	}
 
+	key, err = cfg.Section("Agent").GetKey("IPAddress")
+	if err == nil {
+		ip := key.String()
+		if ip != "" {
+			a.Config.IPAddress = ip
+			log.Println("[INFO]: IP address has been set from configuration file")
+		}
+	}
+
 	log.Println("[INFO]: agent has read its settings from the INI file")
 	return nil
 }
 
 func (c *Config) WriteConfig() error {
 	// Get conf file
-	configFile := openuem_utils.GetConfigFile()
+	configFile := openuem_utils.GetAgentConfigFile()
 
 	// Open ini file
 	cfg, err := ini.Load(configFile)
@@ -204,7 +212,7 @@ func (c *Config) WriteConfig() error {
 
 func (c *Config) ResetRestartRequiredFlag() error {
 	// Get conf file
-	configFile := openuem_utils.GetConfigFile()
+	configFile := openuem_utils.GetAgentConfigFile()
 
 	// Open ini file
 	cfg, err := ini.Load(configFile)
