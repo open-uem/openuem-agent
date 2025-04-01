@@ -3,12 +3,10 @@
 package main
 
 import (
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/open-uem/openuem-agent/internal/commands/report"
 	"github.com/open-uem/openuem-agent/internal/logger"
 )
 
@@ -21,13 +19,7 @@ func main() {
 
 	s.Execute()
 
-	r, err := report.RunReport("", true, false, "", "", "")
-	if err != nil {
-		log.Println("error running report")
-	}
-	r.Print()
-
-	// TODO LINUX Keep the connection alive
+	// TODO LINUX Keep the connection alive for service
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-done
