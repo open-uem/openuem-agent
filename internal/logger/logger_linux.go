@@ -5,6 +5,7 @@ package logger
 import (
 	"log"
 	"os"
+	"path/filepath"
 )
 
 func New() *OpenUEMLogger {
@@ -12,7 +13,17 @@ func New() *OpenUEMLogger {
 
 	logger := OpenUEMLogger{}
 
-	logPath := "/var/log/openuem-agent"
+	wd := "/var/log/openuem-agent"
+
+	if _, err := os.Stat(wd); os.IsNotExist(err) {
+		if err := os.MkdirAll(wd, 0660); err != nil {
+			log.Fatalf("[FATAL]: could not create log directory, reason: %v", err)
+		}
+	}
+
+	logFilename := "openuem-agent.log"
+	logPath := filepath.Join(wd, logFilename)
+
 	logger.LogFile, err = os.OpenFile(logPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		log.Fatalf("could not create log file: %v", err)
