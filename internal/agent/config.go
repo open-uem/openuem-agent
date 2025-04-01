@@ -138,28 +138,56 @@ func (a *Agent) ReadConfig() error {
 		log.Fatalf("[FATAL]: could not get current working directory")
 	}
 
-	a.Config.AgentCert = filepath.Join(cwd, "certificates", "agent.cer")
+	key, err = cfg.Section("Certificates").GetKey("AgentCert")
+	if err != nil {
+		log.Println("[ERROR]: could not get agent certificate from config file")
+		a.Config.AgentCert = filepath.Join(cwd, "certificates", "agent.cer")
+	} else {
+		a.Config.AgentCert = key.String()
+	}
+
 	_, err = openuem_utils.ReadPEMCertificate(a.Config.AgentCert)
 	if err != nil {
 		log.Fatalf("[FATAL]: could not read agent certificate")
 	}
 
-	a.Config.AgentKey = filepath.Join(cwd, "certificates", "agent.key")
+	key, err = cfg.Section("Certificates").GetKey("AgentKey")
+	if err != nil {
+		log.Println("[ERROR]: could not get agent private key from config file")
+		a.Config.AgentKey = filepath.Join(cwd, "certificates", "agent.key")
+	} else {
+		a.Config.AgentKey = key.String()
+	}
+
 	_, err = openuem_utils.ReadPEMPrivateKey(a.Config.AgentKey)
 	if err != nil {
 		log.Fatalf("[FATAL]: could not read agent private key")
 	}
 
-	a.Config.CACert = filepath.Join(cwd, "certificates", "ca.cer")
+	key, err = cfg.Section("Certificates").GetKey("CACert")
+	if err != nil {
+		log.Println("[ERROR]: could not get CA certificate from config file")
+		a.Config.CACert = filepath.Join(cwd, "certificates", "ca.cer")
+	} else {
+		a.Config.CACert = key.String()
+	}
+
 	_, err = openuem_utils.ReadPEMCertificate(a.Config.CACert)
 	if err != nil {
 		log.Fatalf("[FATAL]: could not read CA certificate")
 	}
 
-	a.Config.SFTPCert = filepath.Join(cwd, "certificates", "sftp.cer")
+	key, err = cfg.Section("Certificates").GetKey("CACert")
+	if err != nil {
+		log.Println("[ERROR]: could not get SFTP certificate from config file")
+		a.Config.SFTPCert = filepath.Join(cwd, "certificates", "sftp.cer")
+	} else {
+		a.Config.SFTPCert = key.String()
+	}
 	_, err = openuem_utils.ReadPEMCertificate(a.Config.SFTPCert)
 	if err != nil {
-		log.Fatalf("[FATAL]: could not read sftp certificate")
+		log.Println("[ERROR]: could not read sftp certificate")
+		a.Config.SFTPCert = ""
 	}
 
 	key, err = cfg.Section("Agent").GetKey("WingetConfigureFrequency")
