@@ -60,6 +60,56 @@ func (r *Report) getApplicationsInfo(debug bool) error {
 		}
 	}
 
+	// Now let's get flatpak apps
+	flatpakCommand := `flatpak list | grep system | awk -F'\t' '{print $1 "***" $3}'`
+	out, err = exec.Command("bash", "-c", flatpakCommand).Output()
+	if err != nil {
+		log.Println("[INFO]: could not get apps installed with flatpak")
+	} else {
+		for p := range strings.SplitSeq(string(out), "\n") {
+			if p != "" {
+				app := openuem_nats.Application{}
+				data := strings.Split(p, "***")
+				app.Name = strings.TrimSpace(data[0])
+				if len(data) > 1 {
+					app.Version = strings.TrimSpace(data[1])
+				} else {
+					app.Version = "-"
+				}
+				app.Publisher = "Flatpak"
+
+				r.Applications = append(r.Applications, app)
+			}
+		}
+	}
+
+	// And snap - Duplicates ubuntu installs so we comment this snipper for the future
+	// snapCommand := `snap list | grep -v 'Rev' | awk '{print $1 "---" $2 "---" $5}'`
+	// out, err = exec.Command("bash", "-c", snapCommand).Output()
+	// if err != nil {
+	// 	log.Println("[INFO]: could not get apps installed with snap")
+	// } else {
+	// 	for p := range strings.SplitSeq(string(out), "\n") {
+	// 		if p != "" {
+	// 			app := openuem_nats.Application{}
+	// 			data := strings.Split(p, "---")
+	// 			app.Name = strings.TrimSpace(data[0])
+	// 			if len(data) > 1 {
+	// 				app.Version = strings.TrimSpace(data[1])
+	// 			} else {
+	// 				app.Version = "-"
+	// 			}
+	// 			if len(data) > 2 {
+	// 				app.Publisher = strings.TrimSuffix(strings.TrimSpace(data[2]), "**")
+	// 			} else {
+	// 				app.Publisher = "Snap"
+	// 			}
+
+	// 			r.Applications = append(r.Applications, app)
+	// 		}
+	// 	}
+	// }
+
 	log.Println("[INFO]: desktop apps information has been retrieved from package manager")
 
 	return nil

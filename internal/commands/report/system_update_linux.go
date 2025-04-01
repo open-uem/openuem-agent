@@ -1,0 +1,101 @@
+//go:build linux
+
+package report
+
+import (
+	"log"
+	"os/exec"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/open-uem/nats"
+)
+
+func (r *Report) getSystemUpdateInfo(debug bool) error {
+	switch r.OS {
+	case "ubuntu", "debian":
+		if err := r.getAptInformation(); err != nil {
+			log.Printf("[ERROR]: could not get pending security updates, reason: %v", err)
+		} else {
+			log.Println("[INFO]: get pending security updates info has been retrieved")
+		}
+	}
+	return nil
+}
+
+func (r *Report) getAptInformation() error {
+
+	// Check if we've security updates that can be upgraded
+	r.SystemUpdate.PendingUpdates = checkAptSecurityUpdatesAvailable()
+
+	// Check if unattended is running
+	r.SystemUpdate.Status = checkUpdatesStatus()
+
+	// Check last time packages were installed
+	r.SystemUpdate.LastInstall = checkLastTimePackagesInstalled()
+
+	return nil
+}
+
+func checkAptSecurityUpdatesAvailable() bool {
+
+	if err := exec.Command("apt", "update").Run(); err != nil {
+		log.Printf("[ERROR]: could not run apt update, reason: %v", err)
+		return false
+	}
+
+	secUpdatesAvailable := `apt list --upgradable 2>/dev/null | grep "\-security" | wc -l`
+	out, err := exec.Command("bash", "-c", secUpdatesAvailable).Output()
+	if err != nil {
+		log.Printf("[ERROR]: could not check if updates are available, reason: %v", err)
+		return false
+	}
+
+	nUpdates, err := strconv.Atoi(strings.TrimSpace(string(out)))
+	if err != nil {
+		log.Printf("[ERROR]: could not get the number of updates available, reason: %v", err)
+		return false
+	}
+
+	return nUpdates > 0
+}
+
+func checkUpdatesStatus() string {
+
+	unattendedCheck := `grep unattended /var/log/apt/history.log | wc -l`
+	out, err := exec.Command("bash", "-c", unattendedCheck).Output()
+	if err != nil {
+		log.Printf("[ERROR]: could not read APT history log, reason: %v", err)
+		return nats.NOT_CONFIGURED
+	}
+
+	nUnattended, err := strconv.Atoi(strings.TrimSpace(string(out)))
+	if err != nil {
+		log.Printf("[ERROR]: could not get the number of unattended items found in APT history log, reason: %v", err)
+		return nats.NOT_CONFIGURED
+	}
+
+	if nUnattended > 0 {
+		return nats.NOTIFY_SCHEDULED_INSTALLATION
+	} else {
+		return nats.NOT_CONFIGURED
+	}
+}
+
+func checkLastTimePackagesInstalled() time.Time {
+	lastInstall := `tail -3 /var/log/apt/history.log | grep End-Date | awk '{print $2,$3}'`
+	out, err := exec.Command("bash", "-c", lastInstall).Output()
+	if err != nil {
+		log.Printf("[ERROR]: could not read APT history log, reason: %v", err)
+		return time.Time{}
+	}
+
+	t, err := time.Parse("2006-01-02 15:04:05", strings.TrimSpace(string(out)))
+	if err != nil {
+		log.Printf("[ERROR]: could not parse time string %s from APT history log, reason: %v", string(out), err)
+		return time.Time{}
+	}
+
+	return t
+}

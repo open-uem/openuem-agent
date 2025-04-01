@@ -93,23 +93,23 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 		}
 	}()
 
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getSharesInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getSharesInfo(debug)
-	// 	}
-	// }()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.getSharesInfo(debug); err != nil {
+			// Retry
+			report.getSharesInfo(debug)
+		}
+	}()
 
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getAntivirusInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getAntivirusInfo(debug)
-	// 	}
-	// }()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.getAntivirusInfo(debug); err != nil {
+			// Retry
+			report.getAntivirusInfo(debug)
+		}
+	}()
 
 	wg.Add(1)
 	go func() {
@@ -149,22 +149,22 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 		}
 	}()
 
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getUpdateTaskInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getUpdateTaskInfo(debug)
-	// 	}
-	// }()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.getUpdateTaskInfo(debug); err != nil {
+			// Retry
+			report.getUpdateTaskInfo(debug)
+		}
+	}()
 
 	wg.Wait()
 
-	// // These tasks can affect previous tasks
-	// if err := report.getSystemUpdateInfo(debug); err != nil {
-	// 	// Retry
-	// 	report.getSystemUpdateInfo(debug)
-	// }
+	// These tasks can affect previous tasks
+	if err := report.getSystemUpdateInfo(debug); err != nil {
+		// Retry
+		report.getSystemUpdateInfo(debug)
+	}
 
 	if err := report.getLogicalDisksInfo(debug); err != nil {
 		// Retry
@@ -177,7 +177,7 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 func (r *Report) Print() {
 	fmt.Printf("\n** 🕵  Agent *********************************************************************************************************\n")
 	fmt.Printf("%-40s |  %s\n", "Computer Name", r.Hostname)
-	// fmt.Printf("%-40s |  %s\n", "IP address", r.IP)
+	fmt.Printf("%-40s |  %s\n", "IP address", r.IP)
 	fmt.Printf("%-40s |  %s\n", "Operating System", r.OS)
 
 	r.logComputer()
@@ -185,9 +185,9 @@ func (r *Report) Print() {
 	r.logLogicalDisks()
 	r.logMonitors()
 	r.logPrinters()
-	// r.logShares()
-	// r.logAntivirus()
-	// r.logSystemUpdate()
+	r.logShares()
+	r.logAntivirus()
+	r.logSystemUpdate()
 	r.logNetworkAdapters()
 	r.logApplications()
 }
