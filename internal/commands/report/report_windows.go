@@ -3,8 +3,9 @@
 package report
 
 import (
-	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
@@ -224,20 +225,20 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 	return &report, nil
 }
 
-func (r *Report) Print() {
-	fmt.Printf("\n** 🕵  Agent *********************************************************************************************************\n")
-	fmt.Printf("%-40s |  %s\n", "Computer Name", r.Hostname)
-	fmt.Printf("%-40s |  %s\n", "IP address", r.IP)
-	fmt.Printf("%-40s |  %s\n", "Operating System", r.OS)
+func isCertificateReady() bool {
+	wd, err := openuem_utils.GetWd()
+	if err != nil {
+		log.Println("[ERROR]: could not get working directory")
+		return false
+	}
 
-	r.logComputer()
-	r.logOS()
-	r.logLogicalDisks()
-	r.logMonitors()
-	r.logPrinters()
-	r.logShares()
-	r.logAntivirus()
-	r.logSystemUpdate()
-	r.logNetworkAdapters()
-	r.logApplications()
+	certPath := filepath.Join(wd, "certificates", "server.cer")
+	_, err = os.Stat(certPath)
+	if err != nil {
+		return false
+	}
+
+	keyPath := filepath.Join(wd, "certificates", "server.key")
+	_, err = os.Stat(keyPath)
+	return err == nil
 }
