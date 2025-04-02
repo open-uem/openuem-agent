@@ -177,7 +177,7 @@ func (a *Agent) ReadConfig() error {
 		log.Fatalf("[FATAL]: could not read CA certificate")
 	}
 
-	key, err = cfg.Section("Certificates").GetKey("CACert")
+	key, err = cfg.Section("Certificates").GetKey("SFTPCert")
 	if err != nil {
 		log.Println("[ERROR]: could not get SFTP certificate from config file")
 		a.Config.SFTPCert = filepath.Join(cwd, "certificates", "sftp.cer")
