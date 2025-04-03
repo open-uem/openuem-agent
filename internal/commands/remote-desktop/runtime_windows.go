@@ -1,6 +1,6 @@
 //go:build windows
 
-package vnc
+package remotedesktop
 
 import (
 	"log"

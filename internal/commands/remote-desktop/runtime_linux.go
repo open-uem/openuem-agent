@@ -1,6 +1,7 @@
-package vnc
+package remotedesktop
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -14,7 +15,7 @@ func RunAsUser(cmdPath string, args []string, env bool) error {
 	cmd := exec.Command(cmdPath, args...)
 
 	// TODO DEBUG
-	// log.Println("[INFO]: command to execute is ", cmdPath, args)
+	log.Println("[INFO]: command to execute is ", cmdPath, args)
 
 	uid, gid, err := getLoggedInUserIDs()
 	if err != nil {
@@ -46,16 +47,23 @@ func RunAsUser(cmdPath string, args []string, env bool) error {
 
 		// Chrome, Firefox in Linux need env variables like USER, DISPLAY, XAUTHORITY...
 		cmd.Env = append(os.Environ(), "USER="+u.Username, "HOME="+u.HomeDir, strings.TrimSpace(display), strings.TrimSpace(xauthority))
+
+		log.Println(cmd.Env)
 	}
 
-	err = cmd.Start()
+	err = cmd.Run()
 	if err != nil {
 		return err
 	}
 
-	err = cmd.Wait()
-	if err != nil {
-		return err
+	return nil
+}
+
+func RunAsUserWithMachineCtl(username, myCmd string) error {
+	command := fmt.Sprintf("machinectl shell %s@ %s", username, myCmd)
+	cmd := exec.Command("bash", "-c", command)
+	if err := cmd.Run(); err != nil {
+		log.Printf("[ERROR]: could not run command %s, reason: %v", command, err)
 	}
 	return nil
 }

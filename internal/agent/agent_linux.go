@@ -19,8 +19,8 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	openuem_nats "github.com/open-uem/nats"
+	rd "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
-	"github.com/open-uem/openuem-agent/internal/commands/vnc"
 	openuem_utils "github.com/open-uem/utils"
 )
 
@@ -167,34 +167,34 @@ func (a *Agent) startNATSConnectJob() error {
 	return nil
 }
 
-func (a *Agent) StartVNCSubscribe() error {
+func (a *Agent) StartRemoteDesktopSubscribe() error {
 	_, err := a.NATSConnection.QueueSubscribe("agent.startvnc."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
 
 		// Instantiate new vnc server, but first try to check if certificates are there
 		a.GetServerCertificate()
 		if a.ServerCertPath == "" || a.ServerKeyPath == "" {
-			log.Println("[ERROR]: VNC requires a server certificate that it's not ready")
+			log.Println("[ERROR]: Remote Desktop service requires a server certificate that it's not ready")
 			return
 		}
 
-		v, err := vnc.New(a.ServerCertPath, a.ServerKeyPath, "", a.Config.VNCProxyPort)
+		v, err := rd.New(a.ServerCertPath, a.ServerKeyPath, "", a.Config.VNCProxyPort)
 		if err != nil {
-			log.Println("[ERROR]: could not get a VNC server")
+			log.Println("[ERROR]: could not get a Remote Desktop service")
 			return
 		}
 
 		// Unmarshal data
-		var vncConn openuem_nats.VNCConnection
-		if err := json.Unmarshal(msg.Data, &vncConn); err != nil {
-			log.Println("[ERROR]: could not unmarshall VNC connection")
+		var rdConn openuem_nats.VNCConnection
+		if err := json.Unmarshal(msg.Data, &rdConn); err != nil {
+			log.Println("[ERROR]: could not unmarshall Remote Desktop connection")
 			return
 		}
 
-		// Start VNC server
-		a.VNCServer = v
-		v.Start(vncConn.PIN, vncConn.NotifyUser)
+		// Start Remote Desktop service
+		a.RemoteDesktop = v
+		v.Start(rdConn.PIN, rdConn.NotifyUser)
 
-		if err := msg.Respond([]byte("VNC Started!")); err != nil {
+		if err := msg.Respond([]byte("Remote Desktop service started!")); err != nil {
 			log.Printf("[ERROR]: could not respond to agent start vnc message, reason: %v\n", err)
 		}
 	})

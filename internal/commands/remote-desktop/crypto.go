@@ -1,4 +1,4 @@
-package vnc
+package remotedesktop
 
 import (
 	"bytes"

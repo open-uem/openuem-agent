@@ -20,9 +20,9 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	openuem_nats "github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/commands/deploy"
+	remotedesktop "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	"github.com/open-uem/openuem-agent/internal/commands/report"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
-	"github.com/open-uem/openuem-agent/internal/commands/vnc"
 	openuem_utils "github.com/open-uem/utils"
 	"github.com/open-uem/wingetcfg/wingetcfg"
 	"gopkg.in/ini.v1"
@@ -38,7 +38,7 @@ type Agent struct {
 	ServerKeyPath          string
 	CACert                 *x509.Certificate
 	SFTPCert               *x509.Certificate
-	VNCServer              *vnc.VNCServer
+	RemoteDesktop          *remotedesktop.RemoteDesktopService
 	BadgerDB               *badger.DB
 	SFTPServer             *sftp.SFTP
 	JetstreamContextCancel context.CancelFunc
@@ -340,20 +340,20 @@ func (a *Agent) RunReportHandler(msg jetstream.Msg) {
 	msg.Ack()
 }
 
-func (a *Agent) StopVNCSubscribe() error {
+func (a *Agent) StopRemoteDesktopSubscribe() error {
 	_, err := a.NATSConnection.QueueSubscribe("agent.stopvnc."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
-		if err := msg.Respond([]byte("VNC Stopped!")); err != nil {
-			log.Printf("[ERROR]: could not respond to agent stop vnc message, reason: %v\n", err)
+		if err := msg.Respond([]byte("Remote Desktop service stopped!")); err != nil {
+			log.Printf("[ERROR]: could not respond to agent stop remote desktop message, reason: %v\n", err)
 		}
 
-		if a.VNCServer != nil {
-			a.VNCServer.Stop()
-			a.VNCServer = nil
+		if a.RemoteDesktop != nil {
+			a.RemoteDesktop.Stop()
+			a.RemoteDesktop = nil
 		}
 	})
 
 	if err != nil {
-		return fmt.Errorf("[ERROR]: could not subscribe to agent stop vnc, reason: %v", err)
+		return fmt.Errorf("[ERROR]: could not subscribe to agent stop remote desktop, reason: %v", err)
 	}
 	return nil
 }
@@ -369,7 +369,7 @@ func (a *Agent) InstallPackageSubscribe() error {
 		}
 
 		if err := deploy.InstallPackage(action.PackageId); err != nil {
-			log.Printf("[ERROR]: could not deploy package using winget, reason: %v\n", err)
+			log.Printf("[ERROR]: could not deploy package using package manager, reason: %v\n", err)
 			return
 		}
 
@@ -693,17 +693,15 @@ func (a *Agent) SubscribeToNATSSubjects() {
 	}
 	log.Println("[INFO]: Agent consumer is ready to serve")
 
-	// Subscribe to VNC only if port is set
-	if a.Config.VNCProxyPort != "" {
-		err = a.StartVNCSubscribe()
-		if err != nil {
-			log.Printf("[ERROR]: %v\n", err)
-		}
+	// Subscribe to Remote Desktop
+	err = a.StartRemoteDesktopSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
 
-		err = a.StopVNCSubscribe()
-		if err != nil {
-			log.Printf("[ERROR]: %v\n", err)
-		}
+	err = a.StopRemoteDesktopSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
 	}
 
 	err = a.InstallPackageSubscribe()

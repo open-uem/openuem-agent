@@ -1,8 +1,8 @@
-package vnc
+package remotedesktop
 
 import "github.com/labstack/echo/v4"
 
-type VNCServer struct {
+type RemoteDesktopService struct {
 	Name                 string
 	StartCommand         string
 	SystemctlCommand     string
@@ -23,10 +23,13 @@ type VNCServer struct {
 	ProxyPort            string
 	ServerPort           string
 	Username             string
+	RequiresVNCProxy     bool
 }
 
-func New(certPath, keyPath, sid, proxyPort string) (*VNCServer, error) {
-	server, err := GetSupportedVNCServer(sid, proxyPort)
+func New(certPath, keyPath, sid, proxyPort string) (*RemoteDesktopService, error) {
+	agentOS := GetAgentOS()
+
+	server, err := GetSupportedRemoteDesktopService(agentOS, sid, proxyPort)
 	if err != nil {
 		return nil, err
 	}

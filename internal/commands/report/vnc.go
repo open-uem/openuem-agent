@@ -3,22 +3,21 @@ package report
 import (
 	"log"
 
-	"github.com/open-uem/openuem-agent/internal/commands/vnc"
+	remotedesktop "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 )
 
-func (r *Report) getVNCInfo(debug bool) error {
+func (r *Report) getRemoteDesktopInfo(debug bool) error {
 	if debug {
-		log.Println("[DEBUG]: vnc info has been requested")
+		log.Println("[DEBUG]: remote desktop info has been requested")
 	}
 
-	v, err := vnc.GetSupportedVNCServer("", "")
-	if err != nil {
-		log.Println("[ERROR]: could not find a supported VNC server")
-		r.SupportedVNCServer = ""
-		return err
+	rd := remotedesktop.GetSupportedRemoteDesktop(r.OS)
+	if rd == "" {
+		log.Println("[ERROR]: could not find a supported Remote Desktop service")
 	} else {
-		r.SupportedVNCServer = v.Name
-		log.Printf("[INFO]: supported VNC server found: %s", v.Name)
+		log.Printf("[INFO]: supported Remote Desktop service found: %s", rd)
 	}
+
+	r.SupportedVNCServer = rd
 	return nil
 }

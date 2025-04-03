@@ -1,6 +1,6 @@
 //go:build windows
 
-package vnc
+package remotedesktop
 
 import (
 	"fmt"
@@ -19,10 +19,10 @@ import (
 	"gopkg.in/ini.v1"
 )
 
-func (vnc *VNCServer) StartProxy() {
-	log.Printf("[INFO]: starting VNC proxy on port %s\n", vnc.ProxyPort)
+func (rd *RemoteDesktopService) StartVNCProxy() {
+	log.Printf("[INFO]: starting VNC proxy on port %s\n", rd.ProxyPort)
 	// Launch proxy only if port is available
-	_, err := net.DialTimeout("tcp", ":"+vnc.ProxyPort, 5*time.Second)
+	_, err := net.DialTimeout("tcp", ":"+rd.ProxyPort, 5*time.Second)
 	if err != nil {
 		vncProxy := vncproxy.New(&vncproxy.Config{
 			LogLevel: vncproxy.InfoFlag,
@@ -30,7 +30,7 @@ func (vnc *VNCServer) StartProxy() {
 				return ":5900", nil
 			},
 		})
-		vnc.Proxy.GET("/ws", func(ctx echo.Context) error {
+		rd.Proxy.GET("/ws", func(ctx echo.Context) error {
 			h := websocket.Handler(vncProxy.ServeWS)
 			h.ServeHTTP(ctx.Response().Writer, ctx.Request())
 			return nil
@@ -38,16 +38,16 @@ func (vnc *VNCServer) StartProxy() {
 
 		log.Println("[INFO]: NoVNC proxy server started")
 
-		if err := vnc.Proxy.StartTLS(":"+vnc.ProxyPort, vnc.ProxyCert, vnc.ProxyKey); err != http.ErrServerClosed {
+		if err := rd.Proxy.StartTLS(":"+rd.ProxyPort, rd.ProxyCert, rd.ProxyKey); err != http.ErrServerClosed {
 			log.Printf("[ERROR]: could not start VNC proxy\n, %v", err)
 		}
 
 	} else {
-		log.Printf("[ERROR]: VNC proxy port %s is not available\n", vnc.ProxyPort)
+		log.Printf("[ERROR]: VNC proxy port %s is not available\n", rd.ProxyPort)
 	}
 }
 
-func (vnc *VNCServer) Start(pin string, notifyUser bool) {
+func (rd *RemoteDesktopService) Start(pin string, notifyUser bool) {
 	cwd, err := openuem_utils.GetWd()
 	if err != nil {
 		log.Printf("[ERROR]: could not get working directory, reason: %v\n", err)
@@ -63,29 +63,33 @@ func (vnc *VNCServer) Start(pin string, notifyUser bool) {
 		}()
 	}
 
-	// Configure VNC server
-	if _, err := vnc.Configure(); err != nil {
-		log.Printf("[ERROR]: could not configure VNC server, reason: %v\n", err)
+	// Configure Remote Desktop service
+	if _, err := rd.Configure(); err != nil {
+		log.Printf("[ERROR]: could not configure Remote Desktop service, reason: %v\n", err)
 		return
 	}
 
 	// Save PIN
-	if err := vnc.SavePIN(pin); err != nil {
-		log.Printf("[ERROR]: could not save PIN before VNC is started, reason: %v\n", err)
+	if err := rd.SavePIN(pin); err != nil {
+		log.Printf("[ERROR]: could not save PIN before Remote Desktop service is started, reason: %v\n", err)
 		return
 	}
 
-	// Start VNC server
-	go RunAsUser(vnc.StartCommand, nil)
+	// Start Remote Desktop service
+	go RunAsUser(rd.StartCommand, nil)
 
 	// Start VNC Proxy
-	go vnc.StartProxy()
+	if rd.RequiresVNCProxy {
+		go rd.StartVNCProxy()
+	}
 }
 
-func (vnc *VNCServer) Stop() {
-	// Stop proxy
-	if err := vnc.Proxy.Close(); err != nil {
-		log.Printf("[ERROR]: could not stop VNC proxy, reason: %v\n", err)
+func (rd *RemoteDesktopService) Stop() {
+	if rd.RequiresVNCProxy {
+		// Stop proxy
+		if err := rd.Proxy.Close(); err != nil {
+			log.Printf("[ERROR]: could not stop VNC proxy, reason: %v\n", err)
+		}
 	}
 
 	// Create new random PIN
@@ -96,37 +100,38 @@ func (vnc *VNCServer) Stop() {
 	}
 
 	// Save PIN
-	if err := vnc.SavePIN(pin); err != nil {
-		log.Printf("[ERROR]: could not save PIN before VNC is started, reason: %v\n", err)
+	if err := rd.SavePIN(pin); err != nil {
+		log.Printf("[ERROR]: could not save PIN before Remote Desktop service is started, reason: %v\n", err)
 		return
 	}
 
-	// Stop gracefully VNC server
-	if vnc.StopCommand != "" {
-		err := RunAsUser(vnc.StopCommand, vnc.StopCommandArgs)
+	// Stop gracefully Remote Desktop service
+	if rd.StopCommand != "" {
+		err := RunAsUser(rd.StopCommand, rd.StopCommandArgs)
 		if err != nil {
-			log.Printf("VNC Stop error, %v\n", err)
+			log.Printf("Remote Desktop service stop error, %v\n", err)
 		}
 	}
 
-	// Kill VNC server as some remains can be there
-	if vnc.KillCommand != "" {
-		err := RunAsUser(vnc.KillCommand, vnc.KillCommandArgs)
+	// Kill Remote Desktop service as some remains can be there
+	if rd.KillCommand != "" {
+		err := RunAsUser(rd.KillCommand, rd.KillCommandArgs)
 		if err != nil {
-			log.Printf("VNC Kill error, %v\n", err)
+			log.Printf("Remote Desktop service kill error, %v\n", err)
 		}
 	}
 }
 
-func GetSupportedVNCServer(sid, proxyPort string) (*VNCServer, error) {
-	supportedServers := map[string]VNCServer{
+func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDesktopService, error) {
+	supportedServers := map[string]RemoteDesktopService{
 		"TightVNC": {
-			StartCommand:    `C:\Program Files\TightVNC\tvnserver.exe`,
-			StopCommand:     `C:\Program Files\TightVNC\tvnserver.exe`,
-			StopCommandArgs: []string{"-controlapp", "-shutdown"},
-			KillCommand:     "taskkill",
-			KillCommandArgs: []string{"/F", "/T", "/IM", "tvnserver.exe"},
-			ConfigureAsUser: true,
+			RequiresVNCProxy: true,
+			StartCommand:     `C:\Program Files\TightVNC\tvnserver.exe`,
+			StopCommand:      `C:\Program Files\TightVNC\tvnserver.exe`,
+			StopCommandArgs:  []string{"-controlapp", "-shutdown"},
+			KillCommand:      "taskkill",
+			KillCommandArgs:  []string{"/F", "/T", "/IM", "tvnserver.exe"},
+			ConfigureAsUser:  true,
 			Configure: func() (string, error) {
 				k, err := registry.OpenKey(registry.USERS, sid+`\SOFTWARE\TightVNC\Server`, registry.QUERY_VALUE)
 				if err == registry.ErrNotExist {
@@ -179,10 +184,11 @@ func GetSupportedVNCServer(sid, proxyPort string) (*VNCServer, error) {
 			},
 		},
 		"UltraVNC": {
-			StartCommand:    `C:\Program Files\uvnc bvba\UltraVNC\winvnc.exe`,
-			StopCommand:     `C:\Program Files\uvnc bvba\UltraVNC\winvnc.exe`,
-			StopCommandArgs: []string{"-kill"},
-			ConfigureAsUser: false,
+			RequiresVNCProxy: true,
+			StartCommand:     `C:\Program Files\uvnc bvba\UltraVNC\winvnc.exe`,
+			StopCommand:      `C:\Program Files\uvnc bvba\UltraVNC\winvnc.exe`,
+			StopCommandArgs:  []string{"-kill"},
+			ConfigureAsUser:  false,
 			Configure: func() (string, error) {
 				iniFile := `C:\Program Files\uvnc bvba\UltraVNC\ultravnc.ini`
 				cfg, err := ini.Load(iniFile)
@@ -201,7 +207,7 @@ func GetSupportedVNCServer(sid, proxyPort string) (*VNCServer, error) {
 					log.Printf("[ERROR]: could not save UltraVNC ini file, reason: %v\n", err)
 					return "", err
 				}
-				log.Println("[INFO]: VNC configured")
+				log.Println("[INFO]: Remote Desktop service configured")
 				return "", nil
 			},
 			SavePIN: func(pin string) error {
@@ -222,10 +228,11 @@ func GetSupportedVNCServer(sid, proxyPort string) (*VNCServer, error) {
 			},
 		},
 		"TigerVNC": {
-			StartCommand:    `C:\Program Files\TigerVNC Server\winvnc4.exe`,
-			StopCommand:     "taskkill",
-			StopCommandArgs: []string{"/F", "/T", "/IM", "winvnc4.exe"},
-			ConfigureAsUser: true,
+			RequiresVNCProxy: true,
+			StartCommand:     `C:\Program Files\TigerVNC Server\winvnc4.exe`,
+			StopCommand:      "taskkill",
+			StopCommandArgs:  []string{"/F", "/T", "/IM", "winvnc4.exe"},
+			ConfigureAsUser:  true,
 			Configure: func() (string, error) {
 
 				_, err := registry.OpenKey(registry.USERS, sid+`\SOFTWARE\TigerVNC`, registry.QUERY_VALUE)
@@ -269,11 +276,32 @@ func GetSupportedVNCServer(sid, proxyPort string) (*VNCServer, error) {
 		},
 	}
 
-	for name, server := range supportedServers {
-		if _, err := os.Stat(server.StartCommand); err == nil {
-			server.Name = name
-			return &server, nil
+	supported := GetSupportedRemoteDesktop(agentOS)
+	if supported == "" {
+		return nil, fmt.Errorf("no supported Remote Desktop service")
+	}
+
+	server := supportedServers[supported]
+	server.Name = supported
+	return &server, nil
+}
+
+func GetSupportedRemoteDesktop(agentOS string) string {
+	if agentOS == "windows" {
+		if _, err := os.Stat(`C:\Program Files\TightVNC\tvnserver.exe`); err == nil {
+			return "TightVNC"
+		}
+		if _, err := os.Stat(`C:\Program Files\uvnc bvba\UltraVNC\winvnc.exe`); err == nil {
+			return "UltraVNC"
+		}
+		if _, err := os.Stat(`C:\Program Files\TigerVNC Server\winvnc4.exe`); err == nil {
+			return "TigerVNC"
 		}
 	}
-	return nil, fmt.Errorf("no supported VNC server")
+
+	return ""
+}
+
+func GetAgentOS() string {
+	return "windows"
 }

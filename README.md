@@ -13,7 +13,7 @@ An agent can be disabled if we don't want to receive new reports.
 Agents use several digital certificates, and associated private keys, to perform their tasks:
 
 - To authenticate against the NATS servers so the agents can send their reports (agent.cer and agent.key that lives in the certificates folder)
-- To secure SFTP and VNC communications (server.cer and server.key that lives in the certificates folder)
+- To secure SFTP and VNC/RDP communications (server.cer and server.key that lives in the certificates folder)
 - To authenticate SFTP connections from the console (sftp.cer that lives in the certificates folder)
 - To validate certificates signed by our own Certificate Authority (ca.cer)
 
