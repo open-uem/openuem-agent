@@ -62,22 +62,13 @@ func (rd *RemoteDesktopService) Start(pin string, notifyUser bool) {
 
 	// Start Remote Desktop service
 	go func() {
-		// xauthorityEnv, err := getXAuthority()
-		// if err != nil {
-		// 	log.Printf("[ERROR]: could not get XAUTHORITY env, reason: %v\n", err)
-		// }
-
-		// xauthority := strings.TrimPrefix(xauthorityEnv, "XAUTHORITY=")
-
 		if rd.SystemctlCommand == "" {
-			// if err := RunAsUser("", rd.StartCommand, rd.StartCommandArgsFunc(username, port, xauthority), true); err != nil {
 			if err := runtime.RunAsUser("", rd.StartCommand, rd.StartCommandArgsFunc(username, port), true); err != nil {
 				log.Printf("[ERROR]: could not start Remote Desktop service, reason: %v", err)
 			} else {
 				log.Println("[INFO]: the remote desktop service should have been started")
 			}
 		} else {
-			// command := fmt.Sprintf("%s %s", rd.SystemctlCommand, strings.Join(rd.StartCommandArgsFunc(username, port, xauthority), " "))
 			command := fmt.Sprintf("%s %s", rd.SystemctlCommand, strings.Join(rd.StartCommandArgsFunc(username, port), " "))
 			cmd := exec.Command("bash", "-c", command)
 			if err := cmd.Run(); err != nil {
@@ -142,9 +133,7 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 		"X11VNC": {
 			RequiresVNCProxy: true,
 			StartCommand:     `/usr/bin/x11vnc`,
-			// StartCommandArgsFunc: func(username string, port string, xauthority string) []string {
 			StartCommandArgsFunc: func(username string, port string) []string {
-				// cmd := []string{"-display", ":0", "-auth", xauthority, "-localhost", "-rfbauth", "/tmp/x11vncpasswd", "-forever", "-rfbport", port}
 				cmd := []string{"-display", ":0", "-auth", "guess", "-localhost", "-rfbauth", "/tmp/x11vncpasswd", "-forever", "-rfbport", port}
 				return cmd
 			},
@@ -196,78 +185,9 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 				return nil
 			},
 		},
-		// "GnomeRemoteDesktopVNC": {
-		// 	RequiresVNCProxy: true,
-		// 	StartCommand:     "/usr/bin/grdctl",
-		// 	StartCommandArgsFunc: func(username string, port string, xauthority string) []string {
-		// 		cmd := []string{"shell", username + "@", "/usr/bin/systemctl --user enable --now gnome-remote-desktop.service"}
-		// 		return cmd
-		// 	},
-		// 	SystemctlCommand: "machinectl",
-		// 	StopCommand:      "machinectl",
-		// 	StopCommandArgsFunc: func(username string) []string {
-		// 		cmd := []string{"shell", username + "@", "/usr/bin/systemctl --user disable --now gnome-remote-desktop.service"}
-		// 		return cmd
-		// 	},
-		// 	Configure: func() (string, error) {
-		// 		err := RunAsUser("grdctl", []string{"vnc", "set-auth-method", "password"}, true)
-		// 		if err != nil {
-		// 			return "", errors.New("could not set set-auth-method")
-		// 		}
-
-		// 		err = RunAsUser("grdctl", []string{"vnc", "disable-view-only"}, true)
-		// 		if err != nil {
-		// 			return "", errors.New("could not set disable-view-only")
-		// 		}
-
-		// 		err = RunAsUser("grdctl", []string{"vnc", "enable"}, true)
-		// 		if err != nil {
-		// 			return "", errors.New("could not set enable grd")
-		// 		}
-		// 		err = RunAsUser("bash", []string{"-c", `gsettings set org.gnome.desktop.remote-desktop.vnc encryption "['none']"`}, true)
-		// 		if err != nil {
-		// 			log.Println("[INFO]: could not set vnc encryption to none")
-		// 		}
-
-		// 		return "5900", nil
-		// 	},
-		// 	RemovePIN: func() error {
-		// 		err := RunAsUser("grdctl", []string{"vnc", "disable"}, true)
-		// 		if err != nil {
-		// 			return errors.New("could not disable grd")
-		// 		}
-
-		// 		err = RunAsUser("grdctl", []string{"vnc", "enable-view-only"}, true)
-		// 		if err != nil {
-		// 			return errors.New("could not set enable-view-only")
-		// 		}
-
-		// 		err = RunAsUser("grdctl", []string{"vnc", "clear-password"}, true)
-		// 		if err != nil {
-		// 			return errors.New("could not clear password for grd")
-		// 		}
-
-		// 		err = RunAsUser("bash", []string{"-c", `gsettings reset org.gnome.desktop.remote-desktop.vnc encryption`}, true)
-		// 		if err != nil {
-		// 			log.Println("[INFO]: could not set vnc encryption to tls-anon")
-		// 		}
-
-		// 		return nil
-		// 	},
-		// 	SavePIN: func(pin string) error {
-		// 		err := RunAsUser("grdctl", []string{"vnc", "set-password", pin}, true)
-		// 		if err != nil {
-		// 			return errors.New("could not set password")
-		// 		}
-
-		// 		log.Println("[INFO]: gnome remote desktop password saved")
-		// 		return nil
-		// 	},
-		// },
 		"GnomeRemoteDesktopRDP": {
 			RequiresVNCProxy: false,
 			StartCommand:     "/usr/bin/grdctl",
-			// StartCommandArgsFunc: func(username string, port string, xauthority string) []string {
 			StartCommandArgsFunc: func(username string, port string) []string {
 				cmd := []string{"shell", username + "@", "/usr/bin/systemctl --user enable --now gnome-remote-desktop.service"}
 				return cmd
