@@ -30,7 +30,6 @@ func (rd *RemoteDesktopService) Start(pin string, notifyUser bool) {
 				log.Printf("[ERROR]: could not show PIN message to user, reason: %v\n", err)
 				return
 			}
-			log.Println("[INFO]: the PIN for remote assistance session should have been shown to the user in a browser")
 		}()
 	}
 
@@ -350,8 +349,9 @@ func notifyPINToUser(pin string) error {
 		return err
 	}
 
-	notifyCommand := fmt.Sprintf("/opt/openuem-agent/bin/openuem-messenger info --message %s --type pin", pin)
-	if err := runtime.RunAsUserWithMachineCtl(username, notifyCommand); err != nil {
+	// Reference: https://ubuntuforums.org/showthread.php?t=2348109 for font size
+	args := []string{"--info", "--title", "OpenUEM Remote Assistance", "--text", fmt.Sprintf("<span foreground='blue' size='xx-large'>PIN: %s</span>", pin), "--width", "300", "--timeout", "30", "--icon", "/opt/openuem-agent/bin/icon.png"}
+	if err := runtime.RunAsUser(username, "zenity", args, true); err != nil {
 		return err
 	}
 
