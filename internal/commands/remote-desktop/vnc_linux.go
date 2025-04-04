@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/user"
@@ -17,38 +16,26 @@ import (
 	"strings"
 	"time"
 
-	"github.com/evangwt/go-vncproxy"
-	"github.com/labstack/echo/v4"
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 	"github.com/zcalusic/sysinfo"
-	"golang.org/x/net/websocket"
 )
 
 func (rd *RemoteDesktopService) Start(pin string, notifyUser bool) {
-	// Get logged in username
-	username, err := runtime.GetLoggedInUser()
-	if err != nil {
-		log.Printf("[ERROR]: could not get logged in username, reason: %v\n", err)
-	}
-
 	log.Println("[INFO]: a request to start a remote desktop service has been received")
 
 	// Show PIN to user if needed
 	if notifyUser {
 		go func() {
-			notifyCommand := fmt.Sprintf("/opt/openuem-agent/bin/openuem-messenger info --message %s --type pin", pin)
-			if err := runtime.RunAsUserWithMachineCtl(username, notifyCommand); err != nil {
+			if err := notifyPINToUser(pin); err != nil {
 				log.Printf("[ERROR]: could not show PIN message to user, reason: %v\n", err)
 				return
 			}
-
 			log.Println("[INFO]: the PIN for remote assistance session should have been shown to the user in a browser")
 		}()
 	}
 
 	// Configure Remote Desktop service
-	port, err := rd.Configure()
-	if err != nil {
+	if err := rd.Configure(); err != nil {
 		log.Printf("[ERROR]: could not configure Remote Desktop service, reason: %v\n", err)
 		return
 	}
@@ -60,40 +47,32 @@ func (rd *RemoteDesktopService) Start(pin string, notifyUser bool) {
 		return
 	}
 
+	// Get the first available port for VNC server
+	vncPort := ""
+	if rd.RequiresVNCProxy {
+		vncPort = getFirstVNCAvailablePort()
+		if vncPort == "" {
+			log.Println("[ERROR]: could get a free port for VNC")
+			return
+		}
+	}
+
 	// Start Remote Desktop service
 	go func() {
-		if rd.SystemctlCommand == "" {
-			if err := runtime.RunAsUser("", rd.StartCommand, rd.StartCommandArgsFunc(username, port), true); err != nil {
-				log.Printf("[ERROR]: could not start Remote Desktop service, reason: %v", err)
-			} else {
-				log.Println("[INFO]: the remote desktop service should have been started")
-			}
-		} else {
-			command := fmt.Sprintf("%s %s", rd.SystemctlCommand, strings.Join(rd.StartCommandArgsFunc(username, port), " "))
-			cmd := exec.Command("bash", "-c", command)
-			if err := cmd.Run(); err != nil {
-				log.Printf("[ERROR]: could not start Remote Desktop service using %s, reason: %v", command, err)
-			} else {
-				log.Println("[INFO]: the remote desktop service should have been started")
-			}
+		log.Println("[INFO]: starting the remote desktop service...")
+		if err := rd.StartService(vncPort); err != nil {
+			log.Printf("[ERROR]: could not start Remote Desktop service, reason: %v", err)
+			return
 		}
 	}()
 
 	// Start VNC Proxy
 	if rd.RequiresVNCProxy {
-		go rd.StartVNCProxy(port)
-		log.Printf("[INFO]: the VNC proxy should have been started and listed at port %s", port)
+		go rd.StartVNCProxy(vncPort)
 	}
 }
 
 func (rd *RemoteDesktopService) Stop() {
-	// Get logged in username
-	username, err := runtime.GetLoggedInUser()
-	if err != nil {
-		log.Printf("[ERROR]: could not get logged in Username, reason: %v\n", err)
-	}
-
-	// Stop proxy
 	if rd.RequiresVNCProxy {
 		if err := rd.Proxy.Close(); err != nil {
 			log.Printf("[ERROR]: could not stop VNC proxy, reason: %v\n", err)
@@ -102,66 +81,64 @@ func (rd *RemoteDesktopService) Stop() {
 		}
 	}
 
-	// Remove PIN
 	if err := rd.RemovePIN(); err != nil {
-		log.Printf("[ERROR]: could not remove vnc password, reason: %v", err)
+		log.Printf("[ERROR]: could not remove remote desktop credentials, reason: %v", err)
 	}
 	log.Println("[INFO]: the PIN for the remote desktop service has been removed")
 
 	// Stop gracefully Remote Desktop service
-	if rd.StopCommand != "" {
-		if rd.SystemctlCommand == "" {
-			err := runtime.RunAsUser(username, rd.StopCommand, rd.StopCommandArgs, true)
-			if err != nil {
-				log.Printf("[ERROR]: Remote Desktop service stop error, %v\n", err)
-				return
-			}
-		} else {
-			command := fmt.Sprintf("%s %s", rd.SystemctlCommand, strings.Join(rd.StopCommandArgsFunc(username), " "))
-			cmd := exec.Command("bash", "-c", command)
-			if err := cmd.Run(); err != nil {
-				log.Printf("[ERROR]: could not stop Remote Desktop service using %s, reason: %v", command, err)
-			}
-		}
+	if err := rd.StopService(); err != nil {
+		log.Printf("[ERROR]: could not stop the remote desktop service, reason: %v", err)
 	}
-
 	log.Println("[INFO]: the remote desktop service has been stopped")
 }
 
 func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDesktopService, error) {
+	// Get logged in username
+	username, err := runtime.GetLoggedInUser()
+	if err != nil {
+		return nil, err
+	}
+
 	supportedServers := map[string]RemoteDesktopService{
 		"X11VNC": {
 			RequiresVNCProxy: true,
-			StartCommand:     `/usr/bin/x11vnc`,
-			StartCommandArgsFunc: func(username string, port string) []string {
-				cmd := []string{"-display", ":0", "-auth", "guess", "-localhost", "-rfbauth", "/tmp/x11vncpasswd", "-forever", "-rfbport", port}
-				return cmd
-			},
-			StopCommand:     "/usr/bin/x11vnc",
-			StopCommandArgs: []string{"-R", "stop"},
-			Configure: func() (string, error) {
-				if isWaylandDisplayServer() {
-					return "", errors.New("x11vnc cannot be used with Wayland display servers")
+			StartService: func(vncPort string) error {
+				homeDir, _, _, err := getUserInfo(username)
+				if err != nil {
+					return err
 				}
+				openuemDir := filepath.Join(homeDir, ".openuem")
+				path := filepath.Join(openuemDir, "x11vncpasswd")
 
-				// Get the first available port for VNC server
-				startingPort := 5900
-				for i := startingPort + 1; i < 65535; i++ {
-					_, err := net.DialTimeout("tcp", ":"+strconv.Itoa(i), 5*time.Second)
-					if err != nil {
-						return strconv.Itoa(i), nil
-					}
+				args := []string{"-display", ":0", "-auth", "guess", "-localhost", "-rfbauth", path, "-forever", "-rfbport", vncPort}
+				if err := runtime.RunAsUser(username, "/usr/bin/x11vnc", args, true); err != nil {
+					return err
 				}
-				return "", errors.New("no free port available")
+				return nil
+			},
+			StopService: func() error {
+				args := []string{"-R", "stop"}
+				if err := runtime.RunAsUser(username, "/usr/bin/x11vnc", args, true); err != nil {
+					return err
+				}
+				return nil
+			},
+			Configure: func() error {
+				return nil
 			},
 			SavePIN: func(pin string) error {
-				// Get logged in username
-				username, err := runtime.GetLoggedInUser()
+				homeDir, uid, gid, err := getUserInfo(username)
 				if err != nil {
-					log.Printf("[ERROR]: could not get logged in Username, reason: %v\n", err)
+					return err
 				}
 
-				path := "/tmp/x11vncpasswd"
+				openuemDir := filepath.Join(homeDir, ".openuem")
+				if err := createOpenUEMDir(openuemDir, uid, gid); err != nil {
+					return err
+				}
+
+				path := filepath.Join(openuemDir, "x11vncpasswd")
 
 				if err := os.Remove(path); err != nil {
 					log.Println("[INFO]: could not remove vnc password")
@@ -175,129 +152,94 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 				return nil
 			},
 			RemovePIN: func() error {
-				path := "/tmp/x11vncpasswd"
-
-				if err := os.Remove(path); err != nil {
+				homeDir, _, _, err := getUserInfo(username)
+				if err != nil {
+					log.Printf("[ERROR]: could not get user info, reason: %v", err)
 					return err
 				}
 
-				log.Println("[INFO]: PIN removed from ", path)
+				openuemDir := filepath.Join(homeDir, ".openuem")
+				if err := os.RemoveAll(openuemDir); err != nil {
+					log.Println("[ERROR]: could not remove .openuem directory")
+				}
+
+				log.Println("[INFO]: PIN removed from ", openuemDir)
 				return nil
 			},
 		},
 		"GnomeRemoteDesktopRDP": {
 			RequiresVNCProxy: false,
-			StartCommand:     "/usr/bin/grdctl",
-			StartCommandArgsFunc: func(username string, port string) []string {
-				cmd := []string{"shell", username + "@", "/usr/bin/systemctl --user enable --now gnome-remote-desktop.service"}
-				return cmd
+			StartService: func(vncPort string) error {
+				command := fmt.Sprintf("machinectl shell %s@ /usr/bin/systemctl --user enable --now gnome-remote-desktop.service", username)
+				cmd := exec.Command("bash", "-c", command)
+				if err := cmd.Run(); err != nil {
+					return err
+				}
+				return nil
 			},
-			SystemctlCommand: "machinectl",
-			StopCommand:      "machinectl",
-			StopCommandArgsFunc: func(username string) []string {
-				cmd := []string{"shell", username + "@", "/usr/bin/systemctl --user disable --now gnome-remote-desktop.service"}
-				return cmd
+			StopService: func() error {
+				command := fmt.Sprintf("machinectl shell %s@ /usr/bin/systemctl --user disable --now gnome-remote-desktop.service", username)
+				cmd := exec.Command("bash", "-c", command)
+				if err := cmd.Run(); err != nil {
+					return err
+				}
+				return nil
 			},
-			Configure: func() (string, error) {
-				username, err := runtime.GetLoggedInUser()
+			Configure: func() error {
+				homeDir, uid, gid, err := getUserInfo(username)
 				if err != nil {
-					log.Println("[ERROR]: could not get current logged in username")
-					return "", err
+					return err
 				}
 
-				u, err := user.Lookup(username)
-				if err != nil {
-					return "", errors.New("could not find username")
-				}
-
-				uid, err := strconv.Atoi(u.Uid)
-				if err != nil {
-					return "", err
-				}
-
-				gid, err := strconv.Atoi(u.Gid)
-				if err != nil {
-					return "", err
-				}
-
-				openuemDir := filepath.Join(u.HomeDir, ".openuem")
-				if err := os.MkdirAll(openuemDir, 0770); err != nil {
-					log.Printf("[ERROR]: could not create openuem dir for current user, reason: %v", err)
-					return "", err
-				}
-
-				if err := os.Chmod(openuemDir, 0770); err != nil {
-					return "", err
-				}
-
-				if err := os.Chown(openuemDir, uid, gid); err != nil {
-					return "", err
-				}
+				openuemDir := filepath.Join(homeDir, ".openuem")
 
 				rdpCert := filepath.Join(openuemDir, "rdp-server.cer")
 				rdpKey := filepath.Join(openuemDir, "rdp-server.key")
 
-				if err := copyFileContents("/etc/openuem-agent/certificates/server.cer", rdpCert); err != nil {
-					return "", err
+				if err := createOpenUEMDir(openuemDir, uid, gid); err != nil {
+					return err
 				}
 
-				if err := os.Chmod(rdpCert, 0600); err != nil {
-					return "", err
-				}
-
-				if err := os.Chown(rdpCert, uid, gid); err != nil {
-					return "", err
+				if err := copyCertFile("/etc/openuem-agent/certificates/server.cer", rdpCert, uid, gid); err != nil {
+					return err
 				}
 
 				err = runtime.RunAsUserWithMachineCtl(username, "/usr/bin/grdctl rdp set-tls-cert "+rdpCert)
 				if err != nil {
-					return "", errors.New("could not set set-tls-cert")
+					return errors.New("could not set set-tls-cert")
 				}
 
-				if err := copyFileContents("/etc/openuem-agent/certificates/server.key", rdpKey); err != nil {
-					return "", err
-				}
-
-				if err := os.Chmod(rdpKey, 0600); err != nil {
-					return "", err
-				}
-
-				if err := os.Chown(rdpKey, uid, gid); err != nil {
-					return "", err
+				if err := copyCertFile("/etc/openuem-agent/certificates/server.key", rdpKey, uid, gid); err != nil {
+					return err
 				}
 
 				err = runtime.RunAsUserWithMachineCtl(username, "/usr/bin/grdctl rdp set-tls-key "+rdpKey)
 				if err != nil {
-					return "", errors.New("could not set set-tls-key")
+					return errors.New("could not set set-tls-key")
 				}
 
 				err = runtime.RunAsUserWithMachineCtl(username, "/usr/bin/grdctl rdp disable-view-only")
 				if err != nil {
-					return "", errors.New("could not set disable-view-only")
+					return errors.New("could not set disable-view-only")
 				}
 
 				err = runtime.RunAsUserWithMachineCtl(username, "/usr/bin/grdctl rdp enable")
 				if err != nil {
-					return "", errors.New("could not set enable grd")
+					return errors.New("could not set enable grd")
 				}
 
-				return "3389", nil
+				return nil
 			},
 			RemovePIN: func() error {
-				username, err := runtime.GetLoggedInUser()
+				homeDir, _, _, err := getUserInfo(username)
 				if err != nil {
-					log.Println("[ERROR]: could not get current logged in username")
+					log.Printf("[ERROR]: could not get user info, reason: %v", err)
 					return err
 				}
 
-				u, err := user.Lookup(username)
-				if err != nil {
-					log.Println("[ERROR]: could not find user by username")
-				} else {
-					openuemDir := filepath.Join(u.HomeDir, ".openuem")
-					if err := os.RemoveAll(openuemDir); err != nil {
-						log.Println("[ERROR]: could not remove .openuem directory")
-					}
+				openuemDir := filepath.Join(homeDir, ".openuem")
+				if err := os.RemoveAll(openuemDir); err != nil {
+					log.Println("[ERROR]: could not remove .openuem directory")
 				}
 
 				err = runtime.RunAsUserWithMachineCtl(username, "/usr/bin/grdctl rdp disable")
@@ -318,13 +260,8 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 				return nil
 			},
 			SavePIN: func(pin string) error {
-				username, err := runtime.GetLoggedInUser()
-				if err != nil {
-					log.Println("[ERROR]: could not get current logged in username")
-					return err
-				}
-
-				err = runtime.RunAsUserWithMachineCtl(username, fmt.Sprintf("/usr/bin/grdctl rdp set-credentials openuem %s", pin))
+				command := fmt.Sprintf("/usr/bin/grdctl rdp set-credentials openuem %s", pin)
+				err = runtime.RunAsUserWithMachineCtl(username, command)
 				if err != nil {
 					return errors.New("could not set rdp credentials")
 				}
@@ -345,55 +282,17 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 	return &server, nil
 }
 
-func (rd *RemoteDesktopService) StartVNCProxy(port string) {
-	log.Printf("[INFO]: starting VNC proxy on port %s\n", rd.ProxyPort)
-	// Launch proxy only if port is available
-	_, err := net.DialTimeout("tcp", ":"+rd.ProxyPort, 5*time.Second)
-	if err != nil {
-		vncProxy := vncproxy.New(&vncproxy.Config{
-			LogLevel: vncproxy.InfoLevel,
-			TokenHandler: func(r *http.Request) (addr string, err error) {
-				return ":" + port, nil
-			},
-		})
-		rd.Proxy.GET("/ws", func(ctx echo.Context) error {
-			h := websocket.Handler(vncProxy.ServeWS)
-			h.ServeHTTP(ctx.Response().Writer, ctx.Request())
-			return nil
-		})
-
-		log.Println("[INFO]: NoVNC proxy server started")
-		if err := rd.Proxy.StartTLS(":"+rd.ProxyPort, rd.ProxyCert, rd.ProxyKey); err != http.ErrServerClosed {
-			log.Printf("[ERROR]: could not start VNC proxy\n, %v", err)
-		}
-
-	} else {
-		log.Printf("[ERROR]: VNC proxy port %s is not available\n", rd.ProxyPort)
-	}
-}
-
 func isWaylandDisplayServer() bool {
 	// Get logged in username
 	username, err := runtime.GetLoggedInUser()
 	if err != nil {
 		log.Printf("[ERROR]: could not get logged in Username, reason: %v\n", err)
-	}
-
-	u, err := user.Lookup(username)
-	if err != nil {
-		log.Println("[ERROR]: could not find user by username ", username)
 		return false
 	}
 
-	uid, err := strconv.Atoi(u.Uid)
+	_, uid, gid, err := getUserInfo(username)
 	if err != nil {
-		log.Println("[ERROR]: could not convert uid to int ", u.Uid)
-		return false
-	}
-
-	gid, err := strconv.Atoi(u.Gid)
-	if err != nil {
-		log.Println("[ERROR]: could not convert gid to int ", u.Gid)
+		log.Printf("[ERROR]: could not get user info, reason: %v\n", err)
 		return false
 	}
 
@@ -435,6 +334,62 @@ func GetAgentOS() string {
 	return si.OS.Vendor
 }
 
+func getFirstVNCAvailablePort() string {
+	for i := 5900; i < 65535; i++ {
+		_, err := net.DialTimeout("tcp", ":"+strconv.Itoa(i), 5*time.Second)
+		if err != nil {
+			return strconv.Itoa(i)
+		}
+	}
+	return ""
+}
+
+func notifyPINToUser(pin string) error {
+	username, err := runtime.GetLoggedInUser()
+	if err != nil {
+		return err
+	}
+
+	notifyCommand := fmt.Sprintf("/opt/openuem-agent/bin/openuem-messenger info --message %s --type pin", pin)
+	if err := runtime.RunAsUserWithMachineCtl(username, notifyCommand); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func createOpenUEMDir(openuemDir string, uid, gid int) error {
+	if err := os.MkdirAll(openuemDir, 0770); err != nil {
+		log.Printf("[ERROR]: could not create openuem dir for current user, reason: %v", err)
+		return err
+	}
+
+	if err := os.Chmod(openuemDir, 0770); err != nil {
+		return err
+	}
+
+	if err := os.Chown(openuemDir, uid, gid); err != nil {
+		return err
+	}
+	return nil
+}
+
+// "/etc/openuem-agent/certificates/server.cer"
+func copyCertFile(src, dst string, uid, gid int) error {
+	if err := copyFileContents(src, dst); err != nil {
+		return err
+	}
+
+	if err := os.Chmod(dst, 0600); err != nil {
+		return err
+	}
+
+	if err := os.Chown(dst, uid, gid); err != nil {
+		return err
+	}
+	return nil
+}
+
 func copyFileContents(src, dst string) (err error) {
 	in, err := os.Open(src)
 	if err != nil {
@@ -456,4 +411,23 @@ func copyFileContents(src, dst string) (err error) {
 	}
 	err = out.Sync()
 	return
+}
+
+func getUserInfo(username string) (homedir string, uid int, gid int, err error) {
+	u, err := user.Lookup(username)
+	if err != nil {
+		return "", -1, -1, err
+	}
+
+	uid, err = strconv.Atoi(u.Uid)
+	if err != nil {
+		return "", -1, -1, err
+	}
+
+	gid, err = strconv.Atoi(u.Gid)
+	if err != nil {
+		return "", -1, -1, err
+	}
+
+	return u.HomeDir, uid, gid, nil
 }

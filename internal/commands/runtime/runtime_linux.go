@@ -18,19 +18,16 @@ func RunAsUser(username, cmdPath string, args []string, env bool) error {
 
 	u, err := user.Lookup(username)
 	if err != nil {
-		log.Println("[ERROR]: could not find user by username ", username)
 		return err
 	}
 
 	uid, err := strconv.Atoi(u.Uid)
 	if err != nil {
-		log.Println("[ERROR]: could not convert uid to int ", u.Uid)
 		return err
 	}
 
 	gid, err := strconv.Atoi(u.Gid)
 	if err != nil {
-		log.Println("[ERROR]: could not convert gid to int ", u.Gid)
 		return err
 	}
 
@@ -54,8 +51,6 @@ func RunAsUser(username, cmdPath string, args []string, env bool) error {
 
 		// Chrome, Firefox in Linux need env variables like USER, DISPLAY, XAUTHORITY...
 		cmd.Env = append(os.Environ(), "USER="+u.Username, "HOME="+u.HomeDir, strings.TrimSpace(display), strings.TrimSpace(xauthority))
-
-		log.Println(cmd.Env)
 	}
 
 	err = cmd.Run()

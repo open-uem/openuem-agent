@@ -5,48 +5,14 @@ package remotedesktop
 import (
 	"fmt"
 	"log"
-	"net"
-	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 
-	"github.com/evangwt/go-vncproxy"
-	"github.com/labstack/echo/v4"
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 	openuem_utils "github.com/open-uem/utils"
-	"golang.org/x/net/websocket"
 	"golang.org/x/sys/windows/registry"
 	"gopkg.in/ini.v1"
 )
-
-func (rd *RemoteDesktopService) StartVNCProxy() {
-	log.Printf("[INFO]: starting VNC proxy on port %s\n", rd.ProxyPort)
-	// Launch proxy only if port is available
-	_, err := net.DialTimeout("tcp", ":"+rd.ProxyPort, 5*time.Second)
-	if err != nil {
-		vncProxy := vncproxy.New(&vncproxy.Config{
-			LogLevel: vncproxy.InfoFlag,
-			TokenHandler: func(r *http.Request) (addr string, err error) {
-				return ":5900", nil
-			},
-		})
-		rd.Proxy.GET("/ws", func(ctx echo.Context) error {
-			h := websocket.Handler(vncProxy.ServeWS)
-			h.ServeHTTP(ctx.Response().Writer, ctx.Request())
-			return nil
-		})
-
-		log.Println("[INFO]: NoVNC proxy server started")
-
-		if err := rd.Proxy.StartTLS(":"+rd.ProxyPort, rd.ProxyCert, rd.ProxyKey); err != http.ErrServerClosed {
-			log.Printf("[ERROR]: could not start VNC proxy\n, %v", err)
-		}
-
-	} else {
-		log.Printf("[ERROR]: VNC proxy port %s is not available\n", rd.ProxyPort)
-	}
-}
 
 func (rd *RemoteDesktopService) Start(pin string, notifyUser bool) {
 	cwd, err := openuem_utils.GetWd()
@@ -65,7 +31,7 @@ func (rd *RemoteDesktopService) Start(pin string, notifyUser bool) {
 	}
 
 	// Configure Remote Desktop service
-	if _, err := rd.Configure(); err != nil {
+	if err := rd.Configure(); err != nil {
 		log.Printf("[ERROR]: could not configure Remote Desktop service, reason: %v\n", err)
 		return
 	}
@@ -77,11 +43,19 @@ func (rd *RemoteDesktopService) Start(pin string, notifyUser bool) {
 	}
 
 	// Start Remote Desktop service
-	go runtime.RunAsUser(rd.StartCommand, nil)
+	go func() {
+		vncPort := ""
+		if err := rd.StartService(vncPort); err != nil {
+			log.Printf("[ERROR]: could not start Remote Desktop service, reason: %v", err)
+			return
+		}
+		log.Println("[INFO]: the remote desktop service should have been started")
+	}()
 
 	// Start VNC Proxy
 	if rd.RequiresVNCProxy {
-		go rd.StartVNCProxy()
+		port := ""
+		go rd.StartVNCProxy(port)
 	}
 }
 
@@ -107,66 +81,66 @@ func (rd *RemoteDesktopService) Stop() {
 	}
 
 	// Stop gracefully Remote Desktop service
-	if rd.StopCommand != "" {
-		err := runtime.RunAsUser(rd.StopCommand, rd.StopCommandArgs)
-		if err != nil {
-			log.Printf("Remote Desktop service stop error, %v\n", err)
-		}
+	if err := rd.StopService(); err != nil {
+		log.Printf("[ERROR]: could not stop the remote desktop service, reason: %v", err)
 	}
+	log.Println("[INFO]: the remote desktop service has been stopped")
 
-	// Kill Remote Desktop service as some remains can be there
-	if rd.KillCommand != "" {
-		err := runtime.RunAsUser(rd.KillCommand, rd.KillCommandArgs)
-		if err != nil {
-			log.Printf("Remote Desktop service kill error, %v\n", err)
-		}
-	}
 }
 
 func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDesktopService, error) {
 	supportedServers := map[string]RemoteDesktopService{
 		"TightVNC": {
 			RequiresVNCProxy: true,
-			StartCommand:     `C:\Program Files\TightVNC\tvnserver.exe`,
-			StopCommand:      `C:\Program Files\TightVNC\tvnserver.exe`,
-			StopCommandArgs:  []string{"-controlapp", "-shutdown"},
-			KillCommand:      "taskkill",
-			KillCommandArgs:  []string{"/F", "/T", "/IM", "tvnserver.exe"},
-			ConfigureAsUser:  true,
-			Configure: func() (string, error) {
+			StartService: func(vncPort string) error {
+				return runtime.RunAsUser(`C:\Program Files\TightVNC\tvnserver.exe`, nil)
+			},
+			StopService: func() error {
+				args := []string{"-controlapp", "-shutdown"}
+				if err := runtime.RunAsUser(`C:\Program Files\TightVNC\tvnserver.exe`, args); err != nil {
+					return err
+				}
+
+				// Kill Remote Desktop service as some remnants can be there
+				if err := runtime.RunAsUser("taskkill", []string{"/F", "/T", "/IM", "tvnserver.exe"}); err != nil {
+					log.Printf("Remote Desktop service kill error, %v\n", err)
+				}
+				return nil
+			},
+			Configure: func() error {
 				k, err := registry.OpenKey(registry.USERS, sid+`\SOFTWARE\TightVNC\Server`, registry.QUERY_VALUE)
 				if err == registry.ErrNotExist {
 					k, err = registry.OpenKey(registry.USERS, sid+`\SOFTWARE`, registry.SET_VALUE)
 					if err != nil {
-						return "", err
+						return err
 					}
 					k, _, err = registry.CreateKey(k, "TightVNC", registry.CREATE_SUB_KEY)
 					if err != nil {
-						return "", err
+						return err
 					}
 
 					k, _, err = registry.CreateKey(k, "Server", registry.CREATE_SUB_KEY)
 					if err != nil {
-						return "", err
+						return err
 					}
 				}
 
 				k, err = registry.OpenKey(registry.USERS, sid+`\SOFTWARE\TightVNC\Server`, registry.SET_VALUE)
 				if err != nil {
-					return "", err
+					return err
 				}
 
 				err = k.SetDWordValue("AllowLoopback", 1)
 				if err != nil {
-					return "", err
+					return err
 				}
 
 				err = k.SetDWordValue("RemoveWallpaper", 0)
 				if err != nil {
-					return "", err
+					return err
 				}
 
-				return "", nil
+				return nil
 			},
 			SavePIN: func(pin string) error {
 				encryptedPIN := DESEncode(pin)
@@ -186,16 +160,19 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 		},
 		"UltraVNC": {
 			RequiresVNCProxy: true,
-			StartCommand:     `C:\Program Files\uvnc bvba\UltraVNC\winvnc.exe`,
-			StopCommand:      `C:\Program Files\uvnc bvba\UltraVNC\winvnc.exe`,
-			StopCommandArgs:  []string{"-kill"},
-			ConfigureAsUser:  false,
-			Configure: func() (string, error) {
+			StartService: func(vncPort string) error {
+				return runtime.RunAsUser(`C:\Program Files\uvnc bvba\UltraVNC\winvnc.exe`, nil)
+			},
+			StopService: func() error {
+				args := []string{"-kill"}
+				return runtime.RunAsUser(`C:\Program Files\uvnc bvba\UltraVNC\winvnc.exe`, args)
+			},
+			Configure: func() error {
 				iniFile := `C:\Program Files\uvnc bvba\UltraVNC\ultravnc.ini`
 				cfg, err := ini.Load(iniFile)
 				if err != nil {
 					log.Println(`C:\Program Files\uvnc bvba\UltraVNC\ultravnc.ini cannot be opened`)
-					return "", err
+					return err
 				}
 
 				adminSection := cfg.Section("admin")
@@ -206,10 +183,10 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 
 				if err := cfg.SaveTo(iniFile); err != nil {
 					log.Printf("[ERROR]: could not save UltraVNC ini file, reason: %v\n", err)
-					return "", err
+					return err
 				}
 				log.Println("[INFO]: Remote Desktop service configured")
-				return "", nil
+				return nil
 			},
 			SavePIN: func(pin string) error {
 				iniFile := `C:\Program Files\uvnc bvba\UltraVNC\ultravnc.ini`
@@ -230,35 +207,37 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 		},
 		"TigerVNC": {
 			RequiresVNCProxy: true,
-			StartCommand:     `C:\Program Files\TigerVNC Server\winvnc4.exe`,
-			StopCommand:      "taskkill",
-			StopCommandArgs:  []string{"/F", "/T", "/IM", "winvnc4.exe"},
-			ConfigureAsUser:  true,
-			Configure: func() (string, error) {
-
+			StartService: func(vncPort string) error {
+				return runtime.RunAsUser(`C:\Program Files\TigerVNC Server\winvnc4.exe`, nil)
+			},
+			StopService: func() error {
+				args := []string{"/F", "/T", "/IM", "winvnc4.exe"}
+				return runtime.RunAsUser("taskkill", args)
+			},
+			Configure: func() error {
 				_, err := registry.OpenKey(registry.USERS, sid+`\SOFTWARE\TigerVNC`, registry.QUERY_VALUE)
 				if err == registry.ErrNotExist {
 					k, err := registry.OpenKey(registry.USERS, sid+`\SOFTWARE`, registry.QUERY_VALUE)
 					if err != nil {
-						return "", err
+						return err
 					}
 					k, _, err = registry.CreateKey(k, "TigerVNC", registry.CREATE_SUB_KEY)
 					if err != nil {
-						return "", err
+						return err
 					}
 
 					k, _, err = registry.CreateKey(k, "WinVNC4", registry.CREATE_SUB_KEY)
 					if err != nil {
-						return "", err
+						return err
 					}
 
 					err = k.SetDWordValue("LocalHost", 1)
 					if err != nil {
-						return "", err
+						return err
 					}
 				}
 
-				return "", nil
+				return nil
 			},
 			SavePIN: func(pin string) error {
 				encryptedPIN := DESEncode(pin)
