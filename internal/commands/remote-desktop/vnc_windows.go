@@ -13,6 +13,7 @@ import (
 
 	"github.com/evangwt/go-vncproxy"
 	"github.com/labstack/echo/v4"
+	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 	openuem_utils "github.com/open-uem/utils"
 	"golang.org/x/net/websocket"
 	"golang.org/x/sys/windows/registry"
@@ -57,7 +58,7 @@ func (rd *RemoteDesktopService) Start(pin string, notifyUser bool) {
 	// Show PIN to user if needed
 	if notifyUser {
 		go func() {
-			if err := RunAsUser(filepath.Join(cwd, "openuem-messenger.exe"), []string{"info", "--message", pin, "--type", "pin"}); err != nil {
+			if err := runtime.RunAsUser(filepath.Join(cwd, "openuem-messenger.exe"), []string{"info", "--message", pin, "--type", "pin"}); err != nil {
 				log.Printf("[ERROR]: could not show PIN message to user, reason: %v\n", err)
 			}
 		}()
@@ -76,7 +77,7 @@ func (rd *RemoteDesktopService) Start(pin string, notifyUser bool) {
 	}
 
 	// Start Remote Desktop service
-	go RunAsUser(rd.StartCommand, nil)
+	go runtime.RunAsUser(rd.StartCommand, nil)
 
 	// Start VNC Proxy
 	if rd.RequiresVNCProxy {
@@ -107,7 +108,7 @@ func (rd *RemoteDesktopService) Stop() {
 
 	// Stop gracefully Remote Desktop service
 	if rd.StopCommand != "" {
-		err := RunAsUser(rd.StopCommand, rd.StopCommandArgs)
+		err := runtime.RunAsUser(rd.StopCommand, rd.StopCommandArgs)
 		if err != nil {
 			log.Printf("Remote Desktop service stop error, %v\n", err)
 		}
@@ -115,7 +116,7 @@ func (rd *RemoteDesktopService) Stop() {
 
 	// Kill Remote Desktop service as some remains can be there
 	if rd.KillCommand != "" {
-		err := RunAsUser(rd.KillCommand, rd.KillCommandArgs)
+		err := runtime.RunAsUser(rd.KillCommand, rd.KillCommandArgs)
 		if err != nil {
 			log.Printf("Remote Desktop service kill error, %v\n", err)
 		}

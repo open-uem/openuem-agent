@@ -1,6 +1,6 @@
 //go:build windows
 
-package remotedesktop
+package runtime
 
 import (
 	"log"

@@ -7,7 +7,7 @@ type RemoteDesktopService struct {
 	StartCommand         string
 	SystemctlCommand     string
 	StartCommandArgs     []string
-	StartCommandArgsFunc func(username string, port string, xauthority string) []string
+	StartCommandArgsFunc func(username string, port string) []string
 	StopCommand          string
 	StopCommandArgs      []string
 	StopCommandArgsFunc  func(username string) []string

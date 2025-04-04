@@ -155,6 +155,10 @@ github.com/open-uem/nats v0.0.0-20250324080214-a47b0d0b44be h1:6cDhvRdJ/gZVHbLyu
 github.com/open-uem/nats v0.0.0-20250324080214-a47b0d0b44be/go.mod h1:uE6mXBorzBYaj5lIkK4Jrtr/U1H5j4lZ/szTaxAnQHo=
 github.com/open-uem/nats v0.0.0-20250324100902-e34b427bb2cf h1:WqGppLiQLqq5Wfx44tfSm+xWCK42PXREsJR1XcAhEH8=
 github.com/open-uem/nats v0.0.0-20250324100902-e34b427bb2cf/go.mod h1:uE6mXBorzBYaj5lIkK4Jrtr/U1H5j4lZ/szTaxAnQHo=
+github.com/open-uem/nats v0.0.0-20250331102729-43113bc1d05a h1:MHYDqLf7h7JYk76apbHjGiIoE24tgb0u2gGUC0+dJ+Y=
+github.com/open-uem/nats v0.0.0-20250331102729-43113bc1d05a/go.mod h1:uE6mXBorzBYaj5lIkK4Jrtr/U1H5j4lZ/szTaxAnQHo=
+github.com/open-uem/nats v0.0.0-20250403114902-a630b1578537 h1:ApgJHpoo9O+yFldweBjG9QHMG5UHRGEosgHx5FaQMPU=
+github.com/open-uem/nats v0.0.0-20250403114902-a630b1578537/go.mod h1:uE6mXBorzBYaj5lIkK4Jrtr/U1H5j4lZ/szTaxAnQHo=
 github.com/open-uem/utils v0.0.0-20250105115248-b0599a18d2b5 h1:EsMEGiRRtb0vJCdpczs8YkJIOvUpyxxI1P49AzBn9g4=
 github.com/open-uem/utils v0.0.0-20250105115248-b0599a18d2b5/go.mod h1:R2LdbpDQixQPMa4a6yuZsYFPANQzXU8EPzQD7/1iQXk=
 github.com/open-uem/utils v0.0.0-20250214102216-df5a38667d0a h1:IJMOUchNqFzwJE8yvaWZakHBqCY5LGTvy5e90aBVEIE=

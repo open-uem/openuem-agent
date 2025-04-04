@@ -3,9 +3,10 @@
 package deploy
 
 import (
-	"fmt"
 	"log"
 	"os/exec"
+
+	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 )
 
 func InstallPackage(packageID string) error {
@@ -17,8 +18,7 @@ func InstallPackage(packageID string) error {
 		return err
 	}
 
-	cmd = fmt.Sprintf("flatpak install --noninteractive --assumeyes flathub %s", packageID)
-	if err := exec.Command("bash", "-c", cmd).Run(); err != nil {
+	if err := runtime.RunAsUser("root", "flatpak", []string{"install", "--noninteractive", "--assumeyes", "flathub", packageID}, true); err != nil {
 		log.Printf("[ERROR]: found and error with flatpak install command, reason %v", err)
 		return err
 	}
@@ -38,8 +38,7 @@ func UpdatePackage(packageID string) error {
 		return err
 	}
 
-	cmd = fmt.Sprintf("flatpak update --noninteractive --assumeyes %s", packageID)
-	if err := exec.Command("bash", "-c", cmd).Run(); err != nil {
+	if err := runtime.RunAsUser("root", "flatpak", []string{"update", "--noninteractive", "--assumeyes", packageID}, true); err != nil {
 		log.Printf("[ERROR]: found and error with flatpak update command, reason %v", err)
 		return err
 	}
@@ -58,8 +57,7 @@ func UninstallPackage(packageID string) error {
 		return err
 	}
 
-	cmd = fmt.Sprintf("flatpak remove --noninteractive --assumeyes %s", packageID)
-	if err := exec.Command("bash", "-c", cmd).Run(); err != nil {
+	if err := runtime.RunAsUser("root", "flatpak", []string{"remove", "--noninteractive", "--assumeyes", packageID}, true); err != nil {
 		log.Printf("[ERROR]: found and error with flatpak remove command, reason %v", err)
 		return err
 	}

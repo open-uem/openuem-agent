@@ -1,4 +1,6 @@
-package remotedesktop
+//go:build linux
+
+package runtime
 
 import (
 	"fmt"
@@ -11,19 +13,24 @@ import (
 	"syscall"
 )
 
-func RunAsUser(cmdPath string, args []string, env bool) error {
+func RunAsUser(username, cmdPath string, args []string, env bool) error {
 	cmd := exec.Command(cmdPath, args...)
 
-	// TODO DEBUG
-	log.Println("[INFO]: command to execute is ", cmdPath, args)
-
-	uid, gid, err := getLoggedInUserIDs()
+	u, err := user.Lookup(username)
 	if err != nil {
+		log.Println("[ERROR]: could not find user by username ", username)
 		return err
 	}
 
-	u, err := user.LookupId(strconv.Itoa(uid))
+	uid, err := strconv.Atoi(u.Uid)
 	if err != nil {
+		log.Println("[ERROR]: could not convert uid to int ", u.Uid)
+		return err
+	}
+
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		log.Println("[ERROR]: could not convert gid to int ", u.Gid)
 		return err
 	}
 
@@ -34,13 +41,13 @@ func RunAsUser(cmdPath string, args []string, env bool) error {
 	// Run command adding env variables
 	if env {
 		// Get DISPLAY environment variable
-		display, err := getDisplay()
+		display, err := GetDisplay(uint32(uid), uint32(gid))
 		if err != nil {
 			return err
 		}
 
 		// Get XAUTHORITY environment variable
-		xauthority, err := getXAuthority()
+		xauthority, err := GetXAuthority(uint32(uid), uint32(gid))
 		if err != nil {
 			return err
 		}
@@ -101,41 +108,8 @@ func GetLoggedInUser() (string, error) {
 	return username, nil
 }
 
-func getLoggedInUserIDs() (int, int, error) {
-	username, err := GetLoggedInUser()
-	if err != nil {
-		log.Println("[ERROR]: could not get current logged in username")
-		return -1, -1, err
-	}
-
-	u, err := user.Lookup(username)
-	if err != nil {
-		log.Println("[ERROR]: could not find user by username ", username)
-		return -1, -1, err
-	}
-
-	uid, err := strconv.Atoi(u.Uid)
-	if err != nil {
-		log.Println("[ERROR]: could not convert uid to int ", u.Uid)
-		return -1, -1, err
-	}
-
-	gid, err := strconv.Atoi(u.Gid)
-	if err != nil {
-		log.Println("[ERROR]: could not convert gid to int ", u.Gid)
-		return -1, -1, err
-	}
-
-	return uid, gid, err
-}
-
 // Get XAUTHORITY environment variable
-func getXAuthority() (string, error) {
-	uid, gid, err := getLoggedInUserIDs()
-	if err != nil {
-		return "", err
-	}
-
+func GetXAuthority(uid, gid uint32) (string, error) {
 	// Ref: https://unix.stackexchange.com/questions/429092/what-is-the-best-way-to-find-the-current-display-and-xauthority-in-non-interacti
 	envCmd := exec.Command("bash", "-c", `ps -u $(id -u) -o pid= | xargs -I{} cat /proc/{}/environ 2>/dev/null | tr '\0' '\n' | grep -m1 '^XAUTHORITY='`)
 	envCmd.SysProcAttr = &syscall.SysProcAttr{
@@ -152,16 +126,12 @@ func getXAuthority() (string, error) {
 }
 
 // Get DISPLAY environment variable
-func getDisplay() (string, error) {
-	uid, gid, err := getLoggedInUserIDs()
-	if err != nil {
-		return "", err
-	}
+func GetDisplay(uid, gid uint32) (string, error) {
 
 	// Ref: https://unix.stackexchange.com/questions/429092/what-is-the-best-way-to-find-the-current-display-and-xauthority-in-non-interacti
 	envCmd := exec.Command("bash", "-c", `ps -u $(id -u) -o pid= | xargs -I{} cat /proc/{}/environ 2>/dev/null | tr '\0' '\n' | grep -m1 '^DISPLAY='`)
 	envCmd.SysProcAttr = &syscall.SysProcAttr{
-		Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)},
+		Credential: &syscall.Credential{Uid: uid, Gid: gid},
 	}
 	envOut, err := envCmd.Output()
 	if err != nil {
