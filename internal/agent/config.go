@@ -230,6 +230,7 @@ func (c *Config) WriteConfig() error {
 	cfg.Section("Agent").Key("ExecuteTaskEveryXMinutes").SetValue(strconv.Itoa(c.ExecuteTaskEveryXMinutes))
 	cfg.Section("Agent").Key("WingetConfigureFrequency").SetValue(strconv.Itoa(c.WingetConfigureFrequency))
 	cfg.Section("Agent").Key("Debug").SetValue(strconv.FormatBool(c.Debug))
+	cfg.Section("Agent").Key("SFTPPort").SetValue(c.SFTPPort)
 
 	if err := cfg.SaveTo(configFile); err != nil {
 		log.Fatalf("[FATAL]: could not save config file, reason: %v", err)
@@ -249,6 +250,20 @@ func (c *Config) ResetRestartRequiredFlag() error {
 	}
 
 	cfg.Section("Agent").Key("RestartRequired").SetValue("false")
+	return cfg.SaveTo(configFile)
+}
+
+func (c *Config) SetRestartRequiredFlag() error {
+	// Get conf file
+	configFile := openuem_utils.GetAgentConfigFile()
+
+	// Open ini file
+	cfg, err := ini.Load(configFile)
+	if err != nil {
+		return err
+	}
+
+	cfg.Section("Agent").Key("RestartRequired").SetValue("true")
 	return cfg.SaveTo(configFile)
 }
 
