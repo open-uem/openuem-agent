@@ -89,6 +89,8 @@ func (a *Agent) Start() {
 			}
 			log.Println("[INFO]: SFTP server has started!")
 		}()
+	} else {
+		log.Println("[INFO]: SFTP port is not set so SFTP server is not started!")
 	}
 
 	// Try to connect to NATS server and start a reconnect job if failed
