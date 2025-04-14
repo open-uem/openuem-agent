@@ -72,7 +72,8 @@ func (r *Report) getNetworkAdaptersFromLinux() error {
 		myNetworkAdapter.MACAddress = i.HardwareAddr.String()
 		ethSettings, err := ethtool.CmdGetMapped(i.Name)
 		if err != nil {
-			log.Printf("[ERROR]: could not get ip addressed assigned to interface, %v\n", err)
+			log.Printf("[INFO]: could not get eth settings using ethtool, %v\n", err)
+			myNetworkAdapter.Speed = " - "
 		} else {
 			speedInBps := ethSettings["Speed"]
 			speedInUnits := "Mbps"
@@ -82,43 +83,43 @@ func (r *Report) getNetworkAdaptersFromLinux() error {
 				speedInBps = speedInBps / 1000
 			}
 			myNetworkAdapter.Speed = fmt.Sprintf("%d %s", speedInBps, speedInUnits)
+		}
 
-			iface, err := net.InterfaceByName(i.Name)
-			if err != nil {
-				log.Printf("[ERROR]: could not get ip addressed assigned to interface, %v\n", err)
-				continue
+		iface, err := net.InterfaceByName(i.Name)
+		if err != nil {
+			log.Printf("[ERROR]: could not get iface info from name, %v\n", err)
+			continue
+		}
+
+		addresses, err := iface.Addrs()
+		if err != nil {
+			log.Printf("[ERROR]: could not get IP addresses assigned to interface, %v\n", err)
+			continue
+		}
+
+		strAddresses := []string{}
+		subnets := []string{}
+		for _, a := range addresses {
+			ipv4Addr := a.(*net.IPNet).IP.To4()
+			if ipv4Addr != nil {
+				strAddresses = append(strAddresses, ipv4Addr.String())
+				subnetMask := a.(*net.IPNet).Mask
+				subnets = append(subnets, fmt.Sprintf("%d.%d.%d.%d", subnetMask[0], subnetMask[1], subnetMask[2], subnetMask[3]))
 			}
+		}
 
-			addresses, err := iface.Addrs()
-			if err != nil {
-				log.Printf("[ERROR]: could not get ip addressed assigned to interface, %v\n", err)
-				continue
-			}
+		myNetworkAdapter.Addresses = strings.Join(strAddresses, ",")
+		myNetworkAdapter.Subnet = strings.Join(subnets, ",")
+		myNetworkAdapter.DefaultGateway, err = getDefaultGateway()
+		myNetworkAdapter.DNSServers = getDNSservers()
+		myNetworkAdapter.DNSDomain = getDNSDomain()
 
-			strAddresses := []string{}
-			subnets := []string{}
-			for _, a := range addresses {
-				ipv4Addr := a.(*net.IPNet).IP.To4()
-				if ipv4Addr != nil {
-					strAddresses = append(strAddresses, ipv4Addr.String())
-					subnetMask := a.(*net.IPNet).Mask
-					subnets = append(subnets, fmt.Sprintf("%d.%d.%d.%d", subnetMask[0], subnetMask[1], subnetMask[2], subnetMask[3]))
-				}
-			}
+		if len(strAddresses) > 0 {
+			myNetworkAdapter.DHCPEnabled = isDHCPEnabled(strAddresses[0])
+		}
 
-			myNetworkAdapter.Addresses = strings.Join(strAddresses, ",")
-			myNetworkAdapter.Subnet = strings.Join(subnets, ",")
-			myNetworkAdapter.DefaultGateway, err = getDefaultGateway()
-			myNetworkAdapter.DNSServers = getDNSservers()
-			myNetworkAdapter.DNSDomain = getDNSDomain()
-
-			if len(strAddresses) > 0 {
-				myNetworkAdapter.DHCPEnabled = isDHCPEnabled(strAddresses[0])
-			}
-
-			if err != nil {
-				log.Printf("[ERROR]: could not get default gateway, %v\n", err)
-			}
+		if err != nil {
+			log.Printf("[ERROR]: could not get default gateway, %v\n", err)
 		}
 
 		r.NetworkAdapters = append(r.NetworkAdapters, myNetworkAdapter)
