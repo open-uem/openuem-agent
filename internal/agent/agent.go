@@ -558,15 +558,17 @@ func (a *Agent) SftpPortSubscribe() error {
 			return
 		}
 
-		port, err := strconv.Atoi(data.SFTPPort)
-		if err != nil {
-			log.Println("[ERROR]: the SFTP port is not a valid number")
-			return
-		}
+		if data.SFTPPort != "" {
+			port, err := strconv.Atoi(data.SFTPPort)
+			if err != nil {
+				log.Println("[ERROR]: the SFTP port is not a valid number")
+				return
+			}
 
-		if port < 0 || port > 65535 {
-			log.Println("[ERROR]: the SFTP port is not a valid port")
-			return
+			if port < 0 || port > 65535 {
+				log.Println("[ERROR]: the SFTP port is not a valid port")
+				return
+			}
 		}
 
 		a.Config.SFTPPort = data.SFTPPort
