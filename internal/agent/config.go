@@ -29,6 +29,7 @@ type Config struct {
 	SFTPCert                 string
 	WingetConfigureFrequency int
 	IPAddress                string
+	SFTPDisabled             bool
 }
 
 func (a *Agent) ReadConfig() error {
@@ -210,6 +211,18 @@ func (a *Agent) ReadConfig() error {
 		}
 	}
 
+	key, err = cfg.Section("Agent").GetKey("SFTPDisabled")
+	if err != nil {
+		log.Println("[ERROR]: could not get SFTPDisabled")
+		a.Config.SFTPDisabled = false
+	} else {
+		a.Config.SFTPDisabled, err = key.Bool()
+		if err != nil {
+			log.Println("[ERROR]: could not parse SFTPDisabled")
+			return err
+		}
+	}
+
 	log.Println("[INFO]: agent has read its settings from the INI file")
 	return nil
 }
@@ -230,6 +243,8 @@ func (c *Config) WriteConfig() error {
 	cfg.Section("Agent").Key("ExecuteTaskEveryXMinutes").SetValue(strconv.Itoa(c.ExecuteTaskEveryXMinutes))
 	cfg.Section("Agent").Key("WingetConfigureFrequency").SetValue(strconv.Itoa(c.WingetConfigureFrequency))
 	cfg.Section("Agent").Key("Debug").SetValue(strconv.FormatBool(c.Debug))
+	cfg.Section("Agent").Key("SFTPPort").SetValue(c.SFTPPort)
+	cfg.Section("Agent").Key("SFTPDisabled").SetValue(strconv.FormatBool(c.SFTPDisabled))
 
 	if err := cfg.SaveTo(configFile); err != nil {
 		log.Fatalf("[FATAL]: could not save config file, reason: %v", err)
@@ -249,6 +264,20 @@ func (c *Config) ResetRestartRequiredFlag() error {
 	}
 
 	cfg.Section("Agent").Key("RestartRequired").SetValue("false")
+	return cfg.SaveTo(configFile)
+}
+
+func (c *Config) SetRestartRequiredFlag() error {
+	// Get conf file
+	configFile := openuem_utils.GetAgentConfigFile()
+
+	// Open ini file
+	cfg, err := ini.Load(configFile)
+	if err != nil {
+		return err
+	}
+
+	cfg.Section("Agent").Key("RestartRequired").SetValue("true")
 	return cfg.SaveTo(configFile)
 }
 

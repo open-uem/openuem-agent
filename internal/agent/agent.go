@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -547,6 +548,47 @@ func (a *Agent) DisableDebugModeSubscribe() error {
 	return nil
 }
 
+func (a *Agent) SftpPortSubscribe() error {
+	_, err := a.NATSConnection.Subscribe("agent.sftpport."+a.Config.UUID, func(msg *nats.Msg) {
+
+		data := openuem_nats.AgentReport{}
+		err := json.Unmarshal(msg.Data, &data)
+		if err != nil {
+			log.Printf("[ERROR]: could not get the SFTP port set from the console, reason: %v\n", err)
+			return
+		}
+
+		if data.SFTPPort != "" {
+			port, err := strconv.Atoi(data.SFTPPort)
+			if err != nil {
+				log.Println("[ERROR]: the SFTP port is not a valid number")
+				return
+			}
+
+			if port < 0 || port > 65535 {
+				log.Println("[ERROR]: the SFTP port is not a valid port")
+				return
+			}
+		}
+
+		a.Config.SFTPPort = data.SFTPPort
+		if err := a.Config.WriteConfig(); err != nil {
+			log.Printf("[ERROR]: could not save the SFTP port, reason: %v\n", err)
+			return
+		}
+
+		if err := a.Config.SetRestartRequiredFlag(); err != nil {
+			log.Printf("[ERROR]: could not set the restart required flag, you may have to restart the agent from the console, reason: %v\n", err)
+			return
+		}
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to agent sftp port, reason: %v", err)
+	}
+	return nil
+}
+
 func (a *Agent) SendDeployResult(r *openuem_nats.DeployAction) error {
 	data, err := json.Marshal(r)
 	if err != nil {
@@ -756,6 +798,11 @@ func (a *Agent) SubscribeToNATSSubjects() {
 	}
 
 	err = a.DisableDebugModeSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
+	err = a.SftpPortSubscribe()
 	if err != nil {
 		log.Printf("[ERROR]: %v\n", err)
 	}

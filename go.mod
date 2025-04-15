@@ -19,7 +19,7 @@ require (
 	github.com/labstack/echo/v4 v4.13.3
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/nats-io/nats.go v1.41.0
-	github.com/open-uem/nats v0.0.0-20250407085943-422b32fe49f0
+	github.com/open-uem/nats v0.0.0-20250414184526-2b7462a79889
 	github.com/open-uem/utils v0.0.0-20250407085447-f3730b9ef3ac
 	github.com/open-uem/wingetcfg v0.0.0-20250317160420-5c7e4c410be1
 	github.com/pkg/sftp v1.13.9
