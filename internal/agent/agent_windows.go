@@ -58,7 +58,7 @@ func (a *Agent) Start() {
 	log.Println("[INFO]: task scheduler has started!")
 
 	// Start BadgerDB KV and SFTP server only if port is set
-	if a.Config.SFTPPort != "" {
+	if a.Config.SFTPPort != "" && !a.Config.SFTPDisabled {
 		cwd, err := Getwd()
 		if err != nil {
 			log.Println("[ERROR]: could not get working directory")
@@ -625,6 +625,14 @@ func (a *Agent) NewConfigSubscribe() error {
 		}
 
 		a.Config.DefaultFrequency = config.AgentFrequency
+
+		if a.Config.SFTPDisabled != config.SFTPDisabled {
+			if err := a.Config.SetRestartRequiredFlag(); err != nil {
+				log.Printf("[ERROR]: could not set restart required flag, reason: %v\n", err)
+				return
+			}
+		}
+		a.Config.SFTPDisabled = config.SFTPDisabled
 
 		// Should we re-schedule agent report?
 		if a.Config.ExecuteTaskEveryXMinutes != SCHEDULETIME_5MIN {
