@@ -280,14 +280,8 @@ func (a *Agent) NewConfigSubscribe() error {
 		}
 
 		a.Config.DefaultFrequency = config.AgentFrequency
-
-		if a.Config.SFTPDisabled != config.SFTPDisabled {
-			if err := a.Config.SetRestartRequiredFlag(); err != nil {
-				log.Printf("[ERROR]: could not set restart required flag, reason: %v\n", err)
-				return
-			}
-		}
 		a.Config.SFTPDisabled = config.SFTPDisabled
+		a.Config.RemoteAssistanceDisabled = config.RemoteAssistanceDisabled
 
 		// Should we re-schedule agent report?
 		if a.Config.ExecuteTaskEveryXMinutes != SCHEDULETIME_5MIN {
@@ -298,6 +292,12 @@ func (a *Agent) NewConfigSubscribe() error {
 		if err := a.Config.WriteConfig(); err != nil {
 			log.Fatalf("[FATAL]: could not write agent config: %v", err)
 		}
+
+		if err := a.Config.SetRestartRequiredFlag(); err != nil {
+			log.Printf("[ERROR]: could not set restart required flag, reason: %v\n", err)
+			return
+		}
+
 		log.Println("[INFO]: new config has been set from console")
 	})
 

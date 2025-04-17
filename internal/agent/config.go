@@ -30,6 +30,7 @@ type Config struct {
 	WingetConfigureFrequency int
 	IPAddress                string
 	SFTPDisabled             bool
+	RemoteAssistanceDisabled bool
 }
 
 func (a *Agent) ReadConfig() error {
@@ -223,6 +224,18 @@ func (a *Agent) ReadConfig() error {
 		}
 	}
 
+	key, err = cfg.Section("Agent").GetKey("RemoteAssistanceDisabled")
+	if err != nil {
+		log.Println("[ERROR]: could not get RemoteAssistanceDisabled")
+		a.Config.RemoteAssistanceDisabled = false
+	} else {
+		a.Config.RemoteAssistanceDisabled, err = key.Bool()
+		if err != nil {
+			log.Println("[ERROR]: could not parse RemoteAssistanceDisabled")
+			return err
+		}
+	}
+
 	log.Println("[INFO]: agent has read its settings from the INI file")
 	return nil
 }
@@ -244,7 +257,9 @@ func (c *Config) WriteConfig() error {
 	cfg.Section("Agent").Key("WingetConfigureFrequency").SetValue(strconv.Itoa(c.WingetConfigureFrequency))
 	cfg.Section("Agent").Key("Debug").SetValue(strconv.FormatBool(c.Debug))
 	cfg.Section("Agent").Key("SFTPPort").SetValue(c.SFTPPort)
+	cfg.Section("Agent").Key("VNCProxyPort").SetValue(c.VNCProxyPort)
 	cfg.Section("Agent").Key("SFTPDisabled").SetValue(strconv.FormatBool(c.SFTPDisabled))
+	cfg.Section("Agent").Key("RemoteAssistanceDisabled").SetValue(strconv.FormatBool(c.RemoteAssistanceDisabled))
 
 	if err := cfg.SaveTo(configFile); err != nil {
 		log.Fatalf("[FATAL]: could not save config file, reason: %v", err)

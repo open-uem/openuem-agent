@@ -634,6 +634,8 @@ func (a *Agent) NewConfigSubscribe() error {
 		}
 		a.Config.SFTPDisabled = config.SFTPDisabled
 
+		a.Config.RemoteAssistanceDisabled = config.RemoteAssistanceDisabled
+
 		// Should we re-schedule agent report?
 		if a.Config.ExecuteTaskEveryXMinutes != SCHEDULETIME_5MIN {
 			a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
