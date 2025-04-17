@@ -125,7 +125,7 @@ func (a *Agent) RunReport() *report.Report {
 	log.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 
 	log.Println("[INFO]: agent is running a report...")
-	r, err := report.RunReport(a.Config.UUID, a.Config.Enabled, a.Config.Debug, a.Config.VNCProxyPort, a.Config.SFTPPort, a.Config.IPAddress)
+	r, err := report.RunReport(a.Config.UUID, a.Config.Enabled, a.Config.Debug, a.Config.VNCProxyPort, a.Config.SFTPPort, a.Config.IPAddress, a.Config.SFTPDisabled, a.Config.RemoteAssistanceDisabled)
 	if err != nil {
 		return nil
 	}
@@ -548,15 +548,19 @@ func (a *Agent) DisableDebugModeSubscribe() error {
 	return nil
 }
 
-func (a *Agent) SftpPortSubscribe() error {
-	_, err := a.NATSConnection.Subscribe("agent.sftpport."+a.Config.UUID, func(msg *nats.Msg) {
+func (a *Agent) AgentSettingsSubscribe() error {
+	_, err := a.NATSConnection.Subscribe("agent.settings."+a.Config.UUID, func(msg *nats.Msg) {
 
-		data := openuem_nats.AgentReport{}
+		data := openuem_nats.AgentSetting{}
 		err := json.Unmarshal(msg.Data, &data)
 		if err != nil {
-			log.Printf("[ERROR]: could not get the SFTP port set from the console, reason: %v\n", err)
+			log.Printf("[ERROR]: could not get the agent's settings sent from the console, reason: %v\n", err)
 			return
 		}
+
+		a.Config.Debug = data.DebugMode
+		a.Config.SFTPDisabled = !data.SFTPService
+		a.Config.RemoteAssistanceDisabled = !data.RemoteAssistance
 
 		if data.SFTPPort != "" {
 			port, err := strconv.Atoi(data.SFTPPort)
@@ -570,10 +574,24 @@ func (a *Agent) SftpPortSubscribe() error {
 				return
 			}
 		}
-
 		a.Config.SFTPPort = data.SFTPPort
+
+		if data.VNCProxyPort != "" {
+			port, err := strconv.Atoi(data.VNCProxyPort)
+			if err != nil {
+				log.Println("[ERROR]: the VNC proxy port is not a valid number")
+				return
+			}
+
+			if port < 0 || port > 65535 {
+				log.Println("[ERROR]: the VNC proxy port is not a valid port")
+				return
+			}
+		}
+		a.Config.VNCProxyPort = data.VNCProxyPort
+
 		if err := a.Config.WriteConfig(); err != nil {
-			log.Printf("[ERROR]: could not save the SFTP port, reason: %v\n", err)
+			log.Printf("[ERROR]: could not save the agent's settings, reason: %v\n", err)
 			return
 		}
 
@@ -584,7 +602,7 @@ func (a *Agent) SftpPortSubscribe() error {
 	})
 
 	if err != nil {
-		return fmt.Errorf("[ERROR]: could not subscribe to agent sftp port, reason: %v", err)
+		return fmt.Errorf("[ERROR]: could not subscribe to agent's settings port, reason: %v", err)
 	}
 	return nil
 }
@@ -802,7 +820,7 @@ func (a *Agent) SubscribeToNATSSubjects() {
 		log.Printf("[ERROR]: %v\n", err)
 	}
 
-	err = a.SftpPortSubscribe()
+	err = a.AgentSettingsSubscribe()
 	if err != nil {
 		log.Printf("[ERROR]: %v\n", err)
 	}
@@ -813,7 +831,7 @@ func (a *Agent) GetRemoteConfig() error {
 		return fmt.Errorf("NATS connection is not ready")
 	}
 
-	msg, err := a.NATSConnection.Request("agentconfig", nil, 10*time.Minute)
+	msg, err := a.NATSConnection.Request("agentconfig", []byte(a.Config.UUID), 10*time.Minute)
 	if err != nil {
 		return err
 	}
@@ -831,6 +849,8 @@ func (a *Agent) GetRemoteConfig() error {
 	if config.Ok {
 		a.Config.DefaultFrequency = config.AgentFrequency
 		a.Config.WingetConfigureFrequency = config.WinGetFrequency
+		a.Config.SFTPDisabled = config.SFTPDisabled
+		a.Config.RemoteAssistanceDisabled = config.RemoteAssistanceDisabled
 		if err := a.Config.WriteConfig(); err != nil {
 			log.Fatalf("[FATAL]: could not write agent config: %v", err)
 		}
