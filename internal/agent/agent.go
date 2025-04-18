@@ -502,52 +502,6 @@ func (a *Agent) UninstallPackageSubscribe() error {
 	return nil
 }
 
-func (a *Agent) EnableDebugModeSubscribe() error {
-	_, err := a.NATSConnection.QueueSubscribe("agent.enabledebug."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
-		log.Println("[INFO]: enable debug received")
-
-		a.Config.Debug = true
-
-		if err := a.Config.WriteConfig(); err != nil {
-			log.Fatalf("[FATAL]: could not write agent config: %v", err)
-		}
-
-		log.Println("[INFO]: agent debug mode has been enabled!")
-
-		if err := msg.Respond([]byte("enabled")); err != nil {
-			log.Printf("[ERROR]: could not respond to agent enable debug mode message, reason: %v\n", err)
-		}
-	})
-
-	if err != nil {
-		return fmt.Errorf("[ERROR]: could not subscribe to enable debug mode message, reason: %v", err)
-	}
-	return nil
-}
-
-func (a *Agent) DisableDebugModeSubscribe() error {
-	_, err := a.NATSConnection.QueueSubscribe("agent.disabledebug."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
-		log.Println("[INFO]: disable debug received")
-
-		a.Config.Debug = false
-
-		if err := a.Config.WriteConfig(); err != nil {
-			log.Fatalf("[FATAL]: could not write agent config: %v", err)
-		}
-
-		log.Println("[INFO]: agent debug mode has been disabled!")
-
-		if err := msg.Respond([]byte("disabled")); err != nil {
-			log.Printf("[ERROR]: could not respond to agent disable debug mode message, reason: %v\n", err)
-		}
-	})
-
-	if err != nil {
-		return fmt.Errorf("[ERROR]: could not subscribe to disable debug mode message, reason: %v", err)
-	}
-	return nil
-}
-
 func (a *Agent) AgentSettingsSubscribe() error {
 	_, err := a.NATSConnection.Subscribe("agent.settings."+a.Config.UUID, func(msg *nats.Msg) {
 
@@ -806,16 +760,6 @@ func (a *Agent) SubscribeToNATSSubjects() {
 	}
 
 	err = a.RebootSubscribe()
-	if err != nil {
-		log.Printf("[ERROR]: %v\n", err)
-	}
-
-	err = a.EnableDebugModeSubscribe()
-	if err != nil {
-		log.Printf("[ERROR]: %v\n", err)
-	}
-
-	err = a.DisableDebugModeSubscribe()
 	if err != nil {
 		log.Printf("[ERROR]: %v\n", err)
 	}
