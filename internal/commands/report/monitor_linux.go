@@ -50,6 +50,22 @@ func (r *Report) getMonitorsInfo(debug bool) error {
 		}
 	}
 
+	reg = regexp.MustCompile(`Week of Manufacture: \s*(.*?)\s* `)
+	matches = reg.FindAllStringSubmatch(string(out), -1)
+	for i, v := range matches {
+		if len(r.Monitors) > i {
+			r.Monitors[i].WeekOfManufacture = v[1]
+		}
+	}
+
+	reg = regexp.MustCompile(`Year of Manufacture: \s*(.*?)\s* `)
+	matches = reg.FindAllStringSubmatch(string(out), -1)
+	for i, v := range matches {
+		if len(r.Monitors) > i {
+			r.Monitors[i].YearOfManufacture = v[1]
+		}
+	}
+
 	log.Printf("[INFO]: monitors information has been retrieved from Linux hwinfo")
 	return nil
 }
