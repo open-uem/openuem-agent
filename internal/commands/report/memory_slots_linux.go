@@ -26,11 +26,7 @@ func (r *Report) getMemorySlotsInfo(debug bool) error {
 	matches := reg.FindAllStringSubmatch(string(out), -1)
 	for _, v := range matches {
 		mySlot := openuem_nats.MemorySlot{}
-		if v[1] == "" || v[1] == "0" {
-			mySlot.Slot = "Unknown"
-		} else {
-			mySlot.Slot = v[1]
-		}
+		mySlot.Slot = v[1]
 		r.MemorySlots = append(r.MemorySlots, mySlot)
 	}
 
@@ -38,39 +34,69 @@ func (r *Report) getMemorySlotsInfo(debug bool) error {
 	matches = reg.FindAllStringSubmatch(string(out), -1)
 	for i, v := range matches {
 		if len(r.MemorySlots) > i {
+			if v[1] == "Unknown" {
+				continue
+			}
 			r.MemorySlots[i].MemoryType = v[1]
 		}
 	}
 
 	reg = regexp.MustCompile(`(?:\tPart Number: )(.*)`)
 	matches = reg.FindAllStringSubmatch(string(out), -1)
-	for i, v := range matches {
-		if len(r.MemorySlots) > i {
+	for _, v := range matches {
+		for i := range r.MemorySlots {
+			if r.MemorySlots[i].MemoryType == "" || r.MemorySlots[i].PartNumber != "" {
+				continue
+			}
 			r.MemorySlots[i].PartNumber = v[1]
+			break
 		}
 	}
 
 	reg = regexp.MustCompile(`(?:\tSerial Number: )(.*)`)
 	matches = reg.FindAllStringSubmatch(string(out), -1)
-	for i, v := range matches {
-		if len(r.MemorySlots) > i {
+	for _, v := range matches {
+		for i := range r.MemorySlots {
+			if r.MemorySlots[i].MemoryType == "" || r.MemorySlots[i].SerialNumber != "" {
+				continue
+			}
 			r.MemorySlots[i].SerialNumber = v[1]
+			break
 		}
 	}
 
 	reg = regexp.MustCompile(`(?:\tSize: )(.*)`)
 	matches = reg.FindAllStringSubmatch(string(out), -1)
 	for i, v := range matches {
-		if len(r.MemorySlots) > i {
-			r.MemorySlots[i].Size = v[1]
+		if v[1] == "No Module Installed" {
+			r.MemorySlots[i].Size = ""
+			continue
 		}
+		r.MemorySlots[i].Size = v[1]
+
 	}
 
 	reg = regexp.MustCompile(`(?:\tSpeed: )(.*)`)
 	matches = reg.FindAllStringSubmatch(string(out), -1)
-	for i, v := range matches {
-		if len(r.MemorySlots) > i {
+	for _, v := range matches {
+		for i := range r.MemorySlots {
+			if r.MemorySlots[i].MemoryType == "" || r.MemorySlots[i].Speed != "" {
+				continue
+			}
 			r.MemorySlots[i].Speed = v[1]
+			break
+		}
+	}
+
+	reg = regexp.MustCompile(`(?:\tManufacturer: )(.*)`)
+	matches = reg.FindAllStringSubmatch(string(out), -1)
+	for _, v := range matches {
+		for i := range r.MemorySlots {
+			if r.MemorySlots[i].MemoryType == "" || r.MemorySlots[i].Manufacturer != "" {
+				continue
+			}
+			r.MemorySlots[i].Manufacturer = v[1]
+			break
 		}
 	}
 
