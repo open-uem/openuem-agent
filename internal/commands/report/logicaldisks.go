@@ -38,31 +38,3 @@ func (r *Report) logLogicalDisks() {
 
 	fmt.Printf("%-40s\n", "No logical disks found")
 }
-
-func convertBytesToUnits(size uint64) string {
-	units := fmt.Sprintf("%d MB", size/1_000_000)
-	if size/1_000_000 >= 1000 {
-		units = fmt.Sprintf("%d GB", size/1_000_000_000)
-	}
-	if size/1_000_000_000 >= 1000 {
-		units = fmt.Sprintf("%d TB", size/1_000_000_000_000)
-	}
-	if size/1_000_000_000_000 >= 1000 {
-		units = fmt.Sprintf("%d PB", size/1_000_000_000_000)
-	}
-	return units
-}
-
-func convertLinuxBytesToUnits(size uint64) string {
-	units := fmt.Sprintf("%d MB", size/1_048_576)
-	if size/1_048_576 >= 1000 {
-		units = fmt.Sprintf("%d GB", size/1_073_741_824)
-	}
-	if size/1_073_741_824 >= 1000 {
-		units = fmt.Sprintf("%d TB", size/1_099_511_628_000)
-	}
-	if size/1_099_511_628_000 >= 1000 {
-		units = fmt.Sprintf("%d PB", size/1_099_511_628_000)
-	}
-	return units
-}

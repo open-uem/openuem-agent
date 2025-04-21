@@ -3,6 +3,7 @@
 package report
 
 import (
+	"fmt"
 	"log"
 	"strings"
 
@@ -52,8 +53,8 @@ func (r *Report) getLogicalDisksFromLinux(debug bool) error {
 
 			totalSize := stat.Blocks * uint64(stat.Bsize)
 			availableSize := stat.Bavail * uint64(stat.Bsize)
-			myDisk.SizeInUnits = convertLinuxBytesToUnits(totalSize)
-			myDisk.RemainingSpaceInUnits = convertLinuxBytesToUnits(availableSize)
+			myDisk.SizeInUnits = convertBytesToUnits(totalSize)
+			myDisk.RemainingSpaceInUnits = convertBytesToUnits(availableSize)
 			myDisk.Usage = int8(100 - (availableSize * 100 / totalSize))
 			myDisk.BitLockerStatus = "Unsupported"
 			myDisk.VolumeName = m.Source
@@ -62,4 +63,18 @@ func (r *Report) getLogicalDisksFromLinux(debug bool) error {
 	}
 
 	return nil
+}
+
+func convertBytesToUnits(size uint64) string {
+	units := fmt.Sprintf("%d MB", size/1_048_576)
+	if size/1_048_576 >= 1000 {
+		units = fmt.Sprintf("%d GB", size/1_073_741_824)
+	}
+	if size/1_073_741_824 >= 1000 {
+		units = fmt.Sprintf("%d TB", size/1_099_511_628_000)
+	}
+	if size/1_099_511_628_000 >= 1000 {
+		units = fmt.Sprintf("%d PB", size/1_099_511_628_000)
+	}
+	return units
 }
