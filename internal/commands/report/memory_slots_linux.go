@@ -22,7 +22,7 @@ func (r *Report) getMemorySlotsInfo(debug bool) error {
 		return err
 	}
 
-	reg := regexp.MustCompile(`Bank Locator: "\s*(.*?)\s*"`)
+	reg := regexp.MustCompile(`(?:\tLocator: )(.*)`)
 	matches := reg.FindAllStringSubmatch(string(out), -1)
 	for _, v := range matches {
 		mySlot := openuem_nats.MemorySlot{}
@@ -34,7 +34,7 @@ func (r *Report) getMemorySlotsInfo(debug bool) error {
 		r.MemorySlots = append(r.MemorySlots, mySlot)
 	}
 
-	reg = regexp.MustCompile(`Type: "\s*(.*?)\s*"`)
+	reg = regexp.MustCompile(`(?:\tType: )(.*)`)
 	matches = reg.FindAllStringSubmatch(string(out), -1)
 	for i, v := range matches {
 		if len(r.MemorySlots) > i {
@@ -42,7 +42,7 @@ func (r *Report) getMemorySlotsInfo(debug bool) error {
 		}
 	}
 
-	reg = regexp.MustCompile(`Part Number: "\s*(.*?)\s*"`)
+	reg = regexp.MustCompile(`(?:\tPart Number: )(.*)`)
 	matches = reg.FindAllStringSubmatch(string(out), -1)
 	for i, v := range matches {
 		if len(r.MemorySlots) > i {
@@ -50,7 +50,7 @@ func (r *Report) getMemorySlotsInfo(debug bool) error {
 		}
 	}
 
-	reg = regexp.MustCompile(`Serial Number: "\s*(.*?)\s*"`)
+	reg = regexp.MustCompile(`(?:\tSerial Number: )(.*)`)
 	matches = reg.FindAllStringSubmatch(string(out), -1)
 	for i, v := range matches {
 		if len(r.MemorySlots) > i {
@@ -58,7 +58,7 @@ func (r *Report) getMemorySlotsInfo(debug bool) error {
 		}
 	}
 
-	reg = regexp.MustCompile(`Size: "\s*(.*?)\s*"`)
+	reg = regexp.MustCompile(`(?:\tSize: )(.*)`)
 	matches = reg.FindAllStringSubmatch(string(out), -1)
 	for i, v := range matches {
 		if len(r.MemorySlots) > i {
@@ -66,7 +66,7 @@ func (r *Report) getMemorySlotsInfo(debug bool) error {
 		}
 	}
 
-	reg = regexp.MustCompile(`Speed: "\s*(.*?)\s*"`)
+	reg = regexp.MustCompile(`(?:\tSpeed: )(.*)`)
 	matches = reg.FindAllStringSubmatch(string(out), -1)
 	for i, v := range matches {
 		if len(r.MemorySlots) > i {
