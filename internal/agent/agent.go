@@ -274,12 +274,6 @@ func (a *Agent) EnableAgentHandler(msg jetstream.Msg) {
 
 		if err := msg.Ack(); err != nil {
 			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
-			return
-		}
-
-		if err := msg.Term(); err != nil {
-			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
-			return
 		}
 		return
 	}
@@ -292,12 +286,6 @@ func (a *Agent) EnableAgentHandler(msg jetstream.Msg) {
 
 			if err := msg.Ack(); err != nil {
 				log.Printf("[ERROR]: could not ACK message, reason: %v", err)
-				return
-			}
-
-			if err := msg.Term(); err != nil {
-				log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
-				return
 			}
 			return
 		}
@@ -326,12 +314,6 @@ func (a *Agent) EnableAgentHandler(msg jetstream.Msg) {
 
 	if err := msg.Ack(); err != nil {
 		log.Printf("[ERROR]: could not ACK message, reason: %v", err)
-		return
-	}
-
-	if err := msg.Term(); err != nil {
-		log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
-		return
 	}
 }
 
@@ -341,12 +323,6 @@ func (a *Agent) DisableAgentHandler(msg jetstream.Msg) {
 
 		if err := msg.Ack(); err != nil {
 			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
-			return
-		}
-
-		if err := msg.Term(); err != nil {
-			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
-			return
 		}
 		return
 	}
@@ -368,12 +344,6 @@ func (a *Agent) DisableAgentHandler(msg jetstream.Msg) {
 
 			if err := msg.Ack(); err != nil {
 				log.Printf("[ERROR]: could not ACK message, reason: %v", err)
-				return
-			}
-
-			if err := msg.Term(); err != nil {
-				log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
-				return
 			}
 			return
 		}
@@ -381,12 +351,6 @@ func (a *Agent) DisableAgentHandler(msg jetstream.Msg) {
 
 	if err := msg.Ack(); err != nil {
 		log.Printf("[ERROR]: could not ACK message, reason: %v", err)
-		return
-	}
-
-	if err := msg.Term(); err != nil {
-		log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
-		return
 	}
 }
 
@@ -397,12 +361,6 @@ func (a *Agent) RunReportHandler(msg jetstream.Msg) {
 		log.Println("[ERROR]: report could not be generated, report has nil value")
 		if err := msg.Ack(); err != nil {
 			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
-			return
-		}
-
-		if err := msg.Term(); err != nil {
-			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
-			return
 		}
 		return
 	}
@@ -411,24 +369,12 @@ func (a *Agent) RunReportHandler(msg jetstream.Msg) {
 		log.Printf("[ERROR]: report could not be send to NATS server!, reason: %v\n", err)
 		if err := msg.Ack(); err != nil {
 			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
-			return
-		}
-
-		if err := msg.Term(); err != nil {
-			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
-			return
 		}
 		return
 	}
 
 	if err := msg.Ack(); err != nil {
 		log.Printf("[ERROR]: could not ACK message, reason: %v", err)
-		return
-	}
-
-	if err := msg.Term(); err != nil {
-		log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
-		return
 	}
 }
 

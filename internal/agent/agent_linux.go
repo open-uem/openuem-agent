@@ -318,12 +318,7 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 			return
 		}
 
-		if err := msg.Term(); err != nil {
-			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
-			return
-		}
 		return
-
 	}
 
 	wd := "/etc/openuem-agent"
@@ -332,12 +327,6 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 		log.Printf("[ERROR]: could not create certificates folder, reason: %v\n", err)
 		if err := msg.Ack(); err != nil {
 			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
-			return
-		}
-
-		if err := msg.Term(); err != nil {
-			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
-			return
 		}
 		return
 	}
@@ -349,12 +338,6 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 		log.Printf("[ERROR]: could not get private key, reason: %v\n", err)
 		if err := msg.Ack(); err != nil {
 			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
-			return
-		}
-
-		if err := msg.Term(); err != nil {
-			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
-			return
 		}
 		return
 	}
@@ -364,12 +347,6 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 		log.Printf("[ERROR]: could not save agent private key, reason: %v\n", err)
 		if err := msg.Ack(); err != nil {
 			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
-			return
-		}
-
-		if err := msg.Term(); err != nil {
-			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
-			return
 		}
 		return
 	}
@@ -381,12 +358,6 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 		log.Printf("[ERROR]: could not save agent certificate, reason: %v\n", err)
 		if err := msg.Ack(); err != nil {
 			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
-			return
-		}
-
-		if err := msg.Term(); err != nil {
-			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
-			return
 		}
 		return
 	}
@@ -394,10 +365,6 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 
 	if err := msg.Ack(); err != nil {
 		log.Printf("[ERROR]: could not ACK message, reason: %v", err)
-	}
-
-	if err := msg.Term(); err != nil {
-		log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
 	}
 
 	// Finally run a new report to inform that the certificate is ready
