@@ -269,14 +269,37 @@ func (a *Agent) RescheduleReportRunTask() {
 }
 
 func (a *Agent) EnableAgentHandler(msg jetstream.Msg) {
-	a.ReadConfig()
-	msg.Ack()
+	if err := a.ReadConfig(); err != nil {
+		log.Printf("[ERROR]: could not read config, reason: %v", err)
+
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+			return
+		}
+
+		if err := msg.Term(); err != nil {
+			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
+			return
+		}
+		return
+	}
 
 	if !a.Config.Enabled {
 		// Save property to file
 		a.Config.Enabled = true
 		if err := a.Config.WriteConfig(); err != nil {
-			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+			log.Printf("[ERROR]: could not write agent config: %v", err)
+
+			if err := msg.Ack(); err != nil {
+				log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+				return
+			}
+
+			if err := msg.Term(); err != nil {
+				log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
+				return
+			}
+			return
 		}
 		log.Println("[INFO]: agent has been enabled!")
 
@@ -300,11 +323,33 @@ func (a *Agent) EnableAgentHandler(msg jetstream.Msg) {
 			a.startReportJob()
 		}()
 	}
+
+	if err := msg.Ack(); err != nil {
+		log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+		return
+	}
+
+	if err := msg.Term(); err != nil {
+		log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
+		return
+	}
 }
 
 func (a *Agent) DisableAgentHandler(msg jetstream.Msg) {
-	a.ReadConfig()
-	msg.Ack()
+	if err := a.ReadConfig(); err != nil {
+		log.Printf("[ERROR]: could not read config, reason: %v", err)
+
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+			return
+		}
+
+		if err := msg.Term(); err != nil {
+			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
+			return
+		}
+		return
+	}
 
 	if a.Config.Enabled {
 		log.Println("[INFO]: agent has been disabled!")
@@ -319,8 +364,29 @@ func (a *Agent) DisableAgentHandler(msg jetstream.Msg) {
 		// Save property to file
 		a.Config.Enabled = false
 		if err := a.Config.WriteConfig(); err != nil {
-			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+			log.Printf("[ERROR]: could not write agent config: %v", err)
+
+			if err := msg.Ack(); err != nil {
+				log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+				return
+			}
+
+			if err := msg.Term(); err != nil {
+				log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
+				return
+			}
+			return
 		}
+	}
+
+	if err := msg.Ack(); err != nil {
+		log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+		return
+	}
+
+	if err := msg.Term(); err != nil {
+		log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
+		return
 	}
 }
 
@@ -329,16 +395,41 @@ func (a *Agent) RunReportHandler(msg jetstream.Msg) {
 	r := a.RunReport()
 	if r == nil {
 		log.Println("[ERROR]: report could not be generated, report has nil value")
-		msg.Ack()
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+			return
+		}
+
+		if err := msg.Term(); err != nil {
+			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
+			return
+		}
 		return
 	}
 
 	if err := a.SendReport(r); err != nil {
 		log.Printf("[ERROR]: report could not be send to NATS server!, reason: %v\n", err)
-		msg.Ack()
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+			return
+		}
+
+		if err := msg.Term(); err != nil {
+			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
+			return
+		}
 		return
 	}
-	msg.Ack()
+
+	if err := msg.Ack(); err != nil {
+		log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+		return
+	}
+
+	if err := msg.Term(); err != nil {
+		log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
+		return
+	}
 }
 
 func (a *Agent) StopRemoteDesktopSubscribe() error {
@@ -687,28 +778,10 @@ func (a *Agent) SubscribeToNATSSubjects() {
 	}
 
 	ctx, a.JetstreamContextCancel = context.WithTimeout(context.Background(), 60*time.Minute)
+	s, err := js.Stream(ctx, "AGENTS_STREAM")
 
-	if err := js.DeleteConsumer(ctx, "AGENTS_STREAM_WORKQUEUE", "AgentConsumer"+a.Config.UUID); err == nil {
-		log.Println("[INFO]: old consumer for AGENTS_STREAM_WORKQUEUE has been deleted")
-	}
-
-	if err := js.DeleteStream(ctx, "AGENTS_STREAM"); err == nil {
-		log.Println("[INFO]: old JetStream AGENTS_STREAM has been deleted")
-	}
-
-	streamConfig := jetstream.StreamConfig{
-		Name: "AGENTS_STREAM_WORKQUEUE",
-		Subjects: []string{
-			"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID,
-			"agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID,
-			"agent.update.updater." + a.Config.UUID, "agent.rollback.updater." + a.Config.UUID,
-		},
-		Retention: jetstream.WorkQueuePolicy,
-	}
-
-	s, err := js.CreateOrUpdateStream(ctx, streamConfig)
 	if err != nil {
-		log.Printf("[ERROR]: could not instantiate AGENTS_STREAM_WORKQUEUE, reason: %v\n", err)
+		log.Printf("[ERROR]: could not get stream AGENTS_STREAM: %v\n", err)
 		return
 	}
 

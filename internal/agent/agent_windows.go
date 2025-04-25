@@ -666,19 +666,45 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 
 	if err := json.Unmarshal(msg.Data(), &data); err != nil {
 		log.Printf("[ERROR]: could not unmarshal agent certificate data, reason: %v\n", err)
-		msg.Ack()
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+			return
+		}
+
+		if err := msg.Term(); err != nil {
+			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
+			return
+		}
 		return
 	}
 
 	wd, err := openuem_utils.GetWd()
 	if err != nil {
 		log.Printf("[ERROR]: could not get working directory, reason: %v\n", err)
-		msg.Ack()
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+			return
+		}
+
+		if err := msg.Term(); err != nil {
+			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
+			return
+		}
+		return
 	}
 
 	if err := os.MkdirAll(filepath.Join(wd, "certificates"), 0660); err != nil {
 		log.Printf("[ERROR]: could not create certificates folder, reason: %v\n", err)
-		msg.Ack()
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+			return
+		}
+
+		if err := msg.Term(); err != nil {
+			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
+			return
+		}
+		return
 	}
 
 	keyPath := filepath.Join(wd, "certificates", "server.key")
@@ -686,13 +712,30 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 	privateKey, err := x509.ParsePKCS1PrivateKey(data.PrivateKeyBytes)
 	if err != nil {
 		log.Printf("[ERROR]: could not get private key, reason: %v\n", err)
-		msg.Ack()
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+			return
+		}
+
+		if err := msg.Term(); err != nil {
+			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
+			return
+		}
+		return
 	}
 
 	err = openuem_utils.SavePrivateKey(privateKey, keyPath)
 	if err != nil {
 		log.Printf("[ERROR]: could not save agent private key, reason: %v\n", err)
-		msg.Ack()
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+			return
+		}
+
+		if err := msg.Term(); err != nil {
+			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
+			return
+		}
 		return
 	}
 	log.Printf("[INFO]: Agent private key saved in %s", keyPath)
@@ -701,12 +744,26 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 	err = openuem_utils.SaveCertificate(data.CertBytes, certPath)
 	if err != nil {
 		log.Printf("[ERROR]: could not save agent certificate, reason: %v\n", err)
-		msg.Ack()
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+			return
+		}
+
+		if err := msg.Term(); err != nil {
+			log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
+			return
+		}
 		return
 	}
 	log.Printf("[INFO]: Agent certificate saved in %s", keyPath)
 
-	msg.Ack()
+	if err := msg.Ack(); err != nil {
+		log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+	}
+
+	if err := msg.Term(); err != nil {
+		log.Printf("[ERROR]: could not Terminate message, reason: %v", err)
+	}
 
 	// Finally run a new report to inform that the certificate is ready
 	r := a.RunReport()
