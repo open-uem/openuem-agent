@@ -687,10 +687,28 @@ func (a *Agent) SubscribeToNATSSubjects() {
 	}
 
 	ctx, a.JetstreamContextCancel = context.WithTimeout(context.Background(), 60*time.Minute)
-	s, err := js.Stream(ctx, "AGENTS_STREAM")
 
+	if err := js.DeleteConsumer(ctx, "AGENTS_STREAM_WORKQUEUE", "AgentConsumer"+a.Config.UUID); err == nil {
+		log.Println("[INFO]: old consumer for AGENTS_STREAM_WORKQUEUE has been deleted")
+	}
+
+	if err := js.DeleteStream(ctx, "AGENTS_STREAM"); err == nil {
+		log.Println("[INFO]: old JetStream AGENTS_STREAM has been deleted")
+	}
+
+	streamConfig := jetstream.StreamConfig{
+		Name: "AGENTS_STREAM_WORKQUEUE",
+		Subjects: []string{
+			"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID,
+			"agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID,
+			"agent.update.updater." + a.Config.UUID, "agent.rollback.updater." + a.Config.UUID,
+		},
+		Retention: jetstream.WorkQueuePolicy,
+	}
+
+	s, err := js.CreateOrUpdateStream(ctx, streamConfig)
 	if err != nil {
-		log.Printf("[ERROR]: could not get stream AGENTS_STREAM: %v\n", err)
+		log.Printf("[ERROR]: could not instantiate AGENTS_STREAM_WORKQUEUE, reason: %v\n", err)
 		return
 	}
 
