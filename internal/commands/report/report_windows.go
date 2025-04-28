@@ -117,6 +117,12 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 			// Retry
 			report.getOperatingSystemInfo(debug)
 		}
+
+		// Printer info after getting username
+		if err := report.getPrintersInfo(debug); err != nil {
+			// Retry
+			report.getPrintersInfo(debug)
+		}
 	}()
 
 	wg.Add(1)
@@ -143,15 +149,6 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 		if err := report.getMemorySlotsInfo(debug); err != nil {
 			// Retry
 			report.getMemorySlotsInfo(debug)
-		}
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := report.getPrintersInfo(debug); err != nil {
-			// Retry
-			report.getPrintersInfo(debug)
 		}
 	}()
 

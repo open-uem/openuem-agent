@@ -40,10 +40,19 @@ func (r *Report) getPrintersFromWMI() error {
 	qPrinters := "SELECT Name, Default, PortName, PrinterStatus, Network FROM Win32_Printer"
 
 	ctx := context.Background()
-	err := WMIQueryWithContext(ctx, qPrinters, &printersDst, namespace)
-	if err != nil {
-		return err
+
+	if r.OperatingSystem.Username != "" {
+		err := WMIQueryWithContextAsUser(ctx, qPrinters, &printersDst, namespace, r.OperatingSystem.Username)
+		if err != nil {
+			return err
+		}
+	} else {
+		err := WMIQueryWithContext(ctx, qPrinters, &printersDst, namespace)
+		if err != nil {
+			return err
+		}
 	}
+
 	for _, v := range printersDst {
 		myPrinter := openuem_nats.Printer{}
 		myPrinter.Name = v.Name

@@ -394,3 +394,40 @@ func (a *Agent) GetServerCertificate() {
 		a.ServerKeyPath = serverKeyPath
 	}
 }
+
+func (a *Agent) SetDefaultPrinter() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.defaultprinter."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+		printerName := string(msg.Data)
+		if printerName == "" {
+			log.Println("[ERROR]: printer name cannot be empty")
+			return
+		}
+		log.Printf("[INFO]: set %s as default printer", printerName)
+
+		if err := msg.Respond(nil); err != nil {
+			log.Printf("[ERROR]: could not respond to agent reboot message, reason: %v\n", err)
+		}
+
+		action := openuem_nats.RebootOrRestart{}
+		if err := json.Unmarshal(msg.Data, &action); err != nil {
+			log.Printf("[ERROR]: could not unmarshal to agent reboot message, reason: %v\n", err)
+			return
+		}
+
+		when := int(time.Until(action.Date).Minutes())
+		if when > 0 {
+			if err := exec.Command("shutdown", "-r", strconv.Itoa(when)).Run(); err != nil {
+				fmt.Printf("[ERROR]: could not initiate power off, reason: %v", err)
+			}
+		} else {
+			if err := exec.Command("shutdown", "-r", "now").Run(); err != nil {
+				fmt.Printf("[ERROR]: could not initiate shutdown, reason: %v", err)
+			}
+		}
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to set default printer, reason: %v", err)
+	}
+	return nil
+}
