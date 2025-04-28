@@ -23,4 +23,4 @@ OpenUEM console shows the information saved by the workers.
 
 ![OpenUEM Console](https://openuem.eu/assets/images/agents_list-37a01f840c883ea4f98f30a199845953.png)
 
-Right now OpenUEM only provides agents for Windows, but soon Linux agents will be released.
+Right now OpenUEM only provides agents for Windows and Debian/Ubuntu Linux but more agents will be released.
