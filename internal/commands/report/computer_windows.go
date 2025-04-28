@@ -111,7 +111,7 @@ func (r *Report) getProcessorInfo() error {
 		return err
 	}
 
-	if len(processorDst) != 1 {
+	if len(processorDst) < 1 {
 		return fmt.Errorf("got wrong processor result set")
 	}
 
