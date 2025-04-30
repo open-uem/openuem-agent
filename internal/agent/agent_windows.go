@@ -669,7 +669,6 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 		if err := msg.Ack(); err != nil {
 			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
 		}
-
 		return
 	}
 

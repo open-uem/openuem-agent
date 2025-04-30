@@ -18,8 +18,8 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/labstack/echo/v4 v4.13.3
 	github.com/moby/sys/mountinfo v0.7.2
-	github.com/nats-io/nats.go v1.41.0
-	github.com/open-uem/nats v0.0.0-20250421093642-a4655dc84c80
+	github.com/nats-io/nats.go v1.41.2
+	github.com/open-uem/nats v0.0.0-20250429094245-01f1cdb54eca
 	github.com/open-uem/utils v0.0.0-20250407085447-f3730b9ef3ac
 	github.com/open-uem/wingetcfg v0.0.0-20250317160420-5c7e4c410be1
 	github.com/pkg/sftp v1.13.9
@@ -27,7 +27,7 @@ require (
 	github.com/zcalusic/sysinfo v1.1.3
 	golang.org/x/crypto v0.37.0
 	golang.org/x/mod v0.24.0
-	golang.org/x/net v0.38.0
+	golang.org/x/net v0.39.0
 	gopkg.in/ini.v1 v1.67.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -48,7 +48,7 @@ require (
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/nats-io/nkeys v0.4.10 // indirect
+	github.com/nats-io/nkeys v0.4.11 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
