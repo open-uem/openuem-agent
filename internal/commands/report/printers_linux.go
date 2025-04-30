@@ -57,6 +57,7 @@ func (r *Report) getPrintersFromLinux() error {
 			myPrinter.IsDefault = myPrinter.Name == defaultPrinter
 			if len(ports) > index {
 				myPrinter.Port = ports[index]
+				myPrinter.IsNetwork = strings.Contains(myPrinter.Port, "socket")
 			} else {
 				myPrinter.Port = "-"
 			}
