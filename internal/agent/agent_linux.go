@@ -394,25 +394,3 @@ func (a *Agent) GetServerCertificate() {
 		a.ServerKeyPath = serverKeyPath
 	}
 }
-
-func (a *Agent) SetDefaultPrinter() error {
-	_, err := a.NATSConnection.QueueSubscribe("agent.defaultprinter."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
-		log.Println("[ERROR]: not implemented for Linux")
-	})
-
-	if err != nil {
-		return fmt.Errorf("[ERROR]: could not subscribe to set default printer, reason: %v", err)
-	}
-	return nil
-}
-
-func (a *Agent) RemovePrinter() error {
-	_, err := a.NATSConnection.QueueSubscribe("agent.defaultprinter."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
-		log.Println("[ERROR]: not implemented for Linux")
-	})
-
-	if err != nil {
-		return fmt.Errorf("[ERROR]: could not subscribe to remove printer, reason: %v", err)
-	}
-	return nil
-}

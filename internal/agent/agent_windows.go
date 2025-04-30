@@ -23,7 +23,6 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	openuem_nats "github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/commands/deploy"
-	"github.com/open-uem/openuem-agent/internal/commands/printers"
 	rd "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	"github.com/open-uem/openuem-agent/internal/commands/report"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
@@ -754,60 +753,4 @@ func (a *Agent) GetServerCertificate() {
 	} else {
 		a.ServerKeyPath = serverKeyPath
 	}
-}
-
-func (a *Agent) SetDefaultPrinter() error {
-	_, err := a.NATSConnection.QueueSubscribe("agent.defaultprinter."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
-		printerName := string(msg.Data)
-		if printerName == "" {
-			log.Println("[ERROR]: printer name cannot be empty")
-			return
-		}
-		log.Printf("[INFO]: set %s printer as default request received", printerName)
-
-		if err := printers.SetDefaultPrinter(printerName); err != nil {
-			log.Printf("[ERROR]: could not set printer %s as default, reason: %v\n", printerName, err)
-			if err := msg.Respond([]byte(err.Error())); err != nil {
-				log.Printf("[ERROR]: could not respond to agent.removeprinter message, reason: %v\n", err)
-			}
-			return
-		}
-
-		if err := msg.Respond(nil); err != nil {
-			log.Printf("[ERROR]: could not respond to agent.removeprinter message, reason: %v\n", err)
-		}
-	})
-
-	if err != nil {
-		return fmt.Errorf("[ERROR]: could not subscribe to default printer message, reason: %v", err)
-	}
-	return nil
-}
-
-func (a *Agent) RemovePrinter() error {
-	_, err := a.NATSConnection.QueueSubscribe("agent.removeprinter."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
-		printerName := string(msg.Data)
-		if printerName == "" {
-			log.Println("[ERROR]: printer name cannot be empty")
-			return
-		}
-		log.Printf("[INFO]: remove %s printer request received", printerName)
-
-		if err := printers.RemovePrinter(printerName); err != nil {
-			log.Printf("[ERROR]: could not remove %s printer, reason: %v\n", printerName, err)
-			if err := msg.Respond(nil); err != nil {
-				log.Printf("[ERROR]: could not respond to agent.removeprinter message, reason: %v\n", err)
-			}
-			return
-		}
-
-		if err := msg.Respond(nil); err != nil {
-			log.Printf("[ERROR]: could not respond to agent.removeprinter message, reason: %v\n", err)
-		}
-	})
-
-	if err != nil {
-		return fmt.Errorf("[ERROR]: could not subscribe to remove printer message, reason: %v", err)
-	}
-	return nil
 }
