@@ -23,6 +23,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	openuem_nats "github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/commands/deploy"
+	"github.com/open-uem/openuem-agent/internal/commands/printers"
 	rd "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	"github.com/open-uem/openuem-agent/internal/commands/report"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
@@ -669,7 +670,6 @@ func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
 		if err := msg.Ack(); err != nil {
 			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
 		}
-
 		return
 	}
 
@@ -763,34 +763,51 @@ func (a *Agent) SetDefaultPrinter() error {
 			log.Println("[ERROR]: printer name cannot be empty")
 			return
 		}
-		log.Printf("[INFO]: set %s as default printer", printerName)
+		log.Printf("[INFO]: set %s printer as default request received", printerName)
 
-		if err := msg.Respond(nil); err != nil {
-			log.Printf("[ERROR]: could not respond to agent reboot message, reason: %v\n", err)
-		}
-
-		exec.Command("powershell", "-Command", "(Get-ADGroupMember -Identity adgroup).count").Run()
-
-		action := openuem_nats.RebootOrRestart{}
-		if err := json.Unmarshal(msg.Data, &action); err != nil {
-			log.Printf("[ERROR]: could not unmarshal to agent reboot message, reason: %v\n", err)
+		if err := printers.SetDefaultPrinter(printerName); err != nil {
+			log.Printf("[ERROR]: could not set printer %s as default, reason: %v\n", printerName, err)
+			if err := msg.Respond([]byte(err.Error())); err != nil {
+				log.Printf("[ERROR]: could not respond to agent.removeprinter message, reason: %v\n", err)
+			}
 			return
 		}
 
-		when := int(time.Until(action.Date).Minutes())
-		if when > 0 {
-			if err := exec.Command("shutdown", "-r", strconv.Itoa(when)).Run(); err != nil {
-				fmt.Printf("[ERROR]: could not initiate power off, reason: %v", err)
-			}
-		} else {
-			if err := exec.Command("shutdown", "-r", "now").Run(); err != nil {
-				fmt.Printf("[ERROR]: could not initiate shutdown, reason: %v", err)
-			}
+		if err := msg.Respond(nil); err != nil {
+			log.Printf("[ERROR]: could not respond to agent.removeprinter message, reason: %v\n", err)
 		}
 	})
 
 	if err != nil {
-		return fmt.Errorf("[ERROR]: could not subscribe to set default printer, reason: %v", err)
+		return fmt.Errorf("[ERROR]: could not subscribe to default printer message, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) RemovePrinter() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.removeprinter."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+		printerName := string(msg.Data)
+		if printerName == "" {
+			log.Println("[ERROR]: printer name cannot be empty")
+			return
+		}
+		log.Printf("[INFO]: remove %s printer request received", printerName)
+
+		if err := printers.RemovePrinter(printerName); err != nil {
+			log.Printf("[ERROR]: could not remove %s printer, reason: %v\n", printerName, err)
+			if err := msg.Respond(nil); err != nil {
+				log.Printf("[ERROR]: could not respond to agent.removeprinter message, reason: %v\n", err)
+			}
+			return
+		}
+
+		if err := msg.Respond(nil); err != nil {
+			log.Printf("[ERROR]: could not respond to agent.removeprinter message, reason: %v\n", err)
+		}
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to remove printer message, reason: %v", err)
 	}
 	return nil
 }

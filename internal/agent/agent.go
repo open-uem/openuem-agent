@@ -805,6 +805,16 @@ func (a *Agent) SubscribeToNATSSubjects() {
 	if err != nil {
 		log.Printf("[ERROR]: %v\n", err)
 	}
+
+	err = a.SetDefaultPrinter()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
+	err = a.RemovePrinter()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
 }
 
 func (a *Agent) GetRemoteConfig() error {
