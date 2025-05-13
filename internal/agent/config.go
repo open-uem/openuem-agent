@@ -240,7 +240,7 @@ func (a *Agent) ReadConfig() error {
 
 	key, err = cfg.Section("Agent").GetKey("TenantID")
 	if err == nil {
-		a.Config.SiteID = key.String()
+		a.Config.TenantID = key.String()
 	}
 
 	key, err = cfg.Section("Agent").GetKey("SiteID")
