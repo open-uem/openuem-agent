@@ -823,7 +823,18 @@ func (a *Agent) GetRemoteConfig() error {
 		return fmt.Errorf("NATS connection is not ready")
 	}
 
-	msg, err := a.NATSConnection.Request("agentconfig", []byte(a.Config.UUID), 10*time.Minute)
+	remoteConfigMsg := openuem_nats.RemoteConfigRequest{
+		AgentID:  a.Config.UUID,
+		TenantID: a.Config.TenantID,
+		SiteID:   a.Config.SiteID,
+	}
+
+	data, err := json.Marshal(remoteConfigMsg)
+	if err != nil {
+		return err
+	}
+
+	msg, err := a.NATSConnection.Request("agentconfig", data, 10*time.Minute)
 	if err != nil {
 		return err
 	}
