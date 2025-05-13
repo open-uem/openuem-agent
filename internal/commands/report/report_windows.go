@@ -17,7 +17,7 @@ import (
 	"gopkg.in/ini.v1"
 )
 
-func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAddress string, sftpDisabled, remoteAssistanceDisabled bool) (*Report, error) {
+func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAddress string, sftpDisabled, remoteAssistanceDisabled bool, tenantID string, siteID string) (*Report, error) {
 	var wg sync.WaitGroup
 	var err error
 
@@ -55,6 +55,8 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 	report.DebugMode = debug
 	report.SftpServiceDisabled = sftpDisabled
 	report.RemoteAssistanceDisabled = remoteAssistanceDisabled
+	report.Tenant = tenantID
+	report.Site = siteID
 
 	// Check if a restart is still required
 	// Get conf file
