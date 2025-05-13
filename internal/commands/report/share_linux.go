@@ -11,7 +11,7 @@ import (
 	"github.com/open-uem/nats"
 )
 
-func (r *Report) getSharesInfo(debug bool) error {
+func (r *Report) getSharesInfo() error {
 	r.getExportedNFSShares()
 
 	return nil

@@ -30,7 +30,7 @@ func (r *Report) getApplicationsInfo(debug bool) error {
 		command = `dpkg --search '*.desktop' | awk '{print $1}' | cut -f 1 -d ':'  | sort --unique`
 	case "opensuse-leap":
 		command = `zypper --quiet search -i -f --provides "*.desktop" | awk '{print $3}' | sort --unique`
-	case "fedora", "almalinux":
+	case "fedora", "almalinux", "redhat", "rocky":
 		command = `dnf repoquery --installed --file "*.desktop" | awk '{print $1}' | sort --unique`
 	case "manjaro", "arch":
 		command = `pacman -Ql | grep ".*\.desktop$" | awk '{print $1}' | sort --unique`
@@ -49,7 +49,7 @@ func (r *Report) getApplicationsInfo(debug bool) error {
 			switch os {
 			case "debian", "ubuntu", "linuxmint":
 				app.Name, app.Version, app.Publisher = getDpkgInfo(p)
-			case "fedora", "opensuse-leap", "almalinux":
+			case "fedora", "opensuse-leap", "almalinux", "redhat", "rocky":
 				app.Name, app.Version, app.Publisher = getRPMInfo(p)
 			case "manjaro", "arch":
 				app.Name, app.Version, app.Publisher = getPackmanInfo(p)

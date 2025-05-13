@@ -110,18 +110,18 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := report.getSharesInfo(debug); err != nil {
+		if err := report.getSharesInfo(); err != nil {
 			// Retry
-			report.getSharesInfo(debug)
+			report.getSharesInfo()
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := report.getAntivirusInfo(debug); err != nil {
+		if err := report.getAntivirusInfo(); err != nil {
 			// Retry
-			report.getAntivirusInfo(debug)
+			report.getAntivirusInfo()
 		}
 	}()
 
@@ -175,9 +175,9 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 	wg.Wait()
 
 	// These tasks can affect previous tasks
-	if err := report.getSystemUpdateInfo(debug); err != nil {
+	if err := report.getSystemUpdateInfo(); err != nil {
 		// Retry
-		report.getSystemUpdateInfo(debug)
+		report.getSystemUpdateInfo()
 	}
 
 	if err := report.getLogicalDisksInfo(debug); err != nil {

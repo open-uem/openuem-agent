@@ -12,7 +12,7 @@ import (
 	"github.com/open-uem/nats"
 )
 
-func (r *Report) getSystemUpdateInfo(debug bool) error {
+func (r *Report) getSystemUpdateInfo() error {
 	switch r.OS {
 	case "ubuntu", "debian":
 		if err := r.getAptInformation(); err != nil {

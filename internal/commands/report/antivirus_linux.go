@@ -2,7 +2,7 @@
 
 package report
 
-func (r *Report) getAntivirusInfo(debug bool) error {
+func (r *Report) getAntivirusInfo() error {
 	r.Antivirus.Name = ""
 	r.Antivirus.IsActive = false
 	r.Antivirus.IsUpdated = false
