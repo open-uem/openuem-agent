@@ -31,6 +31,8 @@ type Config struct {
 	IPAddress                string
 	SFTPDisabled             bool
 	RemoteAssistanceDisabled bool
+	SiteID                   string
+	TenantID                 string
 }
 
 func (a *Agent) ReadConfig() error {
@@ -234,6 +236,16 @@ func (a *Agent) ReadConfig() error {
 			log.Println("[ERROR]: could not parse RemoteAssistanceDisabled")
 			return err
 		}
+	}
+
+	key, err = cfg.Section("Agent").GetKey("TenantID")
+	if err == nil {
+		a.Config.SiteID = key.String()
+	}
+
+	key, err = cfg.Section("Agent").GetKey("SiteID")
+	if err == nil {
+		a.Config.SiteID = key.String()
 	}
 
 	log.Println("[INFO]: agent has read its settings from the INI file")
