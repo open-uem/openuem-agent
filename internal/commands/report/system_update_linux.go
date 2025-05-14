@@ -122,7 +122,7 @@ func checkUpdatesStatus() string {
 }
 
 func checkLastTimePackagesInstalled() time.Time {
-	lastInstall := `dnf history list | grep upgrade | awk '{print $5,$6}'`
+	lastInstall := `tail -3 /var/log/apt/history.log | grep End-Date | awk '{print $2,$3}'`
 	out, err := exec.Command("bash", "-c", lastInstall).Output()
 	if err != nil {
 		log.Printf("[ERROR]: could not read DNF history log, reason: %v", err)
@@ -139,7 +139,7 @@ func checkLastTimePackagesInstalled() time.Time {
 }
 
 func checkDnfLastTimePackagesInstalled() time.Time {
-	lastInstall := `tail -3 /var/log/apt/history.log | grep End-Date | awk '{print $2,$3}'`
+	lastInstall := `dnf history list | grep upgrade | awk '{print $5,$6}'`
 	out, err := exec.Command("bash", "-c", lastInstall).Output()
 	if err != nil {
 		log.Printf("[ERROR]: could not read APT history log, reason: %v", err)
@@ -148,7 +148,7 @@ func checkDnfLastTimePackagesInstalled() time.Time {
 
 	t, err := time.Parse("2006-01-02 15:04:05", strings.TrimSpace(string(out)))
 	if err != nil {
-		log.Printf("[ERROR]: could not parse time string %s from APT history log, reason: %v", string(out), err)
+		log.Printf("[ERROR]: could not parse time string %s from DNF history log, reason: %v", string(out), err)
 		return time.Time{}
 	}
 
