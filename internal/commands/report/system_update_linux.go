@@ -27,6 +27,8 @@ func (r *Report) getSystemUpdateInfo() error {
 		} else {
 			log.Println("[INFO]: get pending security updates info has been retrieved")
 		}
+	default:
+		r.SystemUpdate.Status = nats.UNKNOWN
 	}
 
 	return nil
