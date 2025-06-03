@@ -3,7 +3,11 @@
 package report
 
 import (
+	"encoding/json"
+	"errors"
 	"log"
+	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -12,59 +16,83 @@ func (r *Report) getComputerInfo(debug bool) error {
 		log.Println("[DEBUG]: computer system info has been requested")
 	}
 	if err := r.getComputerSystemInfo(); err != nil {
-		log.Printf("[ERROR]: could not get information from SysInfo: %v", err)
+		log.Printf("[ERROR]: could not get information from System Profiler: %v", err)
 		return err
-	} else {
-		log.Printf("[INFO]: computer system info has been retrieved from SysInfo")
 	}
 
-	if debug {
-		log.Println("[DEBUG]: serial number has been requested")
-	}
-	if err := r.getSerialNumber(); err != nil {
-		log.Printf("[ERROR]: could not get information from SysInfo: %v", err)
-		return err
-	} else {
-		log.Printf("[INFO]: serial number info has been retrieved from SysInfo")
-	}
-
-	if debug {
-		log.Println("[DEBUG]: processor info has been requested")
-	}
-	if err := r.getProcessorInfo(); err != nil {
-		log.Printf("[ERROR]: could not get information from SysInfo: %v", err)
-		return err
-	} else {
-		log.Printf("[INFO]: processor info has been retrieved from SysInfo")
-	}
 	return nil
 }
 
 func (r *Report) getComputerSystemInfo() error {
+	var data SPHardwareDataType
+	out, err := exec.Command("system_profiler", "-json", "SPHardwareDataType").Output()
+	if err != nil {
+		return err
+	}
 
-	r.Computer.Manufacturer = strings.TrimSpace("TODO")
-	if r.Computer.Manufacturer == "" {
-		r.Computer.Manufacturer = "Unknown"
+	if err := json.Unmarshal(out, &data); err != nil {
+		return err
 	}
-	r.Computer.Model = strings.TrimSpace("si.Product.Name")
-	if r.Computer.Model == "System Product Name" {
-		r.Computer.Model = "Unknown"
+
+	r.Computer.Manufacturer = "Apple"
+
+	if len(data.SPHardwareDataType) == 0 {
+		return errors.New("could not get info from SPHardwareDataType")
 	}
-	r.Computer.Memory = 0
+
+	hw := data.SPHardwareDataType[0]
+
+	r.Computer.Model = hw.MachineModel
+	if r.Computer.Model == "iMacPro1,1" {
+		r.Computer.Model = "MacBookPro15,1"
+	}
+	r.Computer.Memory = getMacOSMemory(hw.PhysicalMemory)
+	r.Computer.Processor = hw.CPUType
+	r.Computer.ProcessorArch = getMacOSArch()
+	r.Computer.ProcessorCores = int64(hw.NumProcessors)
+	r.Computer.Serial = hw.SerialNumber
 	return nil
 }
 
-func (r *Report) getSerialNumber() error {
-	r.Computer.Serial = "si.Product.Serial"
-	if r.Computer.Serial == "System Serial Number" {
-		r.Computer.Serial = "Unknown"
+func getMacOSMemory(memory string) uint64 {
+	if strings.Contains(memory, "GB") {
+		quantity := strings.TrimSuffix(memory, " GB")
+		val, err := strconv.Atoi(quantity)
+		if err == nil {
+			return uint64(val * 1024)
+		}
 	}
-	return nil
+
+	if strings.Contains(memory, "MB") {
+		quantity := strings.TrimSuffix(memory, " MB")
+		val, err := strconv.Atoi(quantity)
+		if err == nil {
+			return uint64(val)
+		}
+	}
+
+	return 0
 }
 
-func (r *Report) getProcessorInfo() error {
-	r.Computer.Processor = "si.CPU.Model"
-	r.Computer.ProcessorArch = "si.Kernel.Architecture"
-	r.Computer.ProcessorCores = 0
-	return nil
+type SPHardwareDataType struct {
+	SPHardwareDataType []HardwareDataType `json:"SPHardwareDataType"`
+}
+
+type HardwareDataType struct {
+	Name                  string `json:"_name"`
+	BootROMVersion        string `json:"boot_rom_version"`
+	CPUType               string `json:"cpu_type"`
+	CurrentProcessorSpeed string `json:"current_processor_speed"`
+	L2CacheCore           string `json:"l2_cache_core"`
+	L3Cache               string `json:"l3_cache"`
+	MachineModel          string `json:"machine_model"`
+	MachineName           string `json:"machine_name"`
+	NumProcessors         int    `json:"number_processors"`
+	OSLoaderVersion       string `json:"os_loader_version"`
+	Packages              int    `json:"packages"`
+	PhysicalMemory        string `json:"physical_memory"`
+	PlatformCPUHTT        string `json:"platform_cpu_http"`
+	PlatformUUID          string `json:"platform_UUID"`
+	ProvisioningUDID      string `json:"provisioning_UDID"`
+	SerialNumber          string `json:"serial_number"`
 }

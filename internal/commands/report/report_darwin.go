@@ -9,13 +9,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	openuem_nats "github.com/open-uem/nats"
 )
 
 func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAddress string, sftpDisabled, remoteAssistanceDisabled bool, tenantID string, siteID string) (*Report, error) {
-	// var wg sync.WaitGroup
+	var wg sync.WaitGroup
 	var err error
 
 	if debug {
@@ -56,24 +57,24 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 		log.Println("[DEBUG]: launching goroutines")
 	}
 
-	// // These operations will be run using goroutines
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getComputerInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getComputerInfo(debug)
-	// 	}
-	// }()
+	// These operations will be run using goroutines
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.getComputerInfo(debug); err != nil {
+			// Retry
+			report.getComputerInfo(debug)
+		}
+	}()
 
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getOperatingSystemInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getOperatingSystemInfo(debug)
-	// 	}
-	// }()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.getOperatingSystemInfo(debug); err != nil {
+			// Retry
+			report.getOperatingSystemInfo(debug)
+		}
+	}()
 
 	// wg.Add(1)
 	// go func() {
@@ -120,6 +121,7 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 	// 	}
 	// }()
 
+	report.IP = "192.168.1.135"
 	// wg.Add(1)
 	// go func() {
 	// 	defer wg.Done()
@@ -167,7 +169,7 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 	// 	}
 	// }()
 
-	// wg.Wait()
+	wg.Wait()
 
 	// These tasks can affect previous tasks
 	// if err := report.getSystemUpdateInfo(); err != nil {
@@ -202,5 +204,5 @@ func getMacOSHostname() string {
 	if err != nil {
 		return "unknown"
 	}
-	return strings.TrimSpace(string(out))
+	return strings.ToUpper(strings.TrimSpace(string(out)))
 }
