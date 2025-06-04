@@ -277,11 +277,11 @@ func (a *Agent) PowerOffSubscribe() error {
 		when := int(time.Until(action.Date).Seconds())
 		if when > 0 {
 			if err := exec.Command("cmd", "/C", "shutdown", "/s", "/t", strconv.Itoa(when)).Run(); err != nil {
-				fmt.Printf("[ERROR]: could not initiate power off, reason: %v", err)
+				log.Printf("[ERROR]: could not initiate power off, reason: %v", err)
 			}
 		} else {
 			if err := exec.Command("cmd", "/C", "shutdown", "/s").Run(); err != nil {
-				fmt.Printf("[ERROR]: could not initiate shutdown, reason: %v", err)
+				log.Printf("[ERROR]: could not initiate shutdown, reason: %v", err)
 			}
 		}
 	})
