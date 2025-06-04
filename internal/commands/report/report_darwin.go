@@ -142,14 +142,14 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 		}
 	}()
 
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getApplicationsInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getApplicationsInfo(debug)
-	// 	}
-	// }()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.getApplicationsInfo(debug); err != nil {
+			// Retry
+			report.getApplicationsInfo(debug)
+		}
+	}()
 
 	// wg.Add(1)
 	// go func() {
