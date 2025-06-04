@@ -3,6 +3,7 @@
 package report
 
 import (
+	"encoding/json"
 	"log"
 	"os/exec"
 	"strings"
@@ -15,70 +16,64 @@ func (r *Report) getPrintersInfo(debug bool) error {
 		log.Println("[DEBUG]: printers info has been requested")
 	}
 
-	err := r.getPrintersFromLinux()
+	err := r.getPrintersFromMac()
 	if err != nil {
-		log.Printf("[ERROR]: could not get printers information from Linux hwinfo: %v", err)
+		log.Printf("[ERROR]: could not get printers information: %v", err)
 		return err
 	} else {
-		log.Printf("[INFO]: printers information has been retrieved from Linux hwinfo")
+		log.Printf("[INFO]: printers information has been retrieved")
 	}
 	return nil
 }
 
-func (r *Report) getPrintersFromLinux() error {
+func (r *Report) getPrintersFromMac() error {
+	var printerData SPPrintersDataType
 	r.Printers = []openuem_nats.Printer{}
 
-	getDefaultPrinter := "LANG=en_US.UTF-8 lpstat -d | awk '{print $4}'"
-	out, err := exec.Command("bash", "-c", getDefaultPrinter).Output()
+	out, err := exec.Command("system_profiler", "-json", "SPPrintersDataType").Output()
 	if err != nil {
 		return err
 	}
-	defaultPrinter := strings.TrimSpace(string(out))
 
-	getPrinters := "LANG=en_US.UTF-8 lpstat -p | grep '^printer' | awk '{print $2}'"
-	out, err = exec.Command("bash", "-c", getPrinters).Output()
-	// out, err := exec.Command("hwinfo", "--printer").Output()
-	if err != nil {
+	if strings.Contains(string(out), "empty") {
+		return nil
+	}
+
+	if err := json.Unmarshal(out, &printerData); err != nil {
 		return err
 	}
-	printers := strings.Split(string(out), "\n")
 
-	getPorts := "LANG=en_US.UTF-8 lpstat -s | grep '^device' | awk '{print $4}'"
-	out, err = exec.Command("bash", "-c", getPorts).Output()
-	if err != nil {
-		return err
-	}
-	ports := strings.Split(string(out), "\n")
-
-	for index, printer := range printers {
+	for _, printer := range printerData.SPPrintersDataType {
 		myPrinter := openuem_nats.Printer{}
-		if printer != "" {
-			myPrinter.Name = strings.TrimSpace(printer)
-			myPrinter.IsDefault = myPrinter.Name == defaultPrinter
-			if len(ports) > index {
-				myPrinter.Port = ports[index]
-				myPrinter.IsNetwork = strings.Contains(myPrinter.Port, "socket")
-			} else {
-				myPrinter.Port = "-"
-			}
-			r.Printers = append(r.Printers, myPrinter)
-		}
+		myPrinter.Name = strings.TrimSpace(printer.Name)
+		myPrinter.IsDefault = strings.Contains(printer.Default, "yes")
+		myPrinter.Port = printer.URI
+		myPrinter.IsNetwork = !strings.Contains(printer.PrintServer, "local")
+		myPrinter.IsShared = strings.Contains(printer.Shared, "yes")
+		r.Printers = append(r.Printers, myPrinter)
 	}
-
-	// reg := regexp.MustCompile(`Model: "\s*(.*?)\s*"`)
-	// matches := reg.FindAllStringSubmatch(string(out), -1)
-	// for _, v := range matches {
-	// 	myPrinter := openuem_nats.Printer{}
-	// 	if v[1] == "" || v[1] == "0" {
-	// 		myPrinter.Name = "Unknown"
-	// 	} else {
-	// 		myPrinter.Name = v[1]
-	// 	}
-	// 	myPrinter.Port = "-"
-	// 	myPrinter.IsDefault = false
-	// 	myPrinter.IsNetwork = false
-	// 	r.Printers = append(r.Printers, myPrinter)
-	// }
 
 	return nil
+}
+
+type SPPrintersDataType struct {
+	SPPrintersDataType []PrinterDataType `json:"SPPrintersDataType"`
+}
+
+type PrinterDataType struct {
+	Name            string `json:"_name"`
+	CreationDate    string `json:"creationDate"`
+	Default         string `json:"default"`
+	DriverVersion   string `json:"driverversion"`
+	FaxSupport      string `json:"Fax Support"`
+	PPD             string `json:"ppd"`
+	PPDFileVersion  string `json:"ppdfileversion"`
+	PrinterSharing  string `json:"printersharing"`
+	PrinterCommands string `json:"printercommands"`
+	PrintServer     string `json:"printserver"`
+	PSVersion       string `json:"psversion"`
+	Scanner         string `json:"scanner"`
+	Shared          string `json:"shared"`
+	Status          string `json:"status"`
+	URI             string `json:"uri"`
 }
