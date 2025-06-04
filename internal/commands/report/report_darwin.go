@@ -121,27 +121,26 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 	// 	}
 	// }()
 
-	report.IP = "192.168.1.135"
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getNetworkAdaptersInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getNetworkAdaptersInfo(debug)
-	// 	}
-	// 	// Get network adapter with default gateway and set its ip address and MAC as the report IP/MAC address
-	// 	for _, n := range report.NetworkAdapters {
-	// 		if n.DefaultGateway != "" {
-	// 			if n.Addresses == "" {
-	// 				report.IP = ipAddress
-	// 			} else {
-	// 				report.IP = n.Addresses
-	// 			}
-	// 			report.MACAddress = n.MACAddress
-	// 			break
-	// 		}
-	// 	}
-	// }()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.getNetworkAdaptersInfo(debug); err != nil {
+			// Retry
+			report.getNetworkAdaptersInfo(debug)
+		}
+		// Get network adapter with default gateway and set its ip address and MAC as the report IP/MAC address
+		for _, n := range report.NetworkAdapters {
+			if n.DefaultGateway != "" {
+				if n.Addresses == "" {
+					report.IP = ipAddress
+				} else {
+					report.IP = n.Addresses
+				}
+				report.MACAddress = n.MACAddress
+				break
+			}
+		}
+	}()
 
 	// wg.Add(1)
 	// go func() {
