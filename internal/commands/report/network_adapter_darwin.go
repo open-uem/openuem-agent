@@ -40,7 +40,7 @@ func (r *Report) getNetworkAdaptersFromMac() error {
 	}
 
 	for _, i := range networkData.SPNetworkDataType {
-		if i.Hardware == "Modem" {
+		if len(i.IPAddress) == 0 {
 			continue
 		}
 
@@ -53,7 +53,7 @@ func (r *Report) getNetworkAdaptersFromMac() error {
 		myNetworkAdapter.DefaultGateway = i.IPV4.Router
 		myNetworkAdapter.DNSServers = strings.Join(i.DNS.ServerAddresses, ",")
 		myNetworkAdapter.DNSDomain = getDNSDomain()
-		myNetworkAdapter.DHCPEnabled = i.IPV4.ConfigMethod == "Automatic"
+		myNetworkAdapter.DHCPEnabled = i.IPV4.ConfigMethod == "DHCP"
 		r.NetworkAdapters = append(r.NetworkAdapters, myNetworkAdapter)
 	}
 
