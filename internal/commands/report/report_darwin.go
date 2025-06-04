@@ -171,10 +171,10 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 	wg.Wait()
 
 	// These tasks can affect previous tasks
-	// if err := report.getSystemUpdateInfo(); err != nil {
-	// 	// Retry
-	// 	report.getSystemUpdateInfo()
-	// }
+	if err := report.getSystemUpdateInfo(); err != nil {
+		// Retry
+		report.getSystemUpdateInfo()
+	}
 
 	if err := report.getLogicalDisksInfo(debug); err != nil {
 		// Retry
