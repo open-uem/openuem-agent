@@ -11,13 +11,11 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
-	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
-	"github.com/zcalusic/sysinfo"
+	openuem_utils "github.com/open-uem/utils"
 )
 
 func (rd *RemoteDesktopService) Start(pin string, notifyUser bool) {
@@ -46,15 +44,7 @@ func (rd *RemoteDesktopService) Start(pin string, notifyUser bool) {
 		return
 	}
 
-	// Get the first available port for VNC server
-	vncPort := ""
-	if rd.RequiresVNCProxy {
-		vncPort = getFirstVNCAvailablePort()
-		if vncPort == "" {
-			log.Println("[ERROR]: could get a free port for VNC")
-			return
-		}
-	}
+	vncPort := "5900"
 
 	// Start Remote Desktop service
 	go func() {
@@ -93,179 +83,77 @@ func (rd *RemoteDesktopService) Stop() {
 }
 
 func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDesktopService, error) {
-	// Get logged in username
-	username, err := runtime.GetLoggedInUser()
-	if err != nil {
-		return nil, err
-	}
-
 	supportedServers := map[string]RemoteDesktopService{
-		"X11VNC": {
+		// Reference: https://community.hetzner.com/tutorials/how-to-enable-vnc-on-macos-via-ssh
+		"MacOS Remote Management": {
 			RequiresVNCProxy: true,
 			StartService: func(vncPort string) error {
-				homeDir, _, _, err := getUserInfo(username)
-				if err != nil {
-					return err
-				}
-				openuemDir := filepath.Join(homeDir, ".openuem")
-				path := filepath.Join(openuemDir, "x11vncpasswd")
-
-				args := []string{"-display", ":0", "-auth", "guess", "-localhost", "-rfbauth", path, "-forever", "-rfbport", vncPort}
-				if err := runtime.RunAsUser(username, "/usr/bin/x11vnc", args, true); err != nil {
-					return err
-				}
-				return nil
-			},
-			StopService: func() error {
-				args := []string{"-R", "stop"}
-				if err := runtime.RunAsUser(username, "/usr/bin/x11vnc", args, true); err != nil {
-					return err
-				}
-				return nil
-			},
-			Configure: func() error {
-				return nil
-			},
-			SavePIN: func(pin string) error {
-				homeDir, uid, gid, err := getUserInfo(username)
-				if err != nil {
-					return err
-				}
-
-				openuemDir := filepath.Join(homeDir, ".openuem")
-				if err := createOpenUEMDir(openuemDir, uid, gid); err != nil {
-					return err
-				}
-
-				path := filepath.Join(openuemDir, "x11vncpasswd")
-
-				if err := os.Remove(path); err != nil {
-					log.Println("[INFO]: could not remove vnc password")
-				}
-
-				if err := runtime.RunAsUser(username, `/usr/bin/x11vnc`, []string{"-storepasswd", pin, path}, false); err != nil {
-					return err
-				}
-
-				log.Println("[INFO]: PIN saved to ", path)
-				return nil
-			},
-			RemovePIN: func() error {
-				homeDir, _, _, err := getUserInfo(username)
-				if err != nil {
-					log.Printf("[ERROR]: could not get user info, reason: %v", err)
-					return err
-				}
-
-				openuemDir := filepath.Join(homeDir, ".openuem")
-				if err := os.RemoveAll(openuemDir); err != nil {
-					log.Println("[ERROR]: could not remove .openuem directory")
-				}
-
-				log.Println("[INFO]: PIN removed from ", openuemDir)
-				return nil
-			},
-		},
-		"GnomeRemoteDesktopRDP": {
-			RequiresVNCProxy: false,
-			StartService: func(vncPort string) error {
-				command := fmt.Sprintf("machinectl shell %s@ /usr/bin/systemctl --user enable --now gnome-remote-desktop.service", username)
+				command := "/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate"
 				cmd := exec.Command("bash", "-c", command)
+				if err := cmd.Run(); err != nil {
+					return err
+				}
+
+				command = "/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -allowAccessFor -allUsers -privs -all"
+				cmd = exec.Command("bash", "-c", command)
+				if err := cmd.Run(); err != nil {
+					return err
+				}
+
+				command = "/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvnclegacy -vnclegacy yes"
+				cmd = exec.Command("bash", "-c", command)
+				if err := cmd.Run(); err != nil {
+					return err
+				}
+
+				command = "/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent -console"
+				cmd = exec.Command("bash", "-c", command)
 				if err := cmd.Run(); err != nil {
 					return err
 				}
 				return nil
 			},
 			StopService: func() error {
-				command := fmt.Sprintf("machinectl shell %s@ /usr/bin/systemctl --user disable --now gnome-remote-desktop.service", username)
+				command := "/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -stop -agent -console"
 				cmd := exec.Command("bash", "-c", command)
 				if err := cmd.Run(); err != nil {
 					return err
 				}
+
+				command = "/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -deactivate"
+				cmd = exec.Command("bash", "-c", command)
+				if err := cmd.Run(); err != nil {
+					return err
+				}
+
 				return nil
 			},
 			Configure: func() error {
-				homeDir, uid, gid, err := getUserInfo(username)
-				if err != nil {
-					return err
-				}
-
-				openuemDir := filepath.Join(homeDir, ".openuem")
-
-				rdpCert := filepath.Join(openuemDir, "rdp-server.cer")
-				rdpKey := filepath.Join(openuemDir, "rdp-server.key")
-
-				if err := createOpenUEMDir(openuemDir, uid, gid); err != nil {
-					return err
-				}
-
-				if err := copyCertFile("/etc/openuem-agent/certificates/server.cer", rdpCert, uid, gid); err != nil {
-					return err
-				}
-
-				err = runtime.RunAsUserWithMachineCtl(username, "/usr/bin/grdctl rdp set-tls-cert "+rdpCert)
-				if err != nil {
-					return errors.New("could not set set-tls-cert")
-				}
-
-				if err := copyCertFile("/etc/openuem-agent/certificates/server.key", rdpKey, uid, gid); err != nil {
-					return err
-				}
-
-				err = runtime.RunAsUserWithMachineCtl(username, "/usr/bin/grdctl rdp set-tls-key "+rdpKey)
-				if err != nil {
-					return errors.New("could not set set-tls-key")
-				}
-
-				err = runtime.RunAsUserWithMachineCtl(username, "/usr/bin/grdctl rdp disable-view-only")
-				if err != nil {
-					return errors.New("could not set disable-view-only")
-				}
-
-				err = runtime.RunAsUserWithMachineCtl(username, "/usr/bin/grdctl rdp enable")
-				if err != nil {
-					return errors.New("could not set enable grd")
-				}
-
 				return nil
 			},
 			RemovePIN: func() error {
-				homeDir, _, _, err := getUserInfo(username)
+				pin, err := openuem_utils.GenerateRandomPIN()
+				command := fmt.Sprintf("/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvncpw -vncpw %s", pin)
+				cmd := exec.Command("bash", "-c", command)
+				if err := cmd.Run(); err != nil {
+					return errors.New("could not save random VNC credentials")
+				}
+
 				if err != nil {
-					log.Printf("[ERROR]: could not get user info, reason: %v", err)
+					log.Printf("[ERROR]: could not generate random PIN, reason: %v\n", err)
 					return err
-				}
-
-				openuemDir := filepath.Join(homeDir, ".openuem")
-				if err := os.RemoveAll(openuemDir); err != nil {
-					log.Println("[ERROR]: could not remove .openuem directory")
-				}
-
-				err = runtime.RunAsUserWithMachineCtl(username, "/usr/bin/grdctl rdp disable")
-				if err != nil {
-					log.Println("[ERROR]: could not disable grdctl")
-				}
-
-				err = runtime.RunAsUserWithMachineCtl(username, "/usr/bin/grdctl rdp enable-view-only")
-				if err != nil {
-					log.Println("[ERROR]: could not set enable-view-only")
-				}
-
-				err = runtime.RunAsUserWithMachineCtl(username, "/usr/bin/grdctl rdp clear-credentials")
-				if err != nil {
-					log.Println("[ERROR]: could not clear password for grd")
 				}
 
 				return nil
 			},
 			SavePIN: func(pin string) error {
-				command := fmt.Sprintf("/usr/bin/grdctl rdp set-credentials openuem %s", pin)
-				err = runtime.RunAsUserWithMachineCtl(username, command)
-				if err != nil {
-					return errors.New("could not set rdp credentials")
+				command := fmt.Sprintf("/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvncpw -vncpw %s", pin)
+				cmd := exec.Command("bash", "-c", command)
+				if err := cmd.Run(); err != nil {
+					return errors.New("could not set VNC credentials")
 				}
 
-				log.Println("[INFO]: gnome remote desktop credentials saved")
+				log.Println("[INFO]: VNC credentials saved")
 				return nil
 			},
 		},
@@ -281,56 +169,12 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 	return &server, nil
 }
 
-func isWaylandDisplayServer() bool {
-	// Get logged in username
-	username, err := runtime.GetLoggedInUser()
-	if err != nil {
-		log.Printf("[ERROR]: could not get logged in Username, reason: %v\n", err)
-		return false
-	}
-
-	_, uid, gid, err := getUserInfo(username)
-	if err != nil {
-		log.Printf("[ERROR]: could not get user info, reason: %v\n", err)
-		return false
-	}
-
-	// Get XAUTHORITY
-	xauthorityEnv, err := runtime.GetXAuthority(uint32(uid), uint32(gid))
-	if err != nil {
-		log.Printf("[ERROR]: could not check if Wayland as I couldn't get XAUTHORITY env, reason: %v\n", err)
-		return false
-	}
-
-	xauthority := strings.TrimPrefix(xauthorityEnv, "XAUTHORITY=")
-	if strings.Contains(xauthority, "wayland") {
-		return true
-	}
-
-	return false
-}
-
 func GetSupportedRemoteDesktop(agentOS string) string {
-	// Check if we're using a Wayland Display Server
-	if isWaylandDisplayServer() {
-		if _, err := os.Stat("/usr/bin/grdctl"); err == nil {
-			return "GnomeRemoteDesktopRDP"
-		}
-		// Wayland requires grdctl for Gnome
-		return ""
-	} else {
-		if _, err := os.Stat("/usr/bin/x11vnc"); err == nil {
-			return "X11VNC"
-		}
-	}
-
-	return ""
+	return "MacOS Remote Management"
 }
 
 func GetAgentOS() string {
-	var si sysinfo.SysInfo
-	si.GetSysInfo()
-	return si.OS.Vendor
+	return "macOS"
 }
 
 func getFirstVNCAvailablePort() string {
@@ -349,10 +193,9 @@ func notifyPINToUser(pin string) error {
 		return err
 	}
 
-	// Reference: https://ubuntuforums.org/showthread.php?t=2348109 for font size
-	// "--icon", "/opt/openuem-agent/bin/icon.png" is not supported by Debian
-	args := []string{"--info", "--title", "OpenUEM Remote Assistance", "--text", fmt.Sprintf("<span foreground='blue' size='xx-large'>PIN: %s</span>", pin), "--width", "300", "--timeout", "30"}
-	if err := runtime.RunAsUser(username, "zenity", args, true); err != nil {
+	// Reference: https://stackoverflow.com/questions/5588064/how-do-i-make-a-mac-terminal-pop-up-alert-applescript
+	args := []string{"-e", fmt.Sprintf(`display alert "OpenUEM Remote Assistance" message "PIN: %s"`, pin)}
+	if err := runtime.RunAsUser(username, "osascript", args, false); err != nil {
 		return err
 	}
 
