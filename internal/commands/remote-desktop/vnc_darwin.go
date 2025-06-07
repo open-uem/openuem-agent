@@ -5,14 +5,8 @@ package remotedesktop
 import (
 	"errors"
 	"fmt"
-	"io"
 	"log"
-	"net"
-	"os"
 	"os/exec"
-	"os/user"
-	"strconv"
-	"time"
 
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 	openuem_utils "github.com/open-uem/utils"
@@ -177,16 +171,6 @@ func GetAgentOS() string {
 	return "macOS"
 }
 
-func getFirstVNCAvailablePort() string {
-	for i := 5900; i < 65535; i++ {
-		_, err := net.DialTimeout("tcp", ":"+strconv.Itoa(i), 5*time.Second)
-		if err != nil {
-			return strconv.Itoa(i)
-		}
-	}
-	return ""
-}
-
 func notifyPINToUser(pin string) error {
 	username, err := runtime.GetLoggedInUser()
 	if err != nil {
@@ -200,78 +184,4 @@ func notifyPINToUser(pin string) error {
 	}
 
 	return nil
-}
-
-func createOpenUEMDir(openuemDir string, uid, gid int) error {
-	if err := os.MkdirAll(openuemDir, 0770); err != nil {
-		log.Printf("[ERROR]: could not create openuem dir for current user, reason: %v", err)
-		return err
-	}
-
-	if err := os.Chmod(openuemDir, 0770); err != nil {
-		return err
-	}
-
-	if err := os.Chown(openuemDir, uid, gid); err != nil {
-		return err
-	}
-	return nil
-}
-
-// "/etc/openuem-agent/certificates/server.cer"
-func copyCertFile(src, dst string, uid, gid int) error {
-	if err := copyFileContents(src, dst); err != nil {
-		return err
-	}
-
-	if err := os.Chmod(dst, 0600); err != nil {
-		return err
-	}
-
-	if err := os.Chown(dst, uid, gid); err != nil {
-		return err
-	}
-	return nil
-}
-
-func copyFileContents(src, dst string) (err error) {
-	in, err := os.Open(src)
-	if err != nil {
-		return
-	}
-	defer in.Close()
-	out, err := os.Create(dst)
-	if err != nil {
-		return
-	}
-	defer func() {
-		cerr := out.Close()
-		if err == nil {
-			err = cerr
-		}
-	}()
-	if _, err = io.Copy(out, in); err != nil {
-		return
-	}
-	err = out.Sync()
-	return
-}
-
-func getUserInfo(username string) (homedir string, uid int, gid int, err error) {
-	u, err := user.Lookup(username)
-	if err != nil {
-		return "", -1, -1, err
-	}
-
-	uid, err = strconv.Atoi(u.Uid)
-	if err != nil {
-		return "", -1, -1, err
-	}
-
-	gid, err = strconv.Atoi(u.Gid)
-	if err != nil {
-		return "", -1, -1, err
-	}
-
-	return u.HomeDir, uid, gid, nil
 }
