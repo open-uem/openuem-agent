@@ -5,7 +5,6 @@ package runtime
 import (
 	"fmt"
 	"log"
-	"os"
 	"os/exec"
 	"os/user"
 	"strconv"
@@ -14,7 +13,11 @@ import (
 )
 
 func RunAsUser(username, cmdPath string, args []string, env bool) error {
-	cmd := exec.Command(cmdPath, args...)
+	sudoArgs := []string{"-u", username}
+	sudoArgs = append(sudoArgs, cmdPath)
+	sudoArgs = append(sudoArgs, args...)
+
+	cmd := exec.Command("sudo", sudoArgs...)
 
 	u, err := user.Lookup(username)
 	if err != nil {
@@ -33,24 +36,6 @@ func RunAsUser(username, cmdPath string, args []string, env bool) error {
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)},
-	}
-
-	// Run command adding env variables
-	if env {
-		// Get DISPLAY environment variable
-		display, err := GetDisplay(uint32(uid), uint32(gid))
-		if err != nil {
-			return err
-		}
-
-		// Get XAUTHORITY environment variable
-		xauthority, err := GetXAuthority(uint32(uid), uint32(gid))
-		if err != nil {
-			return err
-		}
-
-		// Chrome, Firefox in Linux need env variables like USER, DISPLAY, XAUTHORITY...
-		cmd.Env = append(os.Environ(), "USER="+u.Username, "HOME="+u.HomeDir, strings.TrimSpace(display), strings.TrimSpace(xauthority))
 	}
 
 	err = cmd.Run()
