@@ -10,12 +10,14 @@ import (
 	"time"
 
 	"github.com/open-uem/nats"
+	openuem_nats "github.com/open-uem/nats"
 )
 
 func (r *Report) getSystemUpdateInfo() error {
 	r.CheckUpdatesStatus()
 	r.CheckSecurityUpdatesAvailable()
 	r.CheckSecurityUpdatesLastSearch()
+	r.getUpdatesHistory()
 	return nil
 }
 
@@ -91,4 +93,26 @@ func (r *Report) CheckSecurityUpdatesLastSearch() {
 	}
 
 	r.SystemUpdate.LastSearch = lastSearch
+}
+
+func (r *Report) getUpdatesHistory() error {
+	listUpdatesCmd := `softwareupdate --history | grep -v Display | grep -v '\-'`
+	out, err := exec.Command("bash", "-c", listUpdatesCmd).Output()
+	if err != nil {
+		log.Printf("[ERROR]: could not read software update history, reason: %v", err)
+		return err
+	}
+
+	lines := strings.Split(string(out), "\n")
+
+	updates := []openuem_nats.Update{}
+	for _, entry := range lines {
+		update := openuem_nats.Update{
+			Title: strings.Join(strings.Fields(entry), " "),
+		}
+		updates = append(updates, update)
+	}
+	r.Updates = updates
+
+	return nil
 }
