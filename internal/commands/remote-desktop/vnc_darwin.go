@@ -94,11 +94,12 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 					return err
 				}
 
-				command = "/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvnclegacy -vnclegacy yes"
-				cmd = exec.Command("bash", "-c", command)
-				if err := cmd.Run(); err != nil {
-					return err
-				}
+				// This should not work with newer clients
+				// command = "/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvnclegacy -vnclegacy yes"
+				// cmd = exec.Command("bash", "-c", command)
+				// if err := cmd.Run(); err != nil {
+				// 	return err
+				// }
 
 				command = "/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent -console"
 				cmd = exec.Command("bash", "-c", command)
@@ -114,7 +115,7 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 					return err
 				}
 
-				command = "/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -deactivate"
+				command = "/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -deactivate -stop"
 				cmd = exec.Command("bash", "-c", command)
 				if err := cmd.Run(); err != nil {
 					return err
@@ -126,7 +127,11 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 				return nil
 			},
 			RemovePIN: func() error {
-				pin, err := openuem_utils.GenerateRandomPIN()
+				pin, err := openuem_utils.GenerateRandomPIN(8)
+				if err != nil {
+					log.Printf("[ERROR]: could not generate random PIN, reason: %v\n", err)
+					return err
+				}
 				command := fmt.Sprintf("/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvncpw -vncpw %s", pin)
 				cmd := exec.Command("bash", "-c", command)
 				if err := cmd.Run(); err != nil {
