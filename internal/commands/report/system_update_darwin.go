@@ -5,6 +5,7 @@ package report
 import (
 	"log"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -107,10 +108,24 @@ func (r *Report) getUpdatesHistory() error {
 
 	updates := []openuem_nats.Update{}
 	for _, entry := range lines {
-		update := openuem_nats.Update{
-			Title: strings.Join(strings.Fields(entry), " "),
+		if entry != "" {
+			update := openuem_nats.Update{}
+			trimmedSpaces := strings.Join(strings.Fields(entry), " ")
+			reg := regexp.MustCompile(`\d{1,2}/\d{1,2}/\d{4}, \d{2}:\d{2}:\d{2}`)
+			matches := reg.FindAllStringSubmatch(trimmedSpaces, -1)
+			for _, v := range matches {
+				myDate, err := time.Parse("02/01/2006, 15:04:05", v[1])
+				if err != nil {
+					log.Printf("[ERROR]: could not parse the installation date for security update, reason: %v", err)
+					update.Title = trimmedSpaces
+				} else {
+					update.Date = myDate
+					update.Title = strings.TrimSuffix(trimmedSpaces, v[1])
+				}
+				break
+			}
+			updates = append(updates, update)
 		}
-		updates = append(updates, update)
 	}
 	r.Updates = updates
 
