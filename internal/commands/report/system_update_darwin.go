@@ -23,7 +23,7 @@ func (r *Report) getSystemUpdateInfo() error {
 }
 
 func (r *Report) CheckSecurityUpdatesAvailable() {
-	out, err := exec.Command("softwareupdate", "-l").Output()
+	out, err := exec.Command("softwareupdate", "-l").CombinedOutput()
 
 	if err != nil {
 		log.Printf("[ERROR]: could not run softwareupdate -l, reason: %v", err)
