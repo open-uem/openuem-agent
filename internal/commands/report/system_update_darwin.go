@@ -31,18 +31,19 @@ func (r *Report) CheckSecurityUpdatesAvailable() bool {
 }
 
 func (r *Report) CheckUpdatesStatus() {
+	var download, automatic bool
 	automaticDownloadsCmd := `defaults read /Library/Preferences/com.apple.SoftwareUpdate.plist AutomaticDownload`
 	out, err := exec.Command("bash", "-c", automaticDownloadsCmd).Output()
 	if err != nil {
 		log.Printf("[ERROR]: could not read SoftwareUpdate.plist, reason: %v", err)
-		r.SystemUpdate.Status = nats.NOT_CONFIGURED
-		return
-	}
-	downloadsOut := strings.TrimSpace(string(out))
-	download, err := strconv.ParseBool(downloadsOut)
-	if err != nil {
-		r.SystemUpdate.Status = nats.NOT_CONFIGURED
-		return
+		download = true
+	} else {
+		downloadsOut := strings.TrimSpace(string(out))
+		download, err = strconv.ParseBool(downloadsOut)
+		if err != nil {
+			r.SystemUpdate.Status = nats.NOT_CONFIGURED
+			return
+		}
 	}
 
 	if !download {
@@ -55,13 +56,14 @@ func (r *Report) CheckUpdatesStatus() {
 	if err != nil {
 		log.Printf("[ERROR]: could not read SoftwareUpdate.plist, reason: %v", err)
 		r.SystemUpdate.Status = nats.NOTIFY_BEFORE_INSTALLATION
-		return
-	}
-	automaticOut := strings.TrimSpace(string(out))
-	automatic, err := strconv.ParseBool(automaticOut)
-	if err != nil {
-		r.SystemUpdate.Status = nats.NOTIFY_BEFORE_INSTALLATION
-		return
+		automatic = false
+	} else {
+		automaticOut := strings.TrimSpace(string(out))
+		automatic, err = strconv.ParseBool(automaticOut)
+		if err != nil {
+			r.SystemUpdate.Status = nats.NOTIFY_BEFORE_INSTALLATION
+			return
+		}
 	}
 
 	if automatic {
