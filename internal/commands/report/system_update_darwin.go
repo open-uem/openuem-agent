@@ -114,13 +114,18 @@ func (r *Report) getUpdatesHistory() error {
 			reg := regexp.MustCompile(`\d{1,2}/\d{1,2}/\d{4}, \d{2}:\d{2}:\d{2}`)
 			matches := reg.FindAllStringSubmatch(trimmedSpaces, -1)
 			for _, v := range matches {
-				myDate, err := time.Parse("02/01/2006, 15:04:05", v[1])
+				if len(v) != 1 {
+					log.Println("[ERROR]: could not match date regex for security update")
+					update.Title = trimmedSpaces
+					break
+				}
+				myDate, err := time.Parse("01/02/2006, 15:04:05", v[0])
 				if err != nil {
 					log.Printf("[ERROR]: could not parse the installation date for security update, reason: %v", err)
 					update.Title = trimmedSpaces
 				} else {
 					update.Date = myDate
-					update.Title = strings.TrimSuffix(trimmedSpaces, v[1])
+					update.Title = strings.TrimSuffix(trimmedSpaces, v[0])
 				}
 				break
 			}
