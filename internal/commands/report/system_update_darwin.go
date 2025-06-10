@@ -19,15 +19,15 @@ func (r *Report) getSystemUpdateInfo() error {
 	return nil
 }
 
-func (r *Report) CheckSecurityUpdatesAvailable() bool {
+func (r *Report) CheckSecurityUpdatesAvailable() {
 	out, err := exec.Command("softwareupdate", "-l").Output()
 
 	if err != nil {
 		log.Printf("[ERROR]: could not run softwareupdate -l, reason: %v", err)
-		return false
+		return
 	}
 
-	return !strings.Contains(string(out), "No new software available")
+	r.SystemUpdate.PendingUpdates = !strings.Contains(string(out), "No new software available")
 }
 
 func (r *Report) CheckUpdatesStatus() {
