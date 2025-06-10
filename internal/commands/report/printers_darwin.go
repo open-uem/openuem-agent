@@ -35,11 +35,12 @@ func (r *Report) getPrintersFromMac() error {
 		return err
 	}
 
-	if strings.Contains(string(out), "empty") {
+	if strings.Contains(string(out), "empty") || strings.Contains(string(out), "no_info_found") {
 		return nil
 	}
 
 	if err := json.Unmarshal(out, &printerData); err != nil {
+		log.Printf("[ERROR]: could not unmarshal printers information: %s", out)
 		return err
 	}
 
