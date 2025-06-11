@@ -80,6 +80,8 @@ github.com/open-uem/utils v0.0.0-20250610102950-f4ab13bbb809 h1:7F7AY8dKS2Ke0Zlx
 github.com/open-uem/utils v0.0.0-20250610102950-f4ab13bbb809/go.mod h1:nPL4xlsiCPyUiF8ntnyrlyz+pVjizIC+N5+TOvj3TLc=
 github.com/open-uem/utils v0.0.0-20250610103233-92d3a95ff479 h1:HLc3jlPY5uy3EiacfQvzk2bTDIfgdkpVNZpcZdmWG1E=
 github.com/open-uem/utils v0.0.0-20250610103233-92d3a95ff479/go.mod h1:nPL4xlsiCPyUiF8ntnyrlyz+pVjizIC+N5+TOvj3TLc=
+github.com/open-uem/utils v0.0.0-20250611060546-cab35b3801b9 h1:u54f6Oq97w7FDHl9oOWKe97TRddxhfqrAPCdXRwiF2A=
+github.com/open-uem/utils v0.0.0-20250611060546-cab35b3801b9/go.mod h1:nPL4xlsiCPyUiF8ntnyrlyz+pVjizIC+N5+TOvj3TLc=
 github.com/open-uem/wingetcfg v0.0.0-20250317160420-5c7e4c410be1 h1:OwLny9z8SqKVqPMVoJCMftGPB9A7T96W/5o70Yhanus=
 github.com/open-uem/wingetcfg v0.0.0-20250317160420-5c7e4c410be1/go.mod h1:dXSggJ7Na4J4WTII2YmxKmlpwlHzMjuHUrBJkn1/DrU=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
