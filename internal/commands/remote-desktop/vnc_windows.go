@@ -68,7 +68,7 @@ func (rd *RemoteDesktopService) Stop() {
 	}
 
 	// Create new random PIN
-	pin, err := openuem_utils.GenerateRandomPIN()
+	pin, err := openuem_utils.GenerateRandomPIN(6)
 	if err != nil {
 		log.Printf("[ERROR]: could not generate random PIN, reason: %v\n", err)
 		return

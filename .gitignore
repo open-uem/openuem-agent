@@ -8,3 +8,5 @@ agent-test
 pending_acks.json
 openuem-messenger
 pin.templ
+openuem-agent
+badgerdb

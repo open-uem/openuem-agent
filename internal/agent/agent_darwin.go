@@ -1,4 +1,4 @@
-//go:build linux
+//go:build darwin
 
 package agent
 
@@ -253,11 +253,11 @@ func (a *Agent) PowerOffSubscribe() error {
 
 		when := int(time.Until(action.Date).Minutes())
 		if when > 0 {
-			if err := exec.Command("shutdown", "-P", strconv.Itoa(when)).Run(); err != nil {
+			if err := exec.Command("shutdown", "-p", strconv.Itoa(when)).Run(); err != nil {
 				log.Printf("[ERROR]: could not initiate power off, reason: %v", err)
 			}
 		} else {
-			if err := exec.Command("shutdown", "-P", "now").Run(); err != nil {
+			if err := exec.Command("shutdown", "-p", "now").Run(); err != nil {
 				log.Printf("[ERROR]: could not initiate shutdown, reason: %v", err)
 			}
 		}
