@@ -32,6 +32,10 @@ type dfInfo struct {
 }
 
 func (r *Report) getLogicalDisksFromMacOS(debug bool) error {
+	if debug {
+		log.Println("[DEBUG]: logical disks info has been requested")
+	}
+
 	diskUsage := make(map[string]dfInfo)
 
 	// let's execute mount to find current df usage
