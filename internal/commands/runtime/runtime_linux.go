@@ -37,24 +37,28 @@ func RunAsUser(username, cmdPath string, args []string, env bool) error {
 
 	// Run command adding env variables
 	if env {
+		cmd.Env = append(os.Environ(), "USER="+u.Username, "HOME="+u.HomeDir)
+
+		// Chrome, Firefox in Linux need env variables like USER, DISPLAY, XAUTHORITY...
+
 		// Get DISPLAY environment variable
 		display, err := GetDisplay(uint32(uid), uint32(gid))
-		if err != nil {
-			return err
+		if err == nil {
+			cmd.Env = append(cmd.Env, strings.TrimSpace(display))
 		}
 
 		// Get XAUTHORITY environment variable
 		xauthority, err := GetXAuthority(uint32(uid), uint32(gid))
-		if err != nil {
-			return err
+		if err == nil {
+			cmd.Env = append(cmd.Env, strings.TrimSpace(xauthority))
 		}
 
-		// Chrome, Firefox in Linux need env variables like USER, DISPLAY, XAUTHORITY...
 		cmd.Env = append(os.Environ(), "USER="+u.Username, "HOME="+u.HomeDir, strings.TrimSpace(display), strings.TrimSpace(xauthority))
 	}
 
-	err = cmd.Run()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
+		log.Printf("[ERROR]: run as user %s found an err with this combined output: %s", username, string(out))
 		return err
 	}
 
@@ -133,7 +137,7 @@ func GetDisplay(uid, gid uint32) (string, error) {
 		log.Println("[ERROR]: could not execute bash script to get Display")
 		return "", err
 	}
-	xauthority := string(envOut)
+	display := string(envOut)
 
-	return xauthority, nil
+	return display, nil
 }
