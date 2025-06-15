@@ -49,7 +49,11 @@ func (r *Report) getComputerSystemInfo() error {
 	r.Computer.Memory = getMacOSMemory(hw.PhysicalMemory)
 	r.Computer.Processor = hw.CPUType
 	r.Computer.ProcessorArch = getMacOSArch()
-	r.Computer.ProcessorCores = int64(hw.NumProcessors)
+	numProcessors, err := strconv.Atoi(hw.NumProcessors)
+	if err != nil {
+		r.Computer.ProcessorCores = int64(numProcessors)
+	}
+
 	r.Computer.Serial = hw.SerialNumber
 	return nil
 }
@@ -87,7 +91,7 @@ type HardwareDataType struct {
 	L3Cache               string `json:"l3_cache"`
 	MachineModel          string `json:"machine_model"`
 	MachineName           string `json:"machine_name"`
-	NumProcessors         int    `json:"number_processors"`
+	NumProcessors         string `json:"number_processors"`
 	OSLoaderVersion       string `json:"os_loader_version"`
 	Packages              int    `json:"packages"`
 	PhysicalMemory        string `json:"physical_memory"`
