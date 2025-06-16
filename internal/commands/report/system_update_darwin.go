@@ -38,7 +38,7 @@ func (r *Report) CheckUpdatesStatus() {
 	automaticDownloadsCmd := `defaults read /Library/Preferences/com.apple.SoftwareUpdate.plist AutomaticDownload`
 	out, err := exec.Command("bash", "-c", automaticDownloadsCmd).Output()
 	if err != nil {
-		log.Printf("[ERROR]: could not read SoftwareUpdate.plist, reason: %v", err)
+		log.Printf("[ERROR]: could not read AutomaticDownload from SoftwareUpdate.plist, reason: %v", err)
 		download = true
 	} else {
 		downloadsOut := strings.TrimSpace(string(out))
@@ -57,7 +57,7 @@ func (r *Report) CheckUpdatesStatus() {
 	automaticInstallCmd := `defaults read /Library/Preferences/com.apple.SoftwareUpdate.plist AutomaticallyInstallMacOSUpdates`
 	out, err = exec.Command("bash", "-c", automaticInstallCmd).Output()
 	if err != nil {
-		log.Printf("[ERROR]: could not read SoftwareUpdate.plist, reason: %v", err)
+		log.Printf("[ERROR]: could not read AutomaticallyInstallMacOSUpdates from SoftwareUpdate.plist, reason: %v", err)
 		r.SystemUpdate.Status = nats.NOTIFY_BEFORE_INSTALLATION
 		automatic = false
 	} else {
@@ -82,7 +82,7 @@ func (r *Report) CheckSecurityUpdatesLastSearch() {
 	lastSearchCmd := `defaults read /Library/Preferences/com.apple.SoftwareUpdate.plist LastSuccessfulDate`
 	out, err := exec.Command("bash", "-c", lastSearchCmd).Output()
 	if err != nil {
-		log.Printf("[ERROR]: could not read SoftwareUpdate.plist, reason: %v", err)
+		log.Printf("[ERROR]: could not read LastSuccessfulDate from SoftwareUpdate.plist, reason: %v", err)
 		return
 	}
 
