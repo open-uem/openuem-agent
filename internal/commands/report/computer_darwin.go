@@ -82,6 +82,9 @@ func (r *Report) getComputerSystemInfo2() error {
 	}
 	r.Computer.Memory = getMacOSMemory(hw.PhysicalMemory)
 	r.Computer.Processor = hw.CPUType
+	if hw.CPUType == "" {
+		r.Computer.Processor = hw.ChipType
+	}
 	r.Computer.ProcessorArch = getMacOSArch()
 	numProcessors, err := strconv.Atoi(hw.NumProcessors)
 	if err != nil {
@@ -124,6 +127,7 @@ type HardwareDataType1 struct {
 	Name                  string `json:"_name"`
 	BootROMVersion        string `json:"boot_rom_version"`
 	CPUType               string `json:"cpu_type"`
+	ChipType              string `json:"chip_type"`
 	CurrentProcessorSpeed string `json:"current_processor_speed"`
 	L2CacheCore           string `json:"l2_cache_core"`
 	L3Cache               string `json:"l3_cache"`
@@ -142,6 +146,7 @@ type HardwareDataType2 struct {
 	Name                  string `json:"_name"`
 	BootROMVersion        string `json:"boot_rom_version"`
 	CPUType               string `json:"cpu_type"`
+	ChipType              string `json:"chip_type"`
 	CurrentProcessorSpeed string `json:"current_processor_speed"`
 	L2CacheCore           string `json:"l2_cache_core"`
 	L3Cache               string `json:"l3_cache"`
