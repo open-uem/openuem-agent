@@ -166,3 +166,25 @@ func RemovePackagesFromCfg(cfg *wingetcfg.WinGetCfg, exclusions []string) error 
 
 	return nil
 }
+
+func RemovePowershellScriptsFromCfg(cfg *wingetcfg.WinGetCfg) map[string]string {
+	scripts := map[string]string{}
+	validResources := []*wingetcfg.WinGetResource{}
+	for _, r := range cfg.Properties.Resources {
+		if r.Resource == wingetcfg.OpenUEMPowershell {
+			script, ok := r.Settings["Script"]
+			if ok {
+				name, ok := r.Settings["Name"]
+				if ok {
+					scripts[name.(string)] = script.(string)
+				}
+			}
+		} else {
+			validResources = append(validResources, r)
+		}
+	}
+
+	cfg.Properties.Resources = validResources
+
+	return scripts
+}
