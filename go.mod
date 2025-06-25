@@ -3,31 +3,31 @@ module github.com/open-uem/openuem-agent
 go 1.24.4
 
 require (
-	github.com/ceshihao/windowsupdate v0.0.4
+	github.com/ceshihao/windowsupdate v0.0.5
 	github.com/go-ole/go-ole v1.3.0
 	github.com/yusufpapurcu/wmi v1.2.4
-	golang.org/x/sys v0.32.0
+	golang.org/x/sys v0.33.0
 )
 
 require (
-	github.com/dgraph-io/badger/v4 v4.6.0
+	github.com/dgraph-io/badger/v4 v4.7.0
 	github.com/doncicuto/comshim v0.0.0-20241121153341-765e348cbb6f
 	github.com/evangwt/go-vncproxy v1.1.0
 	github.com/gliderlabs/ssh v0.3.8
-	github.com/go-co-op/gocron/v2 v2.16.1
+	github.com/go-co-op/gocron/v2 v2.16.2
 	github.com/google/uuid v1.6.0
-	github.com/labstack/echo/v4 v4.13.3
+	github.com/labstack/echo/v4 v4.13.4
 	github.com/moby/sys/mountinfo v0.7.2
-	github.com/nats-io/nats.go v1.41.2
+	github.com/nats-io/nats.go v1.43.0
 	github.com/open-uem/nats v0.0.0-20250514125548-3bae96c53080
 	github.com/open-uem/utils v0.0.0-20250611060546-cab35b3801b9
-	github.com/open-uem/wingetcfg v0.0.0-20250317160420-5c7e4c410be1
+	github.com/open-uem/wingetcfg v0.0.0-20250625081220-c2cbe77dc3ed
 	github.com/pkg/sftp v1.13.9
-	github.com/safchain/ethtool v0.5.10
+	github.com/safchain/ethtool v0.6.1
 	github.com/zcalusic/sysinfo v1.1.3
-	golang.org/x/crypto v0.37.0
-	golang.org/x/mod v0.24.0
-	golang.org/x/net v0.39.0
+	golang.org/x/crypto v0.39.0
+	golang.org/x/mod v0.25.0
+	golang.org/x/net v0.41.0
 	gopkg.in/ini.v1 v1.67.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -39,7 +39,7 @@ require (
 	github.com/dgraph-io/ristretto/v2 v2.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/evangwt/go-bufcopy v0.1.1 // indirect
-	github.com/go-logr/logr v1.4.2 // indirect
+	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
@@ -55,9 +55,9 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
-	go.opentelemetry.io/otel v1.35.0 // indirect
-	go.opentelemetry.io/otel/metric v1.35.0 // indirect
-	go.opentelemetry.io/otel/trace v1.35.0 // indirect
-	golang.org/x/text v0.24.0 // indirect
+	go.opentelemetry.io/otel v1.37.0 // indirect
+	go.opentelemetry.io/otel/metric v1.37.0 // indirect
+	go.opentelemetry.io/otel/trace v1.37.0 // indirect
+	golang.org/x/text v0.26.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 )

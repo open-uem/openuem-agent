@@ -475,6 +475,20 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 		log.Printf("[DEBUG]: config after removing exclusions: +%v", cfg)
 	}
 
+	errData := ""
+
+	// Remove openuem powershell config and execute them
+	scripts := deploy.RemovePowershellScriptsFromCfg(&cfg)
+	for name, script := range scripts {
+		if err := a.ExecutePowerShellScript(powershellPath, script); err != nil {
+			if errData != "" {
+				errData += ", " + name + ": " + err.Error()
+			} else {
+				errData = name + ": " + err.Error()
+			}
+		}
+	}
+
 	// Run configuration
 	scriptPath := filepath.Join(cwd, "powershell", "configure.ps1")
 	configPath := filepath.Join(cwd, "powershell", fmt.Sprintf("openuem.%s.winget", uuid.New()))
@@ -500,20 +514,23 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 	cmd := exec.Command(powershellPath, scriptPath, configPath)
 
 	executeErr := cmd.Run()
-	errData := ""
 	if executeErr != nil {
 		log.Println("[ERROR]: configuration profile could not be applied")
 		data, err := os.ReadFile("C:\\Program Files\\OpenUEM Agent\\logs\\wingetcfg.txt")
 		if err != nil {
 			log.Println("[ERROR]: could not read wingetcfg.txt log")
 		}
-		errData = string(data)
+		if errData != "" {
+			errData = ", " + string(data)
+		} else {
+			errData = string(data)
+		}
 	} else {
 		log.Println("[INFO]: winget configuration have finished successfully")
 	}
 
 	// Report if application was successful or not
-	if err := a.SendWinGetCfgProfileApplicationReport(profileID, a.Config.UUID, executeErr == nil, errData); err != nil {
+	if err := a.SendWinGetCfgProfileApplicationReport(profileID, a.Config.UUID, executeErr == nil && errData == "", errData); err != nil {
 		log.Println("[ERROR]: could not report if application was applied succesfully or no")
 	}
 
@@ -753,4 +770,44 @@ func (a *Agent) GetServerCertificate() {
 	} else {
 		a.ServerKeyPath = serverKeyPath
 	}
+}
+
+func (a *Agent) ExecutePowerShellScript(powershellPath string, script string) error {
+	if script != "" {
+		file, err := os.CreateTemp(os.TempDir(), "*.ps1")
+		if err != nil {
+			fmt.Printf("[ERROR]: could not create temp ps1 file, reason: %v", err)
+			return errors.New("could not create temp ps1 file")
+		} else {
+			defer func() {
+				if err := file.Close(); err != nil {
+					fmt.Printf("[ERROR]: could not close the file, maybe it was closed earlier, reason: %v", err)
+				}
+			}()
+			if _, err := file.Write([]byte(script)); err != nil {
+				fmt.Printf("[ERROR]: could not execute write on temp ps1 file, reason: %v", err)
+				return errors.New("could not execute write on temp ps1 file")
+			}
+			if err := file.Close(); err != nil {
+				fmt.Printf("[ERROR]: could not close temp ps1 file, reason: %v", err)
+				return errors.New("could not close temp ps1 file")
+			}
+
+			if out, err := exec.Command(powershellPath, "-File", file.Name()).CombinedOutput(); err != nil {
+				fmt.Printf("[ERROR]: could not execute powershell script, reason: %v, %s", err, string(out))
+				return errors.New("could not execute powershell script")
+			}
+			if a.Config.Debug {
+				log.Println("[DEBUG]: a script should have run:", powershellPath, "-File", file.Name())
+			} else {
+				log.Println("[INFO]: a powershell script has been executed due to a configuration profile")
+			}
+
+			if err := os.Remove(file.Name()); err != nil {
+				fmt.Printf("[ERROR]: could not remove temp ps1 file, reason: %v", err)
+			}
+		}
+	}
+
+	return nil
 }
