@@ -74,6 +74,10 @@ github.com/open-uem/utils v0.0.0-20250611060546-cab35b3801b9 h1:u54f6Oq97w7FDHl9
 github.com/open-uem/utils v0.0.0-20250611060546-cab35b3801b9/go.mod h1:nPL4xlsiCPyUiF8ntnyrlyz+pVjizIC+N5+TOvj3TLc=
 github.com/open-uem/wingetcfg v0.0.0-20250625081220-c2cbe77dc3ed h1:KY37O92PlXF1sw+hEkd0flMNvQVM9TSVDlwydc8Hl0w=
 github.com/open-uem/wingetcfg v0.0.0-20250625081220-c2cbe77dc3ed/go.mod h1:b2rmcb7kD/AODHdvHGZ8TpzhX4qrkdDPrEGM5FmOBxQ=
+github.com/open-uem/wingetcfg v0.0.0-20250625104344-375d1fbe8e6a h1:R6vpzlGNsozLmOBlLizKTXdiD0zAKy0z9psxnGPjPGA=
+github.com/open-uem/wingetcfg v0.0.0-20250625104344-375d1fbe8e6a/go.mod h1:b2rmcb7kD/AODHdvHGZ8TpzhX4qrkdDPrEGM5FmOBxQ=
+github.com/open-uem/wingetcfg v0.0.0-20250625110454-5d9433af7cf3 h1:vjCfQw884vSM8Roxpm0mqMrefolE4Hd2jIvi99MBo+E=
+github.com/open-uem/wingetcfg v0.0.0-20250625110454-5d9433af7cf3/go.mod h1:b2rmcb7kD/AODHdvHGZ8TpzhX4qrkdDPrEGM5FmOBxQ=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/sftp v1.13.9 h1:4NGkvGudBL7GteO3m6qnaQ4pC0Kvf0onSVc9gR3EWBw=

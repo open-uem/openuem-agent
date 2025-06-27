@@ -167,8 +167,14 @@ func RemovePackagesFromCfg(cfg *wingetcfg.WinGetCfg, exclusions []string) error 
 	return nil
 }
 
-func RemovePowershellScriptsFromCfg(cfg *wingetcfg.WinGetCfg) map[string]string {
-	scripts := map[string]string{}
+type PowerShellTask struct {
+	ID        string
+	Script    string
+	RunConfig string
+}
+
+func RemovePowershellScriptsFromCfg(cfg *wingetcfg.WinGetCfg) map[string]PowerShellTask {
+	scripts := map[string]PowerShellTask{}
 	validResources := []*wingetcfg.WinGetResource{}
 	for _, r := range cfg.Properties.Resources {
 		if r.Resource == wingetcfg.OpenUEMPowershell {
@@ -176,7 +182,24 @@ func RemovePowershellScriptsFromCfg(cfg *wingetcfg.WinGetCfg) map[string]string 
 			if ok {
 				name, ok := r.Settings["Name"]
 				if ok {
-					scripts[name.(string)] = script.(string)
+					id, ok := r.Settings["ID"]
+					if ok {
+						scriptRun, ok := r.Settings["ScriptRun"]
+						if ok {
+							scripts[name.(string)] = PowerShellTask{
+								Script:    script.(string),
+								RunConfig: scriptRun.(string),
+								ID:        id.(string),
+							}
+						} else {
+							scripts[name.(string)] = PowerShellTask{
+								Script:    script.(string),
+								RunConfig: "once",
+								ID:        id.(string),
+							}
+						}
+					}
+
 				}
 			}
 		} else {

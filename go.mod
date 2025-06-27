@@ -21,7 +21,7 @@ require (
 	github.com/nats-io/nats.go v1.43.0
 	github.com/open-uem/nats v0.0.0-20250514125548-3bae96c53080
 	github.com/open-uem/utils v0.0.0-20250611060546-cab35b3801b9
-	github.com/open-uem/wingetcfg v0.0.0-20250625081220-c2cbe77dc3ed
+	github.com/open-uem/wingetcfg v0.0.0-20250625110454-5d9433af7cf3
 	github.com/pkg/sftp v1.13.9
 	github.com/safchain/ethtool v0.6.1
 	github.com/zcalusic/sysinfo v1.1.3
