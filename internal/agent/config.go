@@ -33,6 +33,7 @@ type Config struct {
 	RemoteAssistanceDisabled bool
 	SiteID                   string
 	TenantID                 string
+	ScriptsRun               string
 }
 
 func (a *Agent) ReadConfig() error {
@@ -248,6 +249,11 @@ func (a *Agent) ReadConfig() error {
 		a.Config.SiteID = key.String()
 	}
 
+	key, err = cfg.Section("Agent").GetKey("ScriptsRun")
+	if err == nil {
+		a.Config.ScriptsRun = key.String()
+	}
+
 	log.Println("[INFO]: agent has read its settings from the INI file")
 	return nil
 }
@@ -272,6 +278,7 @@ func (c *Config) WriteConfig() error {
 	cfg.Section("Agent").Key("VNCProxyPort").SetValue(c.VNCProxyPort)
 	cfg.Section("Agent").Key("SFTPDisabled").SetValue(strconv.FormatBool(c.SFTPDisabled))
 	cfg.Section("Agent").Key("RemoteAssistanceDisabled").SetValue(strconv.FormatBool(c.RemoteAssistanceDisabled))
+	cfg.Section("Agent").Key("ScriptsRun").SetValue(c.ScriptsRun)
 
 	if err := cfg.SaveTo(configFile); err != nil {
 		log.Fatalf("[FATAL]: could not save config file, reason: %v", err)

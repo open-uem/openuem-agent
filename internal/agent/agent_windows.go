@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -479,12 +480,50 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 
 	// Remove openuem powershell config and execute them
 	scripts := deploy.RemovePowershellScriptsFromCfg(&cfg)
-	for name, script := range scripts {
-		if err := a.ExecutePowerShellScript(powershellPath, script); err != nil {
+	for name, taskConfig := range scripts {
+		if err := a.ReadConfig(); err != nil {
+			log.Printf("[ERROR]: could not read ScriptsRun from agent config")
 			if errData != "" {
 				errData += ", " + name + ": " + err.Error()
 			} else {
 				errData = name + ": " + err.Error()
+			}
+			continue
+		}
+
+		if taskConfig.RunConfig == "once" {
+			scriptsRun := strings.Split(a.Config.ScriptsRun, ",")
+			if !slices.Contains(scriptsRun, taskConfig.ID) {
+				if err := a.ExecutePowerShellScript(powershellPath, taskConfig.Script); err != nil {
+					if errData != "" {
+						errData += ", " + name + ": " + err.Error()
+					} else {
+						errData = name + ": " + err.Error()
+					}
+				}
+				// Save data in agent config
+				tasksRun := strings.Split(a.Config.ScriptsRun, ",")
+				tasksRun = append(tasksRun, taskConfig.ID)
+				a.Config.ScriptsRun = strings.Join(tasksRun, ",")
+				if err := a.Config.WriteConfig(); err != nil {
+					log.Printf("[ERROR]: could not write ScriptsRun to agent config")
+					if errData != "" {
+						errData += ", " + name + ": " + err.Error()
+					} else {
+						errData = name + ": " + err.Error()
+					}
+				}
+			} else {
+				log.Printf("[INFO]: powershell execution task %s has already run once", name)
+			}
+
+		} else {
+			if err := a.ExecutePowerShellScript(powershellPath, taskConfig.Script); err != nil {
+				if errData != "" {
+					errData += ", " + name + ": " + err.Error()
+				} else {
+					errData = name + ": " + err.Error()
+				}
 			}
 		}
 	}
