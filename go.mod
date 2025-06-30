@@ -10,6 +10,7 @@ require (
 )
 
 require (
+	github.com/apenella/go-ansible/v2 v2.2.0
 	github.com/dgraph-io/badger/v4 v4.7.0
 	github.com/doncicuto/comshim v0.0.0-20241121153341-765e348cbb6f
 	github.com/evangwt/go-vncproxy v1.1.0
@@ -19,7 +20,8 @@ require (
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/nats-io/nats.go v1.43.0
-	github.com/open-uem/nats v0.0.0-20250514125548-3bae96c53080
+	github.com/open-uem/nats v0.0.0-20250630060536-99ac24ef63c9
+	github.com/open-uem/openuem-ansible-config v0.0.0-20250630085057-8eeaefd54087
 	github.com/open-uem/utils v0.0.0-20250611060546-cab35b3801b9
 	github.com/open-uem/wingetcfg v0.0.0-20250625110454-5d9433af7cf3
 	github.com/pkg/sftp v1.13.9
@@ -34,8 +36,11 @@ require (
 
 require (
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
+	github.com/apenella/go-common-utils/data v0.0.0-20220913191136-86daaa87e7df // indirect
+	github.com/apenella/go-common-utils/error v0.0.0-20220913191136-86daaa87e7df // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/danieljoos/wincred v1.2.2 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgraph-io/ristretto/v2 v2.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/evangwt/go-bufcopy v0.1.1 // indirect
@@ -51,7 +56,10 @@ require (
 	github.com/nats-io/nkeys v0.4.11 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
+	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
@@ -60,4 +68,5 @@ require (
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
