@@ -3,9 +3,13 @@
 package agent
 
 import (
+	"bytes"
+	"context"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -14,6 +18,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/apenella/go-ansible/v2/pkg/execute"
+	"github.com/apenella/go-ansible/v2/pkg/execute/measure"
+	results "github.com/apenella/go-ansible/v2/pkg/execute/result/json"
+	"github.com/apenella/go-ansible/v2/pkg/execute/stdoutcallback"
+	"github.com/apenella/go-ansible/v2/pkg/playbook"
 	"github.com/dgraph-io/badger/v4"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/nats-io/nats.go"
@@ -21,7 +30,9 @@ import (
 	openuem_nats "github.com/open-uem/nats"
 	rd "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
+	ansiblecfg "github.com/open-uem/openuem-ansible-config/ansible"
 	openuem_utils "github.com/open-uem/utils"
+	"gopkg.in/yaml.v3"
 )
 
 func (a *Agent) Start() {
@@ -126,6 +137,7 @@ func (a *Agent) Start() {
 
 	// Start other jobs associated
 	a.startPendingACKJob()
+	a.startCheckForAnsibleProfilesJob()
 }
 
 func (a *Agent) startNATSConnectJob() error {
@@ -152,6 +164,7 @@ func (a *Agent) startNATSConnectJob() error {
 				a.SubscribeToNATSSubjects()
 				a.startReportJob()
 				a.startPendingACKJob()
+				a.startCheckForAnsibleProfilesJob()
 
 				// Get remote config
 				if err := a.GetRemoteConfig(); err != nil {
@@ -269,6 +282,11 @@ func (a *Agent) PowerOffSubscribe() error {
 	return nil
 }
 
+func (a *Agent) RescheduleAnsibleConfigureTask() {
+	a.TaskScheduler.RemoveJob(a.WingetConfigureJob.ID())
+	a.startCheckForAnsibleProfilesJob()
+}
+
 func (a *Agent) NewConfigSubscribe() error {
 	_, err := a.NATSConnection.Subscribe("agent.newconfig", func(msg *nats.Msg) {
 
@@ -287,6 +305,12 @@ func (a *Agent) NewConfigSubscribe() error {
 		if a.Config.ExecuteTaskEveryXMinutes != SCHEDULETIME_5MIN {
 			a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
 			a.RescheduleReportRunTask()
+		}
+
+		// Should we re-schedule winget configure task?
+		if config.WinGetFrequency != 0 {
+			a.Config.WingetConfigureFrequency = config.WinGetFrequency
+			a.RescheduleAnsibleConfigureTask()
 		}
 
 		if err := a.Config.WriteConfig(); err != nil {
@@ -393,4 +417,195 @@ func (a *Agent) GetServerCertificate() {
 	} else {
 		a.ServerKeyPath = serverKeyPath
 	}
+}
+
+func (a *Agent) startCheckForAnsibleProfilesJob() error {
+	var err error
+	// Create task for running the agent
+
+	if a.Config.WingetConfigureFrequency == 0 {
+		a.Config.WingetConfigureFrequency = SCHEDULETIME_30MIN
+	}
+
+	a.WingetConfigureJob, err = a.TaskScheduler.NewJob(
+		gocron.DurationJob(
+			time.Duration(a.Config.WingetConfigureFrequency)*time.Minute,
+		),
+		gocron.NewTask(a.GetUnixConfigureProfiles),
+	)
+	if err != nil {
+		log.Fatalf("[FATAL]: could not start the check for Ansible profiles job, reason: %v", err)
+		return err
+	}
+	log.Printf("[INFO]: new check for Ansible profiles job has been scheduled every %d minutes", a.Config.WingetConfigureFrequency)
+	return nil
+}
+
+func (a *Agent) GetUnixConfigureProfiles() {
+	if a.Config.Debug {
+		log.Println("[DEBUG]: running task Ansible profiles job")
+	}
+
+	profiles := []ProfileConfig{}
+
+	profileRequest := openuem_nats.CfgProfiles{
+		AgentID: a.Config.UUID,
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: going to send a ansible.profile request")
+	}
+
+	data, err := json.Marshal(profileRequest)
+	if err != nil {
+		log.Printf("[ERROR]: could not marshal profile request, reason: %v", err)
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: ansiblecfg.profile sending request")
+	}
+
+	msg, err := a.NATSConnection.Request("ansiblecfg.profiles", data, 5*time.Minute)
+	if err != nil {
+		log.Printf("[ERROR]: could not send request to agent worker, reason: %v", err)
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: ansiblecfg.profile request sent")
+		if msg.Data != nil {
+			log.Println("[DEBUG]: received ansiblecfg.profile response")
+		}
+	}
+
+	if err := yaml.Unmarshal(msg.Data, &profiles); err != nil {
+		log.Printf("[ERROR]: could not unmarshal profiles response from agent worker, reason: %v", err)
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: ansiblecfg.profile response unmarshalled")
+	}
+
+	for _, p := range profiles {
+		if a.Config.Debug {
+			log.Println("[DEBUG]: ansiblecfg.profile to be unmarshalled")
+		}
+
+		cfg, err := yaml.Marshal(p.AnsibleConfig)
+		if err != nil {
+			log.Printf("[ERROR]: could not marshal YAML file with Ansible configuration, reason: %v", err)
+			continue
+		}
+
+		if a.Config.Debug {
+			log.Println("[DEBUG]: we're going to apply the configuration")
+		}
+
+		if err := a.ApplyConfiguration(p.ProfileID, cfg); err != nil {
+			// TODO inform that this profile has an error to agent worker
+			log.Printf("[ERROR]: could not apply YAML configuration file with Ansible, reason: %v", err)
+			continue
+		}
+	}
+}
+
+func (a *Agent) ApplyConfiguration(profileID int, config []byte) error {
+	var cfg []ansiblecfg.AnsiblePlaybook
+
+	if err := yaml.Unmarshal(config, &cfg); err != nil {
+		log.Printf("[ERROR]: could not unmarshall Ansible playbook folder %v", err)
+		return err
+	}
+
+	ansibleFolder, err := CreatePlaybooksFolder()
+	if err != nil {
+		log.Printf("[ERROR]: could not create playbooks folder %v", err)
+		return err
+	}
+
+	pbFile, err := os.CreateTemp(ansibleFolder, "*.yml")
+	if err != nil {
+		log.Printf("[ERROR]: could not create playbook file %v", err)
+		return err
+	}
+
+	_, err = pbFile.WriteString("---\n\n")
+	if err != nil {
+		log.Printf("[ERROR]: could not write start of playbook to file %v", err)
+		return err
+	}
+
+	_, err = pbFile.Write(config)
+	if err != nil {
+		log.Printf("[ERROR]: could not write playbook file %v", err)
+		return err
+	}
+
+	if err := pbFile.Close(); err != nil {
+		log.Printf("[ERROR]: could not close playbook file %v", err)
+		return err
+	}
+
+	defer func() {
+		if err := os.Remove(pbFile.Name()); err != nil {
+			log.Printf("[ERROR]: could not delete playbook file %v", err)
+		}
+	}()
+
+	log.Println("[INFO]: received a request to apply a configuration profile")
+
+	errData := ""
+	buff := new(bytes.Buffer)
+
+	ansiblePlaybookOptions := &playbook.AnsiblePlaybookOptions{
+		Connection: "local",
+		Inventory:  "127.0.0.1,",
+	}
+
+	playbookCmd := playbook.NewAnsiblePlaybookCmd(
+		playbook.WithPlaybooks(pbFile.Name()),
+		playbook.WithPlaybookOptions(ansiblePlaybookOptions),
+	)
+
+	exec := measure.NewExecutorTimeMeasurement(
+		stdoutcallback.NewJSONStdoutCallbackExecute(
+			execute.NewDefaultExecute(
+				execute.WithCmd(playbookCmd),
+				execute.WithErrorEnrich(playbook.NewAnsiblePlaybookErrorEnrich()),
+				execute.WithWrite(io.Writer(buff)),
+			),
+		),
+	)
+
+	err = exec.Execute(context.TODO())
+	if err != nil {
+		res, err := results.ParseJSONResultsStream(io.Reader(buff))
+		if err != nil {
+			errData = err.Error()
+		} else {
+			errData = res.String()
+		}
+	} else {
+		log.Println("[INFO]: ansible configuration has finished successfully")
+	}
+
+	// Report if application was successful or not
+	if err := a.SendWinGetCfgProfileApplicationReport(profileID, a.Config.UUID, errData == "", errData); err != nil {
+		log.Println("[ERROR]: could not report if profile was applied succesfully or no")
+	}
+
+	if err != nil {
+		return errors.New(errData)
+	}
+	return nil
+}
+
+func CreatePlaybooksFolder() (string, error) {
+	cwd, err := Getwd()
+	if err != nil {
+		log.Println("[ERROR]: could not get working directory")
+		return "", errors.New("could not get working directory")
+	}
+
+	folder := filepath.Join(cwd, "ansible")
+	return folder, os.MkdirAll(folder, 0660)
 }

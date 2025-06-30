@@ -25,6 +25,7 @@ import (
 	remotedesktop "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	"github.com/open-uem/openuem-agent/internal/commands/report"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
+	ansiblecfg "github.com/open-uem/openuem-ansible-config/ansible"
 	openuem_utils "github.com/open-uem/utils"
 	"github.com/open-uem/wingetcfg/wingetcfg"
 	"gopkg.in/ini.v1"
@@ -52,10 +53,11 @@ type JSONActions struct {
 }
 
 type ProfileConfig struct {
-	ProfileID   int                  `yaml:"profileID"`
-	Exclusions  []string             `yaml:"exclusions"`
-	Deployments []string             `yaml:"deployments"`
-	Config      *wingetcfg.WinGetCfg `yaml:"config"`
+	ProfileID     int                          `yaml:"profileID"`
+	Exclusions    []string                     `yaml:"exclusions"`
+	Deployments   []string                     `yaml:"deployments"`
+	WinGetConfig  *wingetcfg.WinGetCfg         `yaml:"config"`
+	AnsibleConfig []ansiblecfg.AnsiblePlaybook `yaml:"ansible"`
 }
 
 func New() Agent {
@@ -936,5 +938,26 @@ func (a *Agent) RemovePrinter() error {
 	if err != nil {
 		return fmt.Errorf("[ERROR]: could not subscribe to remove printer message, reason: %v", err)
 	}
+	return nil
+}
+
+func (a *Agent) SendWinGetCfgProfileApplicationReport(profileID int, agentID string, success bool, errData string) error {
+	// Notify worker if application was succesful or not
+	deployment := openuem_nats.WingetCfgReport{
+		ProfileID: profileID,
+		AgentID:   agentID,
+		Success:   success,
+		Error:     errData,
+	}
+
+	data, err := json.Marshal(deployment)
+	if err != nil {
+		return err
+	}
+
+	if _, err := a.NATSConnection.Request("wingetcfg.report", data, 2*time.Minute); err != nil {
+		return err
+	}
+
 	return nil
 }

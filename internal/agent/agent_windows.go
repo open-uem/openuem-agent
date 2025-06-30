@@ -322,7 +322,7 @@ func (a *Agent) GetWingetConfigureProfiles() {
 
 	profiles := []ProfileConfig{}
 
-	profileRequest := openuem_nats.WingetCfgProfiles{
+	profileRequest := openuem_nats.CfgProfiles{
 		AgentID: a.Config.UUID,
 	}
 
@@ -364,7 +364,7 @@ func (a *Agent) GetWingetConfigureProfiles() {
 			log.Println("[DEBUG]: wingetcfg.profile to be unmarshalled")
 		}
 
-		cfg, err := yaml.Marshal(p.Config)
+		cfg, err := yaml.Marshal(p.WinGetConfig)
 		if err != nil {
 			log.Printf("[ERROR]: could not marshal YAML file with winget configuration, reason: %v", err)
 			continue
@@ -570,7 +570,7 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 
 	// Report if application was successful or not
 	if err := a.SendWinGetCfgProfileApplicationReport(profileID, a.Config.UUID, executeErr == nil && errData == "", errData); err != nil {
-		log.Println("[ERROR]: could not report if application was applied succesfully or no")
+		log.Println("[ERROR]: could not report if profile was applied succesfully or no")
 	}
 
 	// Check if packages have been installed (or uninstalled) and notify the agent worker
@@ -619,27 +619,6 @@ func (a *Agent) SendWinGetCfgDeploymentReport(packageID, packageName, action str
 	}
 
 	if _, err := a.NATSConnection.Request("wingetcfg.deploy", data, 2*time.Minute); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (a *Agent) SendWinGetCfgProfileApplicationReport(profileID int, agentID string, success bool, errData string) error {
-	// Notify worker if application was succesful or not
-	deployment := openuem_nats.WingetCfgReport{
-		ProfileID: profileID,
-		AgentID:   agentID,
-		Success:   success,
-		Error:     errData,
-	}
-
-	data, err := json.Marshal(deployment)
-	if err != nil {
-		return err
-	}
-
-	if _, err := a.NATSConnection.Request("wingetcfg.report", data, 2*time.Minute); err != nil {
 		return err
 	}
 
