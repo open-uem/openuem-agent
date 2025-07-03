@@ -501,8 +501,7 @@ func (a *Agent) GetUnixConfigureProfiles() {
 		}
 
 		if err := a.ApplyConfiguration(p.ProfileID, cfg); err != nil {
-			// TODO inform that this profile has an error to agent worker
-			log.Printf("[ERROR]: could not apply YAML configuration file with Ansible, reason: %v", err)
+			log.Println("[ERROR]: could not apply YAML configuration file with Ansible")
 			continue
 		}
 	}
