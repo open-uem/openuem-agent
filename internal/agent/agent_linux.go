@@ -22,6 +22,8 @@ import (
 	"github.com/apenella/go-ansible/v2/pkg/execute/measure"
 	results "github.com/apenella/go-ansible/v2/pkg/execute/result/json"
 	"github.com/apenella/go-ansible/v2/pkg/execute/stdoutcallback"
+	"github.com/apenella/go-ansible/v2/pkg/execute/workflow"
+	galaxy "github.com/apenella/go-ansible/v2/pkg/galaxy/collection/install"
 	"github.com/apenella/go-ansible/v2/pkg/playbook"
 	"github.com/dgraph-io/badger/v4"
 	"github.com/go-co-op/gocron/v2"
@@ -485,6 +487,14 @@ func (a *Agent) GetUnixConfigureProfiles() {
 		log.Println("[DEBUG]: ansiblecfg.profile response unmarshalled")
 	}
 
+	if len(profiles) > 0 {
+		if err := installCommunityGeneralCollection(); err != nil {
+			log.Printf("[ERROR]: could not install ansible community general collection, reason: %v", err)
+		} else {
+			log.Println("[INFO]: ansible community general collection has been installed")
+		}
+	}
+
 	for _, p := range profiles {
 		if a.Config.Debug {
 			log.Println("[DEBUG]: ansiblecfg.profile to be unmarshalled")
@@ -607,4 +617,43 @@ func CreatePlaybooksFolder() (string, error) {
 
 	folder := filepath.Join(cwd, "ansible")
 	return folder, os.MkdirAll(folder, 0660)
+}
+
+func installCommunityGeneralCollection() error {
+	ansibleFolder, err := CreatePlaybooksFolder()
+	if err != nil {
+		log.Printf("[ERROR]: could not create playbooks folder %v", err)
+		return err
+	}
+
+	pbFile, err := os.CreateTemp(ansibleFolder, "*.yml")
+	if err != nil {
+		log.Printf("[ERROR]: could not create playbook file %v", err)
+		return err
+	}
+
+	_, err = pbFile.WriteString("---\n\ncollections:\n- name: community.general")
+	if err != nil {
+		log.Printf("[ERROR]: could not write start of playbook to file %v", err)
+		return err
+	}
+
+	if err := pbFile.Close(); err != nil {
+		log.Printf("[ERROR]: could not close playbook file %v", err)
+		return err
+	}
+
+	galaxyInstallCollectionCmd := galaxy.NewAnsibleGalaxyCollectionInstallCmd(
+		galaxy.WithGalaxyCollectionInstallOptions(&galaxy.AnsibleGalaxyCollectionInstallOptions{
+			Force:            true,
+			Upgrade:          true,
+			RequirementsFile: pbFile.Name(),
+		}),
+	)
+
+	galaxyInstallCollectionExec := execute.NewDefaultExecute(
+		execute.WithCmd(galaxyInstallCollectionCmd),
+	)
+
+	return workflow.NewWorkflowExecute(galaxyInstallCollectionExec).WithTrace().Execute(context.TODO())
 }
