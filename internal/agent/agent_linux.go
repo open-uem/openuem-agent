@@ -309,7 +309,7 @@ func (a *Agent) NewConfigSubscribe() error {
 			a.RescheduleReportRunTask()
 		}
 
-		// Should we re-schedule winget configure task?
+		// Should we re-schedule ansible configure task?
 		if config.WinGetFrequency != 0 {
 			a.Config.WingetConfigureFrequency = config.WinGetFrequency
 			a.RescheduleAnsibleConfigureTask()
@@ -587,11 +587,13 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte) error {
 
 	err = exec.Execute(context.TODO())
 	if err != nil {
+		generalError := err
 		res, err := results.ParseJSONResultsStream(io.Reader(buff))
-		if err != nil {
-			errData = err.Error()
-		} else {
+		if err == nil {
 			errData = res.String()
+		}
+		if errData == "" {
+			errData = generalError.Error()
 		}
 	} else {
 		log.Println("[INFO]: ansible configuration has finished successfully")
