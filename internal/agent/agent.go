@@ -784,6 +784,8 @@ func (a *Agent) SubscribeToNATSSubjects() {
 	if err != nil {
 		log.Printf("[ERROR]: %v\n", err)
 	}
+
+	log.Println("[INFO]: Subscribed to NATS subjects!")
 }
 
 func (a *Agent) CreateAgentJetStreamConsumer() {

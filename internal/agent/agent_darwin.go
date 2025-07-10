@@ -109,7 +109,6 @@ func (a *Agent) Start() {
 		return
 	}
 	a.SubscribeToNATSSubjects()
-	log.Println("[INFO]: Subscribed to NATS subjects!")
 
 	// Run report for the first time after start if agent is enabled
 	if a.Config.Enabled {
