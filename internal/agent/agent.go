@@ -231,6 +231,11 @@ func (a *Agent) ReportTask() {
 		return
 	}
 
+	// Get remote config
+	if err := a.GetRemoteConfig(); err != nil {
+		log.Printf("[ERROR]: could not get remote config %v", err)
+	}
+
 	// Report run and sent! Use default frequency
 	a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
 	if err := a.Config.WriteConfig(); err != nil {
