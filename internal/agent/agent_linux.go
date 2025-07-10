@@ -554,11 +554,13 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte) error {
 		return err
 	}
 
-	defer func() {
-		if err := os.Remove(pbFile.Name()); err != nil {
-			log.Printf("[ERROR]: could not delete playbook file %v", err)
-		}
-	}()
+	if !a.Config.Debug {
+		defer func() {
+			if err := os.Remove(pbFile.Name()); err != nil {
+				log.Printf("[ERROR]: could not delete playbook file %v", err)
+			}
+		}()
+	}
 
 	log.Println("[INFO]: received a request to apply a configuration profile")
 

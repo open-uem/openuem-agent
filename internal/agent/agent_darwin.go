@@ -491,7 +491,7 @@ func (a *Agent) GetUnixConfigureProfiles() {
 	}
 
 	if len(profiles) > 0 {
-		if err := installCommunityGeneralCollection(); err != nil {
+		if err := a.InstallCommunityGeneralCollection(); err != nil {
 			log.Printf("[ERROR]: could not install ansible community general collection, reason: %v", err)
 		} else {
 			log.Println("[INFO]: ansible community general collection has been installed")
@@ -565,11 +565,13 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte) error {
 		return err
 	}
 
-	defer func() {
-		if err := os.Remove(pbFile.Name()); err != nil {
-			log.Printf("[ERROR]: could not delete playbook file %v", err)
-		}
-	}()
+	if !a.Config.Debug {
+		defer func() {
+			if err := os.Remove(pbFile.Name()); err != nil {
+				log.Printf("[ERROR]: could not delete playbook file %v", err)
+			}
+		}()
+	}
 
 	log.Println("[INFO]: received a request to apply a configuration profile")
 
@@ -641,7 +643,7 @@ func CreatePlaybooksFolder() (string, error) {
 	return folder, os.MkdirAll(folder, 0660)
 }
 
-func installCommunityGeneralCollection() error {
+func (a *Agent) InstallCommunityGeneralCollection() error {
 	var galaxyInstallCollectionCmd *galaxy.AnsibleGalaxyCollectionInstallCmd
 
 	ansibleFolder, err := CreatePlaybooksFolder()
@@ -665,6 +667,14 @@ func installCommunityGeneralCollection() error {
 	if err := pbFile.Close(); err != nil {
 		log.Printf("[ERROR]: could not close playbook file %v", err)
 		return err
+	}
+
+	if !a.Config.Debug {
+		defer func() {
+			if err := os.Remove(pbFile.Name()); err != nil {
+				log.Printf("[ERROR]: could not delete playbook file %v", err)
+			}
+		}()
 	}
 
 	if runtime.GOARCH == "amd64" {
