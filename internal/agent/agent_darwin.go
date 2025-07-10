@@ -111,12 +111,6 @@ func (a *Agent) Start() {
 	a.SubscribeToNATSSubjects()
 	log.Println("[INFO]: Subscribed to NATS subjects!")
 
-	// Get remote config
-	if err := a.GetRemoteConfig(); err != nil {
-		log.Printf("[ERROR]: could not get remote config %v", err)
-	}
-	log.Println("[INFO]: remote config requested")
-
 	// Run report for the first time after start if agent is enabled
 	if a.Config.Enabled {
 		r := a.RunReport()
@@ -129,6 +123,12 @@ func (a *Agent) Start() {
 			a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN // Try to send it again in 5 minutes
 			log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
 		} else {
+			// Get remote config
+			if err := a.GetRemoteConfig(); err != nil {
+				log.Printf("[ERROR]: could not get remote config %v", err)
+			}
+			log.Println("[INFO]: remote config requested")
+
 			// Start scheduled report job with default frequency
 			a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
 		}
@@ -167,15 +167,11 @@ func (a *Agent) startNATSConnectJob() error {
 				// We have connected
 				a.TaskScheduler.RemoveJob(a.NATSConnectJob.ID())
 				a.SubscribeToNATSSubjects()
+
+				// Start the rest of tasks
 				a.startReportJob()
 				a.startPendingACKJob()
 				a.startCheckForAnsibleProfilesJob()
-
-				// Get remote config
-				if err := a.GetRemoteConfig(); err != nil {
-					log.Printf("[ERROR]: could not get remote config %v", err)
-				}
-
 			},
 		),
 	)
