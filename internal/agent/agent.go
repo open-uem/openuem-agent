@@ -723,53 +723,14 @@ func SaveDeploymentNotACK(action openuem_nats.DeployAction) error {
 }
 
 func (a *Agent) SubscribeToNATSSubjects() {
-	var ctx context.Context
 
-	js, err := jetstream.New(a.NATSConnection)
-	if err != nil {
-		log.Printf("[ERROR]: could not intantiate JetStream: %v", err)
-		return
-	}
-
-	ctx, a.JetstreamContextCancel = context.WithTimeout(context.Background(), 60*time.Minute)
-	s, err := js.Stream(ctx, "AGENTS_STREAM")
-
-	if err != nil {
-		log.Printf("[ERROR]: could not get stream AGENTS_STREAM: %v\n", err)
-		return
-	}
-
-	consumerConfig := jetstream.ConsumerConfig{
-		Durable: "AgentConsumer" + a.Config.UUID,
-		FilterSubjects: []string{
-			"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID,
-			"agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID,
-			"agent.update.updater." + a.Config.UUID, "agent.rollback.updater." + a.Config.UUID,
-		},
-	}
-
-	if len(strings.Split(a.Config.NATSServers, ",")) > 1 {
-		consumerConfig.Replicas = int(math.Min(float64(len(strings.Split(a.Config.NATSServers, ","))), 5))
-	}
-
-	c1, err := s.CreateOrUpdateConsumer(ctx, consumerConfig)
-	if err != nil {
-		log.Printf("[ERROR]: could not create Jetstream consumer: %v", err)
-		return
-	}
-
-	// TODO stop consume context ()
-	_, err = c1.Consume(a.JetStreamAgentHandler, jetstream.ConsumeErrHandler(func(consumeCtx jetstream.ConsumeContext, err error) {
-		log.Printf("[ERROR]: consumer error: %v", err)
-	}))
-	if err != nil {
-		log.Printf("[ERROR]: could not start Agent consumer: %v", err)
-		return
-	}
-	log.Println("[INFO]: Agent consumer is ready to serve")
+	// Create JetStream consumer with associated subjects
+	go func() {
+		a.CreateAgentJetStreamConsumer()
+	}()
 
 	// Subscribe to Remote Desktop
-	err = a.StartRemoteDesktopSubscribe()
+	err := a.StartRemoteDesktopSubscribe()
 	if err != nil {
 		log.Printf("[ERROR]: %v\n", err)
 	}
@@ -823,6 +784,54 @@ func (a *Agent) SubscribeToNATSSubjects() {
 	if err != nil {
 		log.Printf("[ERROR]: %v\n", err)
 	}
+}
+
+func (a *Agent) CreateAgentJetStreamConsumer() {
+	var ctx context.Context
+
+	js, err := jetstream.New(a.NATSConnection)
+	if err != nil {
+		log.Printf("[ERROR]: could not intantiate JetStream: %v", err)
+		return
+	}
+
+	ctx, a.JetstreamContextCancel = context.WithTimeout(context.Background(), SCHEDULETIME_5MIN*time.Minute)
+	s, err := js.Stream(ctx, "AGENTS_STREAM")
+
+	if err != nil {
+		log.Printf("[ERROR]: could not get stream AGENTS_STREAM: %v\n", err)
+		return
+	}
+
+	consumerConfig := jetstream.ConsumerConfig{
+		Durable: "AgentConsumer" + a.Config.UUID,
+		FilterSubjects: []string{
+			"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID,
+			"agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID,
+			"agent.update.updater." + a.Config.UUID, "agent.rollback.updater." + a.Config.UUID,
+		},
+	}
+
+	if len(strings.Split(a.Config.NATSServers, ",")) > 1 {
+		consumerConfig.Replicas = int(math.Min(float64(len(strings.Split(a.Config.NATSServers, ","))), 5))
+	}
+
+	c1, err := s.CreateOrUpdateConsumer(ctx, consumerConfig)
+	if err != nil {
+		log.Printf("[ERROR]: could not create Jetstream consumer: %v", err)
+		return
+	}
+
+	// TODO stop consume context ()
+	_, err = c1.Consume(a.JetStreamAgentHandler, jetstream.ConsumeErrHandler(func(consumeCtx jetstream.ConsumeContext, err error) {
+		log.Printf("[ERROR]: consumer error: %v", err)
+	}))
+	if err != nil {
+		log.Printf("[ERROR]: could not start Agent consumer: %v", err)
+		return
+	}
+	log.Println("[INFO]: Agent consumer is ready to serve")
+
 }
 
 func (a *Agent) GetRemoteConfig() error {
