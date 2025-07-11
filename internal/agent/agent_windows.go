@@ -547,9 +547,9 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 
 	cmd := exec.Command(powershellPath, scriptPath, configPath)
 
-	executeErr := cmd.Run()
+	out, executeErr := cmd.CombinedOutput()
 	if executeErr != nil {
-		log.Println("[ERROR]: configuration profile could not be applied")
+		log.Printf("[ERROR]: configuration profile could not be applied, %s", string(out))
 		data, err := os.ReadFile("C:\\Program Files\\OpenUEM Agent\\logs\\wingetcfg.txt")
 		if err != nil {
 			log.Println("[ERROR]: could not read wingetcfg.txt log")
