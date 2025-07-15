@@ -141,17 +141,29 @@ func checkLastTimePackagesInstalled() time.Time {
 }
 
 func checkDnfLastTimePackagesInstalled() time.Time {
-	lastInstall := `dnf history list | grep update | awk '{print $5,$6}'`
+	var t time.Time
+
+	lastInstall := `dnf history list | grep -m 1 update | awk '{print $5,$6}'`
 	out, err := exec.Command("bash", "-c", lastInstall).Output()
 	if err != nil {
 		log.Printf("[ERROR]: could not read APT history log, reason: %v", err)
 		return time.Time{}
 	}
 
-	t, err := time.Parse("2006-01-02 15:04:05", strings.TrimSpace(string(out)))
+	t, err = time.Parse("2006-01-02 15:04", strings.TrimSpace(string(out)))
 	if err != nil {
-		log.Printf("[ERROR]: could not parse time string %s from DNF history log, reason: %v", string(out), err)
-		return time.Time{}
+		lastInstall := `dnf history list | grep -m 1 update | awk '{print $6,$7}'`
+		out, err := exec.Command("bash", "-c", lastInstall).Output()
+		if err != nil {
+			log.Printf("[ERROR]: could not read APT history log, reason: %v", err)
+			return time.Time{}
+		}
+
+		t, err = time.Parse("2006-01-02 15:04", strings.TrimSpace(string(out)))
+		if err != nil {
+			log.Printf("[ERROR]: could not parse time string %s from DNF history log, reason: %v", string(out), err)
+			return time.Time{}
+		}
 	}
 
 	return t
