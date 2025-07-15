@@ -141,7 +141,7 @@ func checkLastTimePackagesInstalled() time.Time {
 }
 
 func checkDnfLastTimePackagesInstalled() time.Time {
-	lastInstall := `dnf history list | grep upgrade | awk '{print $5,$6}'`
+	lastInstall := `dnf history list | grep update | awk '{print $5,$6}'`
 	out, err := exec.Command("bash", "-c", lastInstall).Output()
 	if err != nil {
 		log.Printf("[ERROR]: could not read APT history log, reason: %v", err)
