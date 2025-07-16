@@ -21,8 +21,8 @@ require (
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/nats-io/nats.go v1.43.0
 	github.com/open-uem/nats v0.0.0-20250630060536-99ac24ef63c9
-	github.com/open-uem/openuem-ansible-config v0.0.0-20250630085057-8eeaefd54087
-	github.com/open-uem/utils v0.0.0-20250611060546-cab35b3801b9
+	github.com/open-uem/openuem-ansible-config v0.0.0-20250710075757-9ef6e3390073
+	github.com/open-uem/utils v0.0.0-20250702121339-316c5b599cd3
 	github.com/open-uem/wingetcfg v0.0.0-20250625110454-5d9433af7cf3
 	github.com/pkg/sftp v1.13.9
 	github.com/safchain/ethtool v0.6.1
