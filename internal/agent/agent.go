@@ -224,7 +224,7 @@ func (a *Agent) ReportTask() {
 	if err := a.SendReport(r); err != nil {
 		a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN
 		if err := a.Config.WriteConfig(); err != nil {
-			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+			log.Printf("[ERROR]: could not write agent config in report task, skipping: %v", err)
 		}
 		a.RescheduleReportRunTask()
 		log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())

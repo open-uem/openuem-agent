@@ -1,17 +1,17 @@
 module github.com/open-uem/openuem-agent
 
-go 1.24.4
+go 1.24.5
 
 require (
 	github.com/ceshihao/windowsupdate v0.0.5
 	github.com/go-ole/go-ole v1.3.0
 	github.com/yusufpapurcu/wmi v1.2.4
-	golang.org/x/sys v0.33.0
+	golang.org/x/sys v0.34.0
 )
 
 require (
 	github.com/apenella/go-ansible/v2 v2.2.0
-	github.com/dgraph-io/badger/v4 v4.7.0
+	github.com/dgraph-io/badger/v4 v4.8.0
 	github.com/doncicuto/comshim v0.0.0-20241121153341-765e348cbb6f
 	github.com/evangwt/go-vncproxy v1.1.0
 	github.com/gliderlabs/ssh v0.3.8
@@ -20,31 +20,31 @@ require (
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/nats-io/nats.go v1.43.0
-	github.com/open-uem/nats v0.0.0-20250630060536-99ac24ef63c9
+	github.com/open-uem/nats v0.0.0-20250717101700-45922fb3baa4
 	github.com/open-uem/openuem-ansible-config v0.0.0-20250710075757-9ef6e3390073
 	github.com/open-uem/utils v0.0.0-20250702121339-316c5b599cd3
-	github.com/open-uem/wingetcfg v0.0.0-20250625110454-5d9433af7cf3
+	github.com/open-uem/wingetcfg v0.0.0-20250723054912-02f24a659219
 	github.com/pkg/sftp v1.13.9
 	github.com/safchain/ethtool v0.6.1
 	github.com/zcalusic/sysinfo v1.1.3
-	golang.org/x/crypto v0.39.0
-	golang.org/x/mod v0.25.0
-	golang.org/x/net v0.41.0
+	golang.org/x/crypto v0.40.0
+	golang.org/x/mod v0.26.0
+	golang.org/x/net v0.42.0
 	gopkg.in/ini.v1 v1.67.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
-	github.com/apenella/go-common-utils/data v0.0.0-20220913191136-86daaa87e7df // indirect
-	github.com/apenella/go-common-utils/error v0.0.0-20220913191136-86daaa87e7df // indirect
+	github.com/apenella/go-common-utils/data v0.0.0-20221227202648-5452d804e940 // indirect
+	github.com/apenella/go-common-utils/error v0.0.0-20221227202648-5452d804e940 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/danieljoos/wincred v1.2.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgraph-io/ristretto/v2 v2.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/evangwt/go-bufcopy v0.1.1 // indirect
-	github.com/fatih/color v1.16.0 // indirect
+	github.com/fatih/color v1.18.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
@@ -67,7 +67,7 @@ require (
 	go.opentelemetry.io/otel v1.37.0 // indirect
 	go.opentelemetry.io/otel/metric v1.37.0 // indirect
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
-	golang.org/x/text v0.26.0 // indirect
+	golang.org/x/text v0.27.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
