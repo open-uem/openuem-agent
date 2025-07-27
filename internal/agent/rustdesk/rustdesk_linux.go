@@ -5,6 +5,7 @@ package rustdesk
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/user"
@@ -15,6 +16,7 @@ import (
 	"github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 	"github.com/pelletier/go-toml/v2"
+	"github.com/shirou/gopsutil/v3/process"
 )
 
 type RustDeskConfig struct {
@@ -204,4 +206,21 @@ func getRustDeskUserInfo() (*RustDeskUser, error) {
 	rdUser.Gid = gid
 
 	return &rdUser, nil
+}
+
+func KillRustDeskProcess() error {
+	processes, err := process.Processes()
+	if err != nil {
+		return err
+	}
+	for _, p := range processes {
+		n, err := p.Name()
+		if err != nil {
+			return err
+		}
+		if n == "rustdesk" || n == "/usr/bin/rustdesk" {
+			return p.Kill()
+		}
+	}
+	return fmt.Errorf("process not found")
 }

@@ -10,7 +10,6 @@ import (
 
 	"github.com/nats-io/nats.go"
 	openuem_nats "github.com/open-uem/nats"
-	"github.com/shirou/gopsutil/v3/process"
 )
 
 type RustDeskOptionsEntries struct {
@@ -69,23 +68,6 @@ func CopyFile(src, dst string) error {
 	}
 
 	return nil
-}
-
-func KillProcess() error {
-	processes, err := process.Processes()
-	if err != nil {
-		return err
-	}
-	for _, p := range processes {
-		n, err := p.Name()
-		if err != nil {
-			return err
-		}
-		if n == "rustdesk" || n == "/usr/bin/rustdesk" {
-			return p.Kill()
-		}
-	}
-	return fmt.Errorf("process not found")
 }
 
 func RustDeskRespond(msg *nats.Msg, id string, errMessage string) {

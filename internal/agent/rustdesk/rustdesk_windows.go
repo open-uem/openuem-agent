@@ -135,3 +135,8 @@ func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
 
 	return id, nil
 }
+
+func KillRustDeskProcess() error {
+	args := []string{"/F", "/T", "/IM", "rustdesk.exe"}
+	return runtime.RunAsUser("taskkill", args)
+}

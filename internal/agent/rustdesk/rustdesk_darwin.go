@@ -28,3 +28,7 @@ func (cfg *RustDeskConfig) LaunchRustDesk() error {
 func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
 	return "", nil
 }
+
+func KillRustDeskProcess() error {
+	return nil
+}
