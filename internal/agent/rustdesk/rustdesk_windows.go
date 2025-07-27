@@ -13,7 +13,9 @@ import (
 
 	"github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
+	openuem_utils "github.com/open-uem/utils"
 	"github.com/pelletier/go-toml/v2"
+	"golang.org/x/sys/windows/svc"
 )
 
 type RustDeskConfig struct {
@@ -97,11 +99,23 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		return err
 	}
 
+	// Restart RustDesk service after configuration changes
+	if err := openuem_utils.WindowsSvcControl("RustDesk", svc.Stop, svc.Stopped); err != nil {
+		log.Printf("[ERROR]: could not stop RustDesk service, reason: %v\n", err)
+		return err
+	}
+
+	// Start service
+	if err := openuem_utils.WindowsStartService("RustDesk"); err != nil {
+		log.Printf("[ERROR]: could not start RustDesk service, reason: %v\n", err)
+		return err
+	}
+
 	return nil
 }
 
 func (cfg *RustDeskConfig) LaunchRustDesk() error {
-	return runtime.RunAsUser(cfg.Binary, cfg.LaunchArgs)
+	return runtime.RunAsUserInBackground(cfg.Binary, cfg.LaunchArgs)
 }
 
 func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
