@@ -824,11 +824,3 @@ func (a *Agent) ExecutePowerShellScript(powershellPath string, script string) er
 
 	return nil
 }
-
-func (a *Agent) StartRustDeskSubscribe() error {
-	return nil
-}
-
-func (a *Agent) StopRustDeskSubscribe() error {
-	return nil
-}

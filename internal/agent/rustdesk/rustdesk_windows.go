@@ -17,18 +17,10 @@ import (
 )
 
 type RustDeskConfig struct {
-	User       *RustDeskUser
 	Binary     string
 	LaunchArgs []string
 	GetIDArgs  []string
 	ConfigFile string
-}
-
-type RustDeskUser struct {
-	Username string
-	Uid      int
-	Gid      int
-	Home     string
 }
 
 func New() *RustDeskConfig {

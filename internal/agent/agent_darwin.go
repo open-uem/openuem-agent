@@ -698,11 +698,3 @@ func (a *Agent) InstallCommunityGeneralCollection() error {
 
 	return workflow.NewWorkflowExecute(galaxyInstallCollectionExec).WithTrace().Execute(context.TODO())
 }
-
-func (a *Agent) StartRustDeskSubscribe() error {
-	return nil
-}
-
-func (a *Agent) StopRustDeskSubscribe() error {
-	return nil
-}

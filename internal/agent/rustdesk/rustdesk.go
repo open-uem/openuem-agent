@@ -1,11 +1,15 @@
 package rustdesk
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 
+	"github.com/nats-io/nats.go"
+	openuem_nats "github.com/open-uem/nats"
 	"github.com/shirou/gopsutil/v3/process"
 )
 
@@ -82,4 +86,21 @@ func KillProcess() error {
 		}
 	}
 	return fmt.Errorf("process not found")
+}
+
+func RustDeskRespond(msg *nats.Msg, id string, errMessage string) {
+	result := openuem_nats.RustDeskResult{
+		RustDeskID: id,
+		Error:      errMessage,
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		log.Printf("[ERROR]: could not marshal RustDesk response, reason: %v\n", err)
+	}
+
+	if err := msg.Respond(data); err != nil {
+		log.Printf("[ERROR]: could not respond to agent rustdesk start message, reason: %v\n", err)
+		return
+	}
 }

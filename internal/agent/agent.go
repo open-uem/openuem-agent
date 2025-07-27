@@ -20,6 +20,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	openuem_nats "github.com/open-uem/nats"
+	"github.com/open-uem/openuem-agent/internal/agent/rustdesk"
 	"github.com/open-uem/openuem-agent/internal/commands/deploy"
 	"github.com/open-uem/openuem-agent/internal/commands/printers"
 	remotedesktop "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
@@ -986,5 +987,56 @@ func (a *Agent) SendWinGetCfgProfileApplicationReport(profileID int, agentID str
 		return err
 	}
 
+	return nil
+}
+
+func (a *Agent) StartRustDeskSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.rustdesk.start."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+
+		rd := rustdesk.New()
+
+		if err := rd.GetInstallationInfo(); err != nil {
+			rustdesk.RustDeskRespond(msg, "", err.Error())
+			return
+		}
+
+		if err := rd.Configure(msg.Data); err != nil {
+			rustdesk.RustDeskRespond(msg, "", err.Error())
+			return
+		}
+
+		if err := rd.LaunchRustDesk(); err != nil {
+			rustdesk.RustDeskRespond(msg, "", err.Error())
+			return
+		}
+
+		id, err := rd.GetRustDeskID()
+		if err != nil {
+			rustdesk.RustDeskRespond(msg, "", err.Error())
+			return
+		}
+
+		// Send ID to the console
+		rustdesk.RustDeskRespond(msg, id, "")
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to rustdesk start subject, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) StopRustDeskSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.rustdesk.stop."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+		if err := rustdesk.KillProcess(); err != nil {
+			rustdesk.RustDeskRespond(msg, "", err.Error())
+			return
+		}
+		rustdesk.RustDeskRespond(msg, "", "")
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to rustdesk stop subject, reason: %v", err)
+	}
 	return nil
 }
