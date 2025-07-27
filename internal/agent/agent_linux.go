@@ -30,6 +30,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	openuem_nats "github.com/open-uem/nats"
+	"github.com/open-uem/openuem-agent/internal/agent/rustdesk"
 	rd "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
 	ansiblecfg "github.com/open-uem/openuem-ansible-config/ansible"
@@ -216,6 +217,58 @@ func (a *Agent) StartRemoteDesktopSubscribe() error {
 	}
 	return nil
 }
+
+func (a *Agent) StartRustDeskSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.rustdesk.start."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+
+		rd := rustdesk.New()
+
+		if err := rd.GetInstallationInfo(); err != nil {
+			rustDeskRespond(msg, "", err.Error())
+			return
+		}
+
+		if err := rd.Configure(msg.Data); err != nil {
+			rustDeskRespond(msg, "", err.Error())
+			return
+		}
+
+		if err := rd.LaunchRustDesk(); err != nil {
+			rustDeskRespond(msg, "", err.Error())
+			return
+		}
+
+		id, err := rd.GetRustDeskID()
+		if err != nil {
+			rustDeskRespond(msg, "", err.Error())
+			return
+		}
+
+		// Send ID to the console
+		rustDeskRespond(msg, id, "")
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to rustdesk start subject, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) StopRustDeskSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.rustdesk.stop."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+		if err := rustdesk.KillProcess(); err != nil {
+			rustDeskRespond(msg, "", err.Error())
+			return
+		}
+		rustDeskRespond(msg, "", "")
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to rustdesk stop subject, reason: %v", err)
+	}
+	return nil
+}
+
 func (a *Agent) RebootSubscribe() error {
 	_, err := a.NATSConnection.QueueSubscribe("agent.reboot."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
 		log.Println("[INFO]: reboot request received")
@@ -655,4 +708,21 @@ func installCommunityGeneralCollection() error {
 	)
 
 	return workflow.NewWorkflowExecute(galaxyInstallCollectionExec).WithTrace().Execute(context.TODO())
+}
+
+func rustDeskRespond(msg *nats.Msg, id string, errMessage string) {
+	result := openuem_nats.RustDeskResult{
+		RustDeskID: id,
+		Error:      errMessage,
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		log.Printf("[ERROR]: could not marshal RustDesk response, reason: %v\n", err)
+	}
+
+	if err := msg.Respond(data); err != nil {
+		log.Printf("[ERROR]: could not respond to agent rustdesk start message, reason: %v\n", err)
+		return
+	}
 }

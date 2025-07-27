@@ -740,6 +740,17 @@ func (a *Agent) SubscribeToNATSSubjects() {
 		log.Printf("[ERROR]: %v\n", err)
 	}
 
+	// Subscribe to RustDesk subjects
+	err = a.StartRustDeskSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
+	err = a.StopRustDeskSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
 	err = a.InstallPackageSubscribe()
 	if err != nil {
 		log.Printf("[ERROR]: %v\n", err)

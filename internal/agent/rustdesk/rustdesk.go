@@ -1,0 +1,85 @@
+package rustdesk
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+
+	"github.com/shirou/gopsutil/v3/process"
+)
+
+type RustDeskOptionsEntries struct {
+	CustomRendezVousServer string `toml:"custom-rendezvous-server"`
+	RelayServer            string `toml:"relay-server"`
+	Key                    string `toml:"key"`
+	ApiServer              string `toml:"api-server"`
+}
+
+type RustDeskOptions struct {
+	Optional RustDeskOptionsEntries `toml:"options"`
+}
+
+// Reference: https://stackoverflow.com/questions/73864379/golang-change-permission-os-chmod-and-os-chowm-recursively
+func ChownRecursively(root string, uid int, gid int) error {
+
+	return filepath.Walk(root,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			err = os.Chown(path, uid, gid)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+}
+
+// Reference: https://leapcell.io/blog/how-to-copy-a-file-in-go
+func CopyFile(src, dst string) error {
+	// Open the source file
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer sourceFile.Close()
+
+	// Create the destination file
+	destinationFile, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer destinationFile.Close()
+
+	// Copy the content
+	_, err = io.Copy(destinationFile, sourceFile)
+	if err != nil {
+		return fmt.Errorf("failed to copy file: %w", err)
+	}
+
+	// Flush file metadata to disk
+	err = destinationFile.Sync()
+	if err != nil {
+		return fmt.Errorf("failed to sync destination file: %w", err)
+	}
+
+	return nil
+}
+
+func KillProcess() error {
+	processes, err := process.Processes()
+	if err != nil {
+		return err
+	}
+	for _, p := range processes {
+		n, err := p.Name()
+		if err != nil {
+			return err
+		}
+		if n == "rustdesk" || n == "/usr/bin/rustdesk" {
+			return p.Kill()
+		}
+	}
+	return fmt.Errorf("process not found")
+}

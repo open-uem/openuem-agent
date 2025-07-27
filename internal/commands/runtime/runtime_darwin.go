@@ -46,6 +46,40 @@ func RunAsUser(username, cmdPath string, args []string, env bool) error {
 	return nil
 }
 
+func RunAsUserWithOutput(username, cmdPath string, args []string, env bool) ([]byte, error) {
+	sudoArgs := []string{"-u", username}
+	sudoArgs = append(sudoArgs, cmdPath)
+	sudoArgs = append(sudoArgs, args...)
+
+	cmd := exec.Command("sudo", sudoArgs...)
+
+	u, err := user.Lookup(username)
+	if err != nil {
+		return nil, err
+	}
+
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return nil, err
+	}
+
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)},
+	}
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, err
+	}
+
+	return output, err
+}
+
 func RunAsUserWithMachineCtl(username, myCmd string) error {
 	command := fmt.Sprintf("machinectl shell %s@ %s", username, myCmd)
 	cmd := exec.Command("bash", "-c", command)
