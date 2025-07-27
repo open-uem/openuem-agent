@@ -36,7 +36,7 @@ func New() *RustDeskConfig {
 }
 
 func (cfg *RustDeskConfig) GetInstallationInfo() error {
-	binPath := "C:\\Program Files\\RustDesk\\rustdesk"
+	binPath := "C:\\Program Files\\RustDesk\\rustdesk.exe"
 
 	if _, err := os.Stat(binPath); err == nil {
 		cfg.Binary = binPath

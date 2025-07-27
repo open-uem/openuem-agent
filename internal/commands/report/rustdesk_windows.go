@@ -12,7 +12,7 @@ func (r *Report) hasRustDesk(debug bool) {
 		log.Println("[DEBUG]: check if RustDesk is available has been requested")
 	}
 
-	binPath := "C:\\Program Files\\RustDesk\\rustdesk"
+	binPath := "C:\\Program Files\\RustDesk\\rustdesk.exe"
 
 	if _, err := os.Stat(binPath); err == nil {
 		r.HasRustDesk = true
