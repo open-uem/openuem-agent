@@ -1,3 +1,5 @@
+//go:build windows
+
 package rustdesk
 
 import (
@@ -5,7 +7,6 @@ import (
 	"errors"
 	"log"
 	"os"
-	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -21,7 +22,6 @@ type RustDeskConfig struct {
 	LaunchArgs []string
 	GetIDArgs  []string
 	ConfigFile string
-	IsFlatpak  bool
 }
 
 type RustDeskUser struct {
@@ -36,35 +36,13 @@ func New() *RustDeskConfig {
 }
 
 func (cfg *RustDeskConfig) GetInstallationInfo() error {
-	rdUser, err := getRustDeskUserInfo()
-	if err != nil {
-		return err
-	}
-	cfg.User = rdUser
+	binPath := "C:\\Program Files\\RustDesk\\rustdesk"
 
-	binPath := "/usr/bin/rustdesk"
-	flatpakGlobalPath := "/var/lib/flatpak/exports/bin/com.rustdesk.RustDesk"
-	flatpakUserPath := filepath.Join(rdUser.Home, "exports", "bin", "com.rustdesk.RustDesk")
-
-	cfg.IsFlatpak = false
 	if _, err := os.Stat(binPath); err == nil {
 		cfg.Binary = binPath
 		cfg.GetIDArgs = []string{"--get-id"}
 	} else {
-		if _, err := os.Stat(flatpakGlobalPath); err == nil {
-			cfg.IsFlatpak = true
-			cfg.Binary = "flatpak"
-			cfg.LaunchArgs = []string{"run", "com.rustdesk.RustDesk"}
-			cfg.GetIDArgs = []string{"run", "com.rustdesk.RustDesk", "--get-id"}
-		} else {
-			if _, err := os.Stat(flatpakUserPath); err == nil {
-				cfg.IsFlatpak = true
-				cfg.LaunchArgs = []string{"run", "com.rustdesk.RustDesk"}
-				cfg.GetIDArgs = []string{"run", "com.rustdesk.RustDesk", "--get-id"}
-			} else {
-				return errors.New("RustDesk not found")
-			}
-		}
+		return errors.New("RustDesk not found")
 	}
 
 	return nil
@@ -89,17 +67,10 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 
 	// Configuration file location
 	configFile := ""
-	rootConfigPath := ""
 	configPath := ""
-	if cfg.IsFlatpak {
-		rootConfigPath = filepath.Join(cfg.User.Home, ".var")
-		configPath = filepath.Join(rootConfigPath, "app", "com.rustdesk.RustDesk", "config", "rustdesk")
-		configFile = filepath.Join(configPath, "RustDesk2.toml")
-	} else {
-		rootConfigPath = filepath.Join(cfg.User.Home, ".config", "rustdesk")
-		configPath = rootConfigPath
-		configFile = filepath.Join(configPath, "RustDesk2.toml")
-	}
+
+	configPath = filepath.Join("C:\\Program Files", "RustDesk", "config")
+	configFile = filepath.Join(configPath, "RustDesk2.toml")
 
 	// Create TOML file
 	cfgTOML := RustDeskOptions{
@@ -129,18 +100,8 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		return err
 	}
 
-	if err := ChownRecursively(rootConfigPath, cfg.User.Uid, cfg.User.Gid); err != nil {
-		log.Printf("[ERROR]: could not chown directory file for RustDesk configuration, reason: %v", err)
-		return err
-	}
-
 	if err := os.WriteFile(configFile, rdTOML, 0600); err != nil {
 		log.Printf("[ERROR]: could not create TOML file for RustDesk configuration, reason: %v", err)
-		return err
-	}
-
-	if err := os.Chown(configFile, cfg.User.Uid, cfg.User.Gid); err != nil {
-		log.Printf("[ERROR]: could not chown the TOML file for RustDesk configuration, reason: %v", err)
 		return err
 	}
 
@@ -148,12 +109,12 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 }
 
 func (cfg *RustDeskConfig) LaunchRustDesk() error {
-	return runtime.RunAsUserInBackground(cfg.User.Username, cfg.Binary, cfg.LaunchArgs, true)
+	return runtime.RunAsUser(cfg.Binary, cfg.LaunchArgs)
 }
 
 func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
 	// Get RustDesk ID
-	out, err := runtime.RunAsUserWithOutput(cfg.User.Username, cfg.Binary, cfg.GetIDArgs, true)
+	out, err := runtime.RunAsUserWithOutput(cfg.Binary, cfg.GetIDArgs)
 	if err != nil {
 		log.Printf("[ERROR]: could not get RustDesk ID, reason: %v", err)
 		return "", err
@@ -167,39 +128,4 @@ func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
 	}
 
 	return id, nil
-}
-
-func getRustDeskUserInfo() (*RustDeskUser, error) {
-	rdUser := RustDeskUser{}
-
-	// Get current user logged in, uid, gid and home user
-	username, err := runtime.GetLoggedInUser()
-	if err != nil {
-		log.Println("[ERROR]: could not get logged in user")
-		return nil, err
-	}
-	rdUser.Username = username
-
-	u, err := user.Lookup(username)
-	if err != nil {
-		log.Println("[ERROR]: could not find user information")
-		return nil, err
-	}
-	rdUser.Home = u.HomeDir
-
-	uid, err := strconv.Atoi(u.Uid)
-	if err != nil {
-		log.Println("[ERROR]: could not get UID of logged in user")
-		return nil, err
-	}
-	rdUser.Uid = uid
-
-	gid, err := strconv.Atoi(u.Gid)
-	if err != nil {
-		log.Println("[ERROR]: could not get GID of logged in user")
-		return nil, err
-	}
-	rdUser.Gid = gid
-
-	return &rdUser, nil
 }

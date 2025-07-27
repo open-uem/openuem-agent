@@ -1,3 +1,5 @@
+//go:build darwin
+
 package report
 
 func (r *Report) hasRustDesk(debug bool) {

@@ -1,3 +1,5 @@
+//go:build linux
+
 package report
 
 import (
@@ -11,19 +13,17 @@ import (
 
 func (r *Report) hasRustDesk(debug bool) {
 
-	installed := false
-
 	if debug {
 		log.Println("[DEBUG]: check if RustDesk is available has been requested")
 	}
 
 	commonPath := "/usr/bin/rustdesk"
 	if _, err := os.Stat(commonPath); err == nil {
-		installed = true
+		r.HasRustDesk = true
 	} else {
 		flatpakOpenUEMPath := "/var/lib/flatpak/exports/bin/com.rustdesk.RustDesk"
 		if _, err := os.Stat(flatpakOpenUEMPath); err == nil {
-			installed = true
+			r.HasRustDesk = true
 		} else {
 			// Get current user logged in
 			username, err := runtime.GetLoggedInUser()
@@ -33,16 +33,14 @@ func (r *Report) hasRustDesk(debug bool) {
 				if err == nil {
 					flatpakUserPath := filepath.Join(u.HomeDir, "exports", "bin", "com.rustdesk.RustDesk")
 					if _, err := os.Stat(flatpakUserPath); err == nil {
-						installed = true
+						r.HasRustDesk = true
 					}
 				}
 			}
 		}
 	}
 
-	r.HasRustDesk = installed
-
-	if installed {
+	if r.HasRustDesk {
 		log.Println("[INFO]: RustDesk is available")
 	} else {
 		log.Println("[INFO]: RustDesk is not available")
