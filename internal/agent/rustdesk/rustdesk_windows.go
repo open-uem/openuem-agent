@@ -69,7 +69,7 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 	configFile := ""
 	configPath := ""
 
-	configPath = filepath.Join("C:\\Program Files", "RustDesk", "config")
+	configPath = "C:\\Windows\\ServiceProfiles\\LocalService\\AppData\\Roaming\\RustDesk\\config"
 	configFile = filepath.Join(configPath, "RustDesk2.toml")
 
 	// Create TOML file
