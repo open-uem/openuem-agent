@@ -138,5 +138,11 @@ func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
 
 func KillRustDeskProcess() error {
 	args := []string{"/F", "/T", "/IM", "rustdesk.exe"}
-	return runtime.RunAsUser("taskkill", args)
+	if err := runtime.RunAsUser("taskkill", args); err != nil {
+		if !strings.Contains(err.Error(), "128") {
+			log.Printf("[WARN]: taskkill RustDesk ID is not a number, reason: %v", err)
+			return err
+		}
+	}
+	return nil
 }

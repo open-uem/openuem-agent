@@ -103,7 +103,7 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 
 				// Kill Remote Desktop service as some remnants can be there
 				if err := runtime.RunAsUser("taskkill", []string{"/F", "/T", "/IM", "tvnserver.exe"}); err != nil {
-					log.Printf("Remote Desktop service kill error, %v\n", err)
+					log.Printf("[WARN]: Remote Desktop service kill error, %v\n", err)
 				}
 				return nil
 			},
