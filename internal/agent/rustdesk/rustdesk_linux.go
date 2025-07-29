@@ -5,9 +5,9 @@ package rustdesk
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strconv"
@@ -20,12 +20,14 @@ import (
 )
 
 type RustDeskConfig struct {
-	User       *RustDeskUser
-	Binary     string
-	LaunchArgs []string
-	GetIDArgs  []string
-	ConfigFile string
-	IsFlatpak  bool
+	User              *RustDeskUser
+	Binary            string
+	LaunchArgs        []string
+	GetIDArgs         []string
+	ConfigFile        string
+	IsFlatpak         bool
+	UseDirectIPAccess bool
+	Whitelist         string
 }
 
 type RustDeskUser struct {
@@ -87,8 +89,7 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		rdConfig.RelayServer == "" &&
 		rdConfig.Key == "" &&
 		rdConfig.APIServer == "" {
-		log.Println("[INFO]: no RustDesk settings has been found for tenant, using RustDesk's default settings")
-		return nil
+		log.Println("[INFO]: no RustDesk server settings has been found for tenant, using RustDesk's default settings")
 	}
 
 	// Configuration file location
@@ -100,7 +101,8 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		configPath = filepath.Join(rootConfigPath, "app", "com.rustdesk.RustDesk", "config", "rustdesk")
 		configFile = filepath.Join(configPath, "RustDesk2.toml")
 	} else {
-		rootConfigPath = filepath.Join(cfg.User.Home, ".config", "rustdesk")
+		rootConfigPath = "/root/.config/rustdesk"
+		// rootConfigPath = filepath.Join(cfg.User.Home, ".config", "rustdesk")
 		configPath = rootConfigPath
 		configFile = filepath.Join(configPath, "RustDesk2.toml")
 	}
@@ -113,6 +115,14 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 			Key:                    rdConfig.Key,
 			ApiServer:              rdConfig.APIServer,
 		},
+	}
+
+	if rdConfig.DirectIPAccess {
+		cfgTOML.Optional.UseDirectIPAccess = "Y"
+	}
+
+	if rdConfig.Whitelist != "" {
+		cfgTOML.Optional.Whitelist = rdConfig.Whitelist
 	}
 
 	rdTOML, err := toml.Marshal(cfgTOML)
@@ -133,9 +143,16 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		return err
 	}
 
-	if err := ChownRecursively(rootConfigPath, cfg.User.Uid, cfg.User.Gid); err != nil {
-		log.Printf("[ERROR]: could not chown directory file for RustDesk configuration, reason: %v", err)
-		return err
+	if cfg.IsFlatpak {
+		if err := ChownRecursively(rootConfigPath, cfg.User.Uid, cfg.User.Gid); err != nil {
+			log.Printf("[ERROR]: could not chown directory file for RustDesk configuration, reason: %v", err)
+			return err
+		}
+	} else {
+		if err := ChownRecursively(rootConfigPath, 0, 0); err != nil {
+			log.Printf("[ERROR]: could not chown directory file for RustDesk configuration, reason: %v", err)
+			return err
+		}
 	}
 
 	if err := os.WriteFile(configFile, rdTOML, 0600); err != nil {
@@ -143,8 +160,17 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		return err
 	}
 
-	if err := os.Chown(configFile, cfg.User.Uid, cfg.User.Gid); err != nil {
-		log.Printf("[ERROR]: could not chown the TOML file for RustDesk configuration, reason: %v", err)
+	if cfg.IsFlatpak {
+		if err := os.Chown(configFile, cfg.User.Uid, cfg.User.Gid); err != nil {
+			log.Printf("[ERROR]: could not chown the TOML file for RustDesk configuration, reason: %v", err)
+			return err
+		}
+	}
+
+	// Restart the RustDesk service to apply the new configuration
+	command := "/usr/bin/systemctl restart rustdesk"
+	cmd := exec.Command("bash", "-c", command)
+	if err := cmd.Run(); err != nil {
 		return err
 	}
 
@@ -153,6 +179,63 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 
 func (cfg *RustDeskConfig) LaunchRustDesk() error {
 	return runtime.RunAsUserInBackground(cfg.User.Username, cfg.Binary, cfg.LaunchArgs, true)
+}
+
+func (cfg *RustDeskConfig) SetRustDeskPassword(config []byte) error {
+
+	// The --password command requires root privileges which is not
+	// possible using Flatpak so we've to do a workaround
+	// creating an empty RustDesk.toml file with the password
+	// encrypted
+
+	// Unmarshal configuration data
+	var rdConfig nats.RustDesk
+	if err := json.Unmarshal(config, &rdConfig); err != nil {
+		log.Println("[ERROR]: could not unmarshall RustDesk configuration")
+		return err
+	}
+
+	// Configuration file location
+	configFile := ""
+	rootConfigPath := ""
+	configPath := ""
+
+	if cfg.IsFlatpak {
+		rootConfigPath = filepath.Join(cfg.User.Home, ".var")
+		configPath = filepath.Join(rootConfigPath, "app", "com.rustdesk.RustDesk", "config", "rustdesk")
+		configFile = filepath.Join(configPath, "RustDesk.toml")
+	} else {
+		rootConfigPath = filepath.Join(cfg.User.Home, ".config", "rustdesk")
+		configPath = rootConfigPath
+		configFile = filepath.Join(configPath, "RustDesk.toml")
+	}
+
+	currentConfig, err := os.ReadFile(configFile)
+	if err != nil {
+		log.Printf("[ERROR]: could not read RustDesk.toml file, reason: %v", err)
+		return err
+	}
+
+	tomlConfig := RustDeskPassword{}
+	if err := toml.Unmarshal(currentConfig, &tomlConfig); err != nil {
+		log.Printf("[ERROR]: could not unmarshal RustDesk.toml file, reason: %v", err)
+		return err
+	}
+
+	tomlConfig.Password = rdConfig.PermanentPassword
+
+	data, err := toml.Marshal(tomlConfig)
+	if err != nil {
+		log.Printf("[ERROR]: could not marshal new configuration file, reason: %v", err)
+		return err
+	}
+
+	if err := os.WriteFile(configFile, data, 0600); err != nil {
+		log.Printf("[ERROR]: could not write configuration file with new password, reason: %v", err)
+		return err
+	}
+
+	return nil
 }
 
 func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
@@ -218,9 +301,19 @@ func KillRustDeskProcess() error {
 		if err != nil {
 			return err
 		}
-		if n == "rustdesk" || n == "/usr/bin/rustdesk" {
-			return p.Kill()
+		if n == "rustdesk" {
+			if err := p.Kill(); err != nil {
+				log.Println("[ERROR]: could not kill RustDesk process ")
+			}
 		}
 	}
-	return fmt.Errorf("process not found")
+
+	// Restart the RustDesk service
+	command := "/usr/bin/systemctl restart rustdesk"
+	cmd := exec.Command("bash", "-c", command)
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -19,10 +19,13 @@ import (
 )
 
 type RustDeskConfig struct {
-	Binary     string
-	LaunchArgs []string
-	GetIDArgs  []string
-	ConfigFile string
+	Binary            string
+	LaunchArgs        []string
+	GetIDArgs         []string
+	ConfigFile        string
+	Password          string
+	UseDirectIPAccess bool
+	Whitelist         string
 }
 
 func New() *RustDeskConfig {
@@ -76,6 +79,14 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		},
 	}
 
+	if rdConfig.DirectIPAccess {
+		cfgTOML.Optional.UseDirectIPAccess = "Y"
+	}
+
+	if rdConfig.Whitelist != "" {
+		cfgTOML.Optional.Whitelist = rdConfig.Whitelist
+	}
+
 	rdTOML, err := toml.Marshal(cfgTOML)
 	if err != nil {
 		log.Printf("[ERROR]: could not marshall TOML file for RustDesk configuration, reason: %v", err)
@@ -116,6 +127,11 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 
 func (cfg *RustDeskConfig) LaunchRustDesk() error {
 	return runtime.RunAsUserInBackground(cfg.Binary, cfg.LaunchArgs)
+}
+
+func (cfg *RustDeskConfig) SetRustDeskPassword(config []byte) error {
+	args := []string{"--password", cfg.Password}
+	return runtime.RunAsUser(cfg.Binary, args)
 }
 
 func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {

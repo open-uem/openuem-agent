@@ -1005,7 +1005,7 @@ func (a *Agent) StartRustDeskSubscribe() error {
 			return
 		}
 
-		if err := rd.LaunchRustDesk(); err != nil {
+		if err := rd.SetRustDeskPassword(msg.Data); err != nil {
 			rustdesk.RustDeskRespond(msg, "", err.Error())
 			return
 		}
@@ -1015,6 +1015,11 @@ func (a *Agent) StartRustDeskSubscribe() error {
 			rustdesk.RustDeskRespond(msg, "", err.Error())
 			return
 		}
+
+		// if err := rd.LaunchRustDesk(); err != nil {
+		// 	rustdesk.RustDeskRespond(msg, "", err.Error())
+		// 	return
+		// }
 
 		// Send ID to the console
 		rustdesk.RustDeskRespond(msg, id, "")
@@ -1032,6 +1037,8 @@ func (a *Agent) StopRustDeskSubscribe() error {
 			rustdesk.RustDeskRespond(msg, "", err.Error())
 			return
 		}
+
+		// TODO - replace config file with .back
 		rustdesk.RustDeskRespond(msg, "", "")
 	})
 

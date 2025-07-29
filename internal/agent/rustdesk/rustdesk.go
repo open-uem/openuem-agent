@@ -17,10 +17,17 @@ type RustDeskOptionsEntries struct {
 	RelayServer            string `toml:"relay-server"`
 	Key                    string `toml:"key"`
 	ApiServer              string `toml:"api-server"`
+	UseDirectIPAccess      string `toml:"direct-server,omitempty"`
+	Whitelist              string `toml:"whitelist,omitempty"`
 }
 
 type RustDeskOptions struct {
 	Optional RustDeskOptionsEntries `toml:"options"`
+}
+
+type RustDeskPassword struct {
+	Password string `toml:"password"`
+	Salt     string `toml:"salt"`
 }
 
 // Reference: https://stackoverflow.com/questions/73864379/golang-change-permission-os-chmod-and-os-chowm-recursively
