@@ -30,6 +30,7 @@ import (
 	openuem_utils "github.com/open-uem/utils"
 	"github.com/open-uem/wingetcfg/wingetcfg"
 	"golang.org/x/mod/semver"
+	"golang.org/x/sys/windows"
 	"gopkg.in/yaml.v3"
 )
 
@@ -547,20 +548,31 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 
 	cmd := exec.Command(powershellPath, scriptPath, configPath)
 
-	executeErr := cmd.Run()
+	executeErr := cmd.Start()
 	if executeErr != nil {
-		log.Println("[ERROR]: configuration profile could not be applied")
-		data, err := os.ReadFile("C:\\Program Files\\OpenUEM Agent\\logs\\wingetcfg.txt")
-		if err != nil {
-			log.Println("[ERROR]: could not read wingetcfg.txt log")
-		}
-		if errData != "" {
-			errData = ", " + string(data)
-		} else {
-			errData = string(data)
-		}
+		log.Printf("[ERROR]: could not start configuration profile process, reason: %v", executeErr)
 	} else {
-		log.Println("[INFO]: winget configuration have finished successfully")
+		// Set priority to below normal
+		err = SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		executeErr = cmd.Wait()
+		if executeErr != nil {
+			log.Println("[ERROR]: configuration profile could not be applied")
+			data, err := os.ReadFile("C:\\Program Files\\OpenUEM Agent\\logs\\wingetcfg.txt")
+			if err != nil {
+				log.Println("[ERROR]: could not read wingetcfg.txt log")
+			}
+			if errData != "" {
+				errData = ", " + string(data)
+			} else {
+				errData = string(data)
+			}
+		} else {
+			log.Println("[INFO]: winget configuration have finished successfully")
+		}
 	}
 
 	// Report if application was successful or not
@@ -820,6 +832,23 @@ func (a *Agent) ExecutePowerShellScript(powershellPath string, script string) er
 				fmt.Printf("[ERROR]: could not remove temp ps1 file, reason: %v", err)
 			}
 		}
+	}
+
+	return nil
+}
+
+const PROCESS_ALL_ACCESS = windows.STANDARD_RIGHTS_REQUIRED | windows.SYNCHRONIZE | 0xffff
+
+func SetPriorityWindows(pid int, priority uint32) error {
+	handle, err := windows.OpenProcess(PROCESS_ALL_ACCESS, false, uint32(pid))
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(handle) // Technically this can fail, but we ignore it
+
+	err = windows.SetPriorityClass(handle, priority)
+	if err != nil {
+		return err
 	}
 
 	return nil
