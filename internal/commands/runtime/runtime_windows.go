@@ -3,6 +3,8 @@
 package runtime
 
 import (
+	"bytes"
+	"errors"
 	"log"
 	"os/exec"
 	"syscall"
@@ -81,6 +83,11 @@ func RunAsUser(cmdPath string, args []string) error {
 		return err
 	}
 
+	err = SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
+	if err != nil {
+		log.Println("[ERROR]: could not change process priority")
+	}
+
 	err = cmd.Wait()
 	if err != nil {
 		return err
@@ -109,5 +116,43 @@ func RunAsUserWithOutput(cmdPath string, args []string) ([]byte, error) {
 		CreationFlags: 0x08000000, // Reference: https://stackoverflow.com/questions/42500570/how-to-hide-command-prompt-window-when-using-exec-in-golang
 	}
 
-	return cmd.Output()
+	if cmd.Stdout != nil {
+		return nil, errors.New("exec: Stdout already set")
+	}
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+
+	err = cmd.Start()
+	if err != nil {
+		return nil, err
+	}
+
+	err = SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
+	if err != nil {
+		log.Println("[ERROR]: could not change process priority")
+	}
+
+	err = cmd.Wait()
+	if err != nil {
+		return nil, err
+	}
+
+	return stdout.Bytes(), err
+}
+
+const PROCESS_ALL_ACCESS = windows.STANDARD_RIGHTS_REQUIRED | windows.SYNCHRONIZE | 0xffff
+
+func SetPriorityWindows(pid int, priority uint32) error {
+	handle, err := windows.OpenProcess(PROCESS_ALL_ACCESS, false, uint32(pid))
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(handle) // Technically this can fail, but we ignore it
+
+	err = windows.SetPriorityClass(handle, priority)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/open-uem/openuem-agent/internal/commands/deploy"
 	rd "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	"github.com/open-uem/openuem-agent/internal/commands/report"
+	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
 	openuem_utils "github.com/open-uem/utils"
 	"github.com/open-uem/wingetcfg/wingetcfg"
@@ -553,9 +554,9 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 		log.Printf("[ERROR]: could not start configuration profile process, reason: %v", executeErr)
 	} else {
 		// Set priority to below normal
-		err = SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
+		err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
 		if err != nil {
-			log.Fatal(err)
+			log.Println("[ERROR]: could not change process priority")
 		}
 
 		executeErr = cmd.Wait()
@@ -832,23 +833,6 @@ func (a *Agent) ExecutePowerShellScript(powershellPath string, script string) er
 				fmt.Printf("[ERROR]: could not remove temp ps1 file, reason: %v", err)
 			}
 		}
-	}
-
-	return nil
-}
-
-const PROCESS_ALL_ACCESS = windows.STANDARD_RIGHTS_REQUIRED | windows.SYNCHRONIZE | 0xffff
-
-func SetPriorityWindows(pid int, priority uint32) error {
-	handle, err := windows.OpenProcess(PROCESS_ALL_ACCESS, false, uint32(pid))
-	if err != nil {
-		return err
-	}
-	defer windows.CloseHandle(handle) // Technically this can fail, but we ignore it
-
-	err = windows.SetPriorityClass(handle, priority)
-	if err != nil {
-		return err
 	}
 
 	return nil

@@ -11,7 +11,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 	"github.com/open-uem/wingetcfg/wingetcfg"
+	"golang.org/x/sys/windows"
 )
 
 func InstallPackage(packageID string) error {
@@ -28,6 +30,11 @@ func InstallPackage(packageID string) error {
 	if err != nil {
 		log.Printf("[ERROR]: could not start winget.exe command %v", err)
 		return err
+	}
+
+	err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
+	if err != nil {
+		log.Println("[ERROR]: could not change process priority")
 	}
 
 	log.Printf("[INFO]: winget.exe is installing an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
@@ -55,6 +62,11 @@ func UpdatePackage(packageID string) error {
 		return err
 	}
 
+	err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
+	if err != nil {
+		log.Println("[ERROR]: could not change process priority")
+	}
+
 	log.Printf("[INFO]: winget.exe is upgrading an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
 	err = cmd.Wait()
 	if err != nil {
@@ -78,6 +90,11 @@ func UninstallPackage(packageID string) error {
 	if err != nil {
 		log.Printf("[ERROR]: could not start winget.exe command %v", err)
 		return err
+	}
+
+	err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
+	if err != nil {
+		log.Println("[ERROR]: could not change process priority")
 	}
 
 	log.Printf("[INFO]: winget.exe is uninstalling the app %s\n", packageID)
