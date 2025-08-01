@@ -1000,7 +1000,8 @@ func (a *Agent) StartRustDeskSubscribe() error {
 			return
 		}
 
-		if err := rd.Configure(msg.Data); err != nil {
+		id, err := rd.GetRustDeskID()
+		if err != nil {
 			rustdesk.RustDeskRespond(msg, "", err.Error())
 			return
 		}
@@ -1010,16 +1011,17 @@ func (a *Agent) StartRustDeskSubscribe() error {
 			return
 		}
 
-		id, err := rd.GetRustDeskID()
-		if err != nil {
+		if err := rd.Configure(msg.Data); err != nil {
 			rustdesk.RustDeskRespond(msg, "", err.Error())
 			return
 		}
 
-		// if err := rd.LaunchRustDesk(); err != nil {
-		// 	rustdesk.RustDeskRespond(msg, "", err.Error())
-		// 	return
-		// }
+		if rd.IsFlatpak {
+			if err := rd.LaunchRustDesk(); err != nil {
+				rustdesk.RustDeskRespond(msg, "", err.Error())
+				return
+			}
+		}
 
 		// Send ID to the console
 		rustdesk.RustDeskRespond(msg, id, "")

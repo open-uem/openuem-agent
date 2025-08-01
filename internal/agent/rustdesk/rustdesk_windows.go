@@ -18,20 +18,6 @@ import (
 	"golang.org/x/sys/windows/svc"
 )
 
-type RustDeskConfig struct {
-	Binary            string
-	LaunchArgs        []string
-	GetIDArgs         []string
-	ConfigFile        string
-	Password          string
-	UseDirectIPAccess bool
-	Whitelist         string
-}
-
-func New() *RustDeskConfig {
-	return &RustDeskConfig{}
-}
-
 func (cfg *RustDeskConfig) GetInstallationInfo() error {
 	binPath := "C:\\Program Files\\RustDesk\\rustdesk.exe"
 
@@ -127,11 +113,6 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 
 func (cfg *RustDeskConfig) LaunchRustDesk() error {
 	return runtime.RunAsUserInBackground(cfg.Binary, cfg.LaunchArgs)
-}
-
-func (cfg *RustDeskConfig) SetRustDeskPassword(config []byte) error {
-	args := []string{"--password", cfg.Password}
-	return runtime.RunAsUser(cfg.Binary, args)
 }
 
 func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
