@@ -449,21 +449,11 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 	}
 
 	// Check if packages were explicitely deleted and profile tries to install it again
+	// Notify which packages has been explicitely deleted to remove it from console
 	explicitelyDeleted := deploy.GetExplicitelyDeletedPackages(deployments, installedPackages)
-
 	if a.Config.Debug {
 		log.Println("[DEBUG]: explicitely deleted packages", explicitelyDeleted)
 	}
-
-	if err := deploy.RemovePackagesFromCfg(&cfg, explicitelyDeleted); err != nil {
-		log.Printf("[ERROR]: could not remove explicitely deleted from config file, reason: %v", err)
-	}
-
-	if a.Config.Debug {
-		log.Printf("[DEBUG]: config after removing explicitely deleted: +%v", cfg.Properties.Resources)
-	}
-
-	// Notify which packages has been explicitely deleted to remove it from console
 	a.SendWinGetCfgExcludedPackage(explicitelyDeleted)
 
 	if a.Config.Debug {
@@ -471,12 +461,12 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 	}
 
 	// Remove exclusions to avoid reinstalling of explicitely deleted packages
-	if err := deploy.RemovePackagesFromCfg(&cfg, exclusions); err != nil {
-		log.Printf("[ERROR]: could not remove exclusions from config file, reason: %v", err)
+	if err := deploy.RemovePackagesFromCfg(&cfg, explicitelyDeleted, exclusions, installedPackages); err != nil {
+		log.Printf("[ERROR]: could not remove explicitely deleted, exclusions or already installed or uninstalled packages from config file, reason: %v", err)
 	}
 
 	if a.Config.Debug {
-		log.Printf("[DEBUG]: config after removing exclusions: +%v", cfg)
+		log.Printf("[DEBUG]: config after removing explicitely deleted, exclusions or already installed or uninstalled packages: +%v", cfg)
 	}
 
 	errData := ""
