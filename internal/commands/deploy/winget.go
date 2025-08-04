@@ -161,19 +161,26 @@ func GetWinGetInstalledPackagesList() (string, error) {
 	return string(out), nil
 }
 
-func RemovePackagesFromCfg(cfg *wingetcfg.WinGetCfg, explicitelyDeleted []string, exclusions []string, installed string) error {
+func RemovePackagesFromCfg(cfg *wingetcfg.WinGetCfg, explicitelyDeleted []string, exclusions []string, installed string, debug bool) error {
 	if len(exclusions) == 0 {
 		return nil
+	}
+
+	if debug {
+		log.Println("[DEBUG]: Installed packages ", installed)
 	}
 
 	validResources := []*wingetcfg.WinGetResource{}
 	for _, r := range cfg.Properties.Resources {
 		if r.Resource == wingetcfg.WinGetPackageResource {
-
 			isPackageExcluded := slices.Contains(exclusions, r.Settings["id"].(string))
 			isPackageExplicitelyDeleted := slices.Contains(explicitelyDeleted, r.Settings["id"].(string))
 			isAlreadyInstalled := strings.Contains(installed, r.Settings["id"].(string))
 			isInstallAction := r.Settings["Ensure"].(string) == "Present"
+
+			if debug {
+				log.Printf("[DEBUG]: Package %s, Is installed? %t, Excluded? %t, Explicitely Deleted %t,", r.Settings["id"], isAlreadyInstalled, isPackageExcluded, isPackageExplicitelyDeleted)
+			}
 
 			if !isPackageExcluded && !isPackageExplicitelyDeleted &&
 				((isInstallAction && !isAlreadyInstalled) || (!isInstallAction && isAlreadyInstalled)) {

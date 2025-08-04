@@ -461,7 +461,7 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 	}
 
 	// Remove exclusions to avoid reinstalling of explicitely deleted packages
-	if err := deploy.RemovePackagesFromCfg(&cfg, explicitelyDeleted, exclusions, installedPackages); err != nil {
+	if err := deploy.RemovePackagesFromCfg(&cfg, explicitelyDeleted, exclusions, installedPackages, a.Config.Debug); err != nil {
 		log.Printf("[ERROR]: could not remove explicitely deleted, exclusions or already installed or uninstalled packages from config file, reason: %v", err)
 	}
 
