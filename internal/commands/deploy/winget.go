@@ -162,10 +162,6 @@ func GetWinGetInstalledPackagesList() (string, error) {
 }
 
 func RemovePackagesFromCfg(cfg *wingetcfg.WinGetCfg, explicitelyDeleted []string, exclusions []string, installed string, debug bool) error {
-	if len(exclusions) == 0 {
-		return nil
-	}
-
 	if debug {
 		log.Println("[DEBUG]: Installed packages ", installed)
 	}
