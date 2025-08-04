@@ -134,11 +134,11 @@ func locateWinGet() (string, error) {
 	return wgPath, nil
 }
 
-func GetExplicitelyDeletedPackages(deployments []string) []string {
+func GetExplicitelyDeletedPackages(deployments []string, installed string) []string {
 	deleted := []string{}
 
 	for _, d := range deployments {
-		if !IsWinGetPackageInstalled(d) {
+		if !strings.Contains(installed, d) {
 			deleted = append(deleted, d)
 		}
 	}
@@ -146,21 +146,19 @@ func GetExplicitelyDeletedPackages(deployments []string) []string {
 	return deleted
 }
 
-func IsWinGetPackageInstalled(packageID string) bool {
+func GetWinGetInstalledPackagesList() (string, error) {
 	wgPath, err := locateWinGet()
 	if err != nil {
 		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
-		return false
+		return "", err
 	}
 
-	if err := exec.Command(wgPath, "list", "-q", packageID).Run(); err != nil {
-		if !strings.Contains(err.Error(), "0x8a150014") {
-			log.Printf("[ERROR]: an error was found running winget.exe list command %v", err)
-		}
-		return false
+	out, err := exec.Command(wgPath, "list").Output()
+	if err != nil {
+		return "", err
 	}
 
-	return true
+	return string(out), nil
 }
 
 func RemovePackagesFromCfg(cfg *wingetcfg.WinGetCfg, exclusions []string) error {

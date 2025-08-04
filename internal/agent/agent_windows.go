@@ -442,8 +442,14 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 		log.Println("[DEBUG]: PowerShell 7 version was compared")
 	}
 
+	installedPackages, err := deploy.GetWinGetInstalledPackagesList()
+	if err != nil {
+		log.Printf("[ERROR]: could not list of packages installed with WinGet, reason: %v", err)
+		return err
+	}
+
 	// Check if packages were explicitely deleted and profile tries to install it again
-	explicitelyDeleted := deploy.GetExplicitelyDeletedPackages(deployments)
+	explicitelyDeleted := deploy.GetExplicitelyDeletedPackages(deployments, installedPackages)
 
 	if a.Config.Debug {
 		log.Println("[DEBUG]: explicitely deleted packages", explicitelyDeleted)
@@ -581,26 +587,33 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 		log.Println("[ERROR]: could not report if profile was applied succesfully or no")
 	}
 
+	// Get list of installed packages again to check if packages where installed or uninstalled correctly
+	installedPackages, err = deploy.GetWinGetInstalledPackagesList()
+	if err != nil {
+		log.Printf("[ERROR]: could not list of packages installed with WinGet, reason: %v", err)
+		return err
+	}
+
 	// Check if packages have been installed (or uninstalled) and notify the agent worker
-	a.CheckIfCfgPackagesInstalled(cfg)
+	a.CheckIfCfgPackagesInstalled(cfg, installedPackages)
 
 	return nil
 }
 
-func (a *Agent) CheckIfCfgPackagesInstalled(cfg wingetcfg.WinGetCfg) {
+func (a *Agent) CheckIfCfgPackagesInstalled(cfg wingetcfg.WinGetCfg, installed string) {
 	for _, r := range cfg.Properties.Resources {
 		if r.Resource == wingetcfg.WinGetPackageResource {
 			packageID := r.Settings["id"].(string)
 			packageName := r.Directives.Description
 			if r.Settings["Ensure"].(string) == "Present" {
-				if deploy.IsWinGetPackageInstalled(packageID) {
+				if strings.Contains(installed, packageID) {
 					if err := a.SendWinGetCfgDeploymentReport(packageID, packageName, "install"); err != nil {
 						log.Printf("[ERROR]: could not send WinGetCfg deployment report, reason: %v", err)
 						continue
 					}
 				}
 			} else {
-				if !deploy.IsWinGetPackageInstalled(packageID) {
+				if !strings.Contains(installed, packageID) {
 					if err := a.SendWinGetCfgDeploymentReport(packageID, packageName, "uninstall"); err != nil {
 						log.Printf("[ERROR]: could not send WinGetCfg deployment report, reason: %v", err)
 						continue
