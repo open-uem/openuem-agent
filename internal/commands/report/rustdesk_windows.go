@@ -40,7 +40,6 @@ func (r *Report) hasRustDeskService(debug bool) {
 	for _, p := range psList {
 		name, err := p.Name()
 		if err != nil {
-			log.Printf("[ERROR]: could not get process name, reason: %v", err)
 			break
 		}
 		if strings.Contains(name, "rustdesk") {
