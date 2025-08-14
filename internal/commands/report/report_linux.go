@@ -167,6 +167,7 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 	go func() {
 		defer wg.Done()
 		report.hasRustDesk(debug)
+		report.hasRustDeskService(debug)
 	}()
 
 	wg.Add(1)

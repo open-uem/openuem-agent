@@ -46,3 +46,7 @@ func (r *Report) hasRustDesk(debug bool) {
 		log.Println("[INFO]: RustDesk is not available")
 	}
 }
+
+func (r *Report) hasRustDeskService(debug bool) {
+	r.HasRustDeskService = false
+}
