@@ -63,7 +63,7 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		return err
 	}
 
-	if rdConfig.CustomRendezVousServer == "" &&
+	if !rdConfig.DirectIPAccess && rdConfig.CustomRendezVousServer == "" &&
 		rdConfig.RelayServer == "" &&
 		rdConfig.Key == "" &&
 		rdConfig.APIServer == "" {

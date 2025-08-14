@@ -39,7 +39,7 @@ func (r *Report) hasRustDeskService(debug bool) {
 
 	for _, p := range psList {
 		name := p.String()
-		log.Println(name)
+		log.Println(p)
 		if strings.Contains(name, "rustdesk") {
 			log.Println("[INFO]: RustDesk is running as a service")
 			r.HasRustDeskService = true
