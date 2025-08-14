@@ -28,7 +28,6 @@ require (
 	github.com/pkg/sftp v1.13.9
 	github.com/safchain/ethtool v0.6.1
 	github.com/shirou/gopsutil/v3 v3.24.5
-	github.com/shirou/gopsutil/v4 v4.25.7
 	github.com/zcalusic/sysinfo v1.1.3
 	golang.org/x/crypto v0.39.0
 	golang.org/x/mod v0.25.0
@@ -46,7 +45,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgraph-io/ristretto/v2 v2.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/ebitengine/purego v0.8.4 // indirect
 	github.com/evangwt/go-bufcopy v0.1.1 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
