@@ -23,15 +23,14 @@ type RustDeskUser struct {
 }
 
 type RustDeskConfig struct {
-	User                 *RustDeskUser
-	Binary               string
-	LaunchArgs           []string
-	GetIDArgs            []string
-	ConfigFile           string
-	IsFlatpak            bool
-	UseDirectIPAccess    bool
-	UsePermanentPassword bool
-	Whitelist            string
+	User              *RustDeskUser
+	Binary            string
+	LaunchArgs        []string
+	GetIDArgs         []string
+	ConfigFile        string
+	IsFlatpak         bool
+	UseDirectIPAccess bool
+	Whitelist         string
 }
 
 type RustDeskOptionsEntries struct {

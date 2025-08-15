@@ -1016,7 +1016,7 @@ func (a *Agent) StartRustDeskSubscribe() error {
 			return
 		}
 
-		if rd.IsFlatpak || !rd.UsePermanentPassword {
+		if rd.IsFlatpak {
 			if err := rd.LaunchRustDesk(); err != nil {
 				rustdesk.RustDeskRespond(msg, "", err.Error())
 				return
