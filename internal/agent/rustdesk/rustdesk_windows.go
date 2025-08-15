@@ -45,7 +45,6 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		rdConfig.Key == "" &&
 		rdConfig.APIServer == "" {
 		log.Println("[INFO]: no RustDesk settings has been found for tenant, using RustDesk's default settings")
-		return nil
 	}
 
 	// Configuration file location
@@ -81,7 +80,6 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 
 	// Check if configuration file exists, if exists create a backup
 	if _, err := os.Stat(configFile); err == nil {
-		log.Println("Backup: ", configFile+".bak")
 		if err := CopyFile(configFile, configFile+".bak"); err != nil {
 			return err
 		}
