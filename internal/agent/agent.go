@@ -1040,7 +1040,11 @@ func (a *Agent) StopRustDeskSubscribe() error {
 			return
 		}
 
-		// TODO - replace config file with .back
+		if err := rustdesk.ConfigRollBack(); err != nil {
+			rustdesk.RustDeskRespond(msg, "", err.Error())
+			return
+		}
+
 		rustdesk.RustDeskRespond(msg, "", "")
 	})
 

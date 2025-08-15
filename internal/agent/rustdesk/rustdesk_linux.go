@@ -63,7 +63,7 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		return err
 	}
 
-	if !rdConfig.DirectIPAccess && rdConfig.CustomRendezVousServer == "" &&
+	if rdConfig.CustomRendezVousServer == "" &&
 		rdConfig.RelayServer == "" &&
 		rdConfig.Key == "" &&
 		rdConfig.APIServer == "" {
@@ -233,5 +233,9 @@ func KillRustDeskProcess() error {
 		return err
 	}
 
+	return nil
+}
+
+func ConfigRollBack() error {
 	return nil
 }

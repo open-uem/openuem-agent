@@ -40,7 +40,7 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		return err
 	}
 
-	if !rdConfig.DirectIPAccess && rdConfig.CustomRendezVousServer == "" &&
+	if rdConfig.CustomRendezVousServer == "" &&
 		rdConfig.RelayServer == "" &&
 		rdConfig.Key == "" &&
 		rdConfig.APIServer == "" {
@@ -141,5 +141,18 @@ func KillRustDeskProcess() error {
 			return err
 		}
 	}
+	return nil
+}
+
+func ConfigRollBack() error {
+	configFile := "C:\\Windows\\ServiceProfiles\\LocalService\\AppData\\Roaming\\RustDesk\\config\\RustDesk2.toml"
+
+	// Check if configuration file exists, if exists create a backup
+	if _, err := os.Stat(configFile + ".bak"); err == nil {
+		if err := CopyFile(configFile+".bak", configFile); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
