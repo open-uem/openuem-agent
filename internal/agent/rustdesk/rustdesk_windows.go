@@ -148,7 +148,7 @@ func ConfigRollBack() error {
 
 	// Check if configuration file exists, if exists create a backup
 	if _, err := os.Stat(configFile + ".bak"); err == nil {
-		if err := CopyFile(configFile+".bak", configFile); err != nil {
+		if err := os.Rename(configFile+".bak", configFile); err != nil {
 			return err
 		}
 	}
