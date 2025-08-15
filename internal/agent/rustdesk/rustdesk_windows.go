@@ -48,6 +48,10 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		return nil
 	}
 
+	if rdConfig.PermanentPassword != "" {
+		cfg.UsePermanentPassword = true
+	}
+
 	// Configuration file location
 	configFile := ""
 	configPath := ""
