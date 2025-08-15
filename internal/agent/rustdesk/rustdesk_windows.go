@@ -5,6 +5,7 @@ package rustdesk
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -135,15 +136,15 @@ func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
 func KillRustDeskProcess() error {
 	args := []string{"/F", "/T", "/IM", "rustdesk.exe"}
 	if err := runtime.RunAsUser("taskkill", args); err != nil {
-		if !strings.Contains(err.Error(), "128") {
-			log.Printf("[WARN]: taskkill RustDesk ID is not a number, reason: %v", err)
-			return err
+		if !strings.Contains(err.Error(), "128") && !strings.Contains(err.Error(), "255") {
+			log.Printf("[WARN]: could not kill RustDesk app, reason: %v", err)
+			return fmt.Errorf("[WARN]: could not kill RustDesk app, reason: %v", err)
 		}
 	}
 	return nil
 }
 
-func ConfigRollBack() error {
+func ConfigRollBack(isFlatpak bool) error {
 	configFile := "C:\\Windows\\ServiceProfiles\\LocalService\\AppData\\Roaming\\RustDesk\\config\\RustDesk2.toml"
 
 	// Check if configuration file exists, if exists create a backup

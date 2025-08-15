@@ -1040,7 +1040,13 @@ func (a *Agent) StopRustDeskSubscribe() error {
 			return
 		}
 
-		if err := rustdesk.ConfigRollBack(); err != nil {
+		rd := rustdesk.New()
+		if err := rd.GetInstallationInfo(); err != nil {
+			rustdesk.RustDeskRespond(msg, "", err.Error())
+			return
+		}
+
+		if err := rustdesk.ConfigRollBack(rd.IsFlatpak); err != nil {
 			rustdesk.RustDeskRespond(msg, "", err.Error())
 			return
 		}

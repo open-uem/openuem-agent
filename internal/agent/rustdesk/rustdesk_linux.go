@@ -79,7 +79,7 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		configPath = filepath.Join(rootConfigPath, "app", "com.rustdesk.RustDesk", "config", "rustdesk")
 		configFile = filepath.Join(configPath, "RustDesk2.toml")
 	} else {
-		rootConfigPath = filepath.Join(cfg.User.Home, ".config", "rustdesk")
+		rootConfigPath = filepath.Join("root", ".config", "rustdesk")
 		configPath = rootConfigPath
 		configFile = filepath.Join(configPath, "RustDesk2.toml")
 	}
@@ -236,6 +236,38 @@ func KillRustDeskProcess() error {
 	return nil
 }
 
-func ConfigRollBack() error {
+func ConfigRollBack(isFlatpak bool) error {
+
+	rdUser, err := getRustDeskUserInfo()
+	if err != nil {
+		return err
+	}
+
+	configFile := ""
+
+	if isFlatpak {
+		configPath := filepath.Join(rdUser.Home, ".var", "app", "com.rustdesk.RustDesk", "config", "rustdesk")
+		configFile = filepath.Join(configPath, "RustDesk2.toml")
+	} else {
+		configPath := filepath.Join("root", ".config", "rustdesk")
+		configFile = filepath.Join(configPath, "RustDesk2.toml")
+	}
+
+	// Check if configuration file exists, if exists create a backup
+	if _, err := os.Stat(configFile + ".bak"); err == nil {
+		if err := os.Rename(configFile+".bak", configFile); err != nil {
+			return err
+		}
+	}
+
+	// Restart the RustDesk service to apply the new configuration if not flatpak
+	if !isFlatpak {
+		command := "/usr/bin/systemctl restart rustdesk"
+		cmd := exec.Command("bash", "-c", command)
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

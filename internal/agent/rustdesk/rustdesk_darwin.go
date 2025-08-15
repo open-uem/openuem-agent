@@ -22,6 +22,6 @@ func KillRustDeskProcess() error {
 	return nil
 }
 
-func ConfigRollBack() error {
+func ConfigRollBack(isFlatpak bool) error {
 	return nil
 }
