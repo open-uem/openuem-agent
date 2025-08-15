@@ -153,5 +153,17 @@ func ConfigRollBack() error {
 		}
 	}
 
+	// Restart RustDesk service after configuration changes
+	if err := openuem_utils.WindowsSvcControl("RustDesk", svc.Stop, svc.Stopped); err != nil {
+		log.Printf("[ERROR]: could not stop RustDesk service, reason: %v\n", err)
+		return err
+	}
+
+	// Start service
+	if err := openuem_utils.WindowsStartService("RustDesk"); err != nil {
+		log.Printf("[ERROR]: could not start RustDesk service, reason: %v\n", err)
+		return err
+	}
+
 	return nil
 }
