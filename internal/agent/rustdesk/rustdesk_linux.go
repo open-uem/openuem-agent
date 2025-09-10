@@ -67,7 +67,7 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		rdConfig.RelayServer == "" &&
 		rdConfig.Key == "" &&
 		rdConfig.APIServer == "" {
-		log.Println("[INFO]: no RustDesk server settings has been found for tenant, using RustDesk's default settings")
+		log.Println("[INFO]: no RustDesk server settings have been found for tenant, using RustDesk's default settings")
 	}
 
 	// Configuration file location
