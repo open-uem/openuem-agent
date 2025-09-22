@@ -160,7 +160,6 @@ func (a *Agent) RunReport() *report.Report {
 
 	log.Println("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 
-	r.Print()
 	return r
 }
 
