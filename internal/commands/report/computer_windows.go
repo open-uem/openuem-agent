@@ -9,6 +9,22 @@ import (
 	"strings"
 )
 
+type computerSystem struct {
+	Manufacturer        string
+	Model               string
+	TotalPhysicalMemory uint64
+}
+
+type biosInfo struct {
+	SerialNumber string
+}
+
+type processorInfo struct {
+	Architecture  uint32
+	Name          string
+	NumberOfCores uint32
+}
+
 func (r *Report) getComputerInfo(debug bool) error {
 	if debug {
 		log.Println("[DEBUG]: computer system info has been requested")

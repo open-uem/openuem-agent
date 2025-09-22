@@ -4,8 +4,8 @@ import (
 	"fmt"
 )
 
-func (r *Report) logLogicalDisks() {
-	fmt.Printf("\n** 💾 Logical Disks *************************************************************************************************\n")
+func (r *Report) logPhysicalDisks() {
+	fmt.Printf("\n** 💾 Physical Disks *************************************************************************************************\n")
 	if len(r.LogicalDisks) > 0 {
 		for i, myDisk := range r.LogicalDisks {
 			diskUsage := fmt.Sprintf("Disk %s usage", myDisk.Label)

@@ -159,6 +159,8 @@ func (a *Agent) RunReport() *report.Report {
 	log.Printf("[INFO]: agent report run took %v\n", time.Since(start))
 
 	log.Println("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+
+	r.Print()
 	return r
 }
 

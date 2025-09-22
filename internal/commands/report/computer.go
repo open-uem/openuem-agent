@@ -4,22 +4,6 @@ import (
 	"fmt"
 )
 
-type computerSystem struct {
-	Manufacturer        string
-	Model               string
-	TotalPhysicalMemory uint64
-}
-
-type biosInfo struct {
-	SerialNumber string
-}
-
-type processorInfo struct {
-	Architecture  uint32
-	Name          string
-	NumberOfCores uint32
-}
-
 func (r *Report) logComputer() {
 	fmt.Printf("\n** 🖥️  Computer ******************************************************************************************************\n")
 	fmt.Printf("%-40s |  %s \n", "Manufacturer", r.Computer.Manufacturer)
