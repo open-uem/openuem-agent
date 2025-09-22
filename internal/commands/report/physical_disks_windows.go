@@ -38,6 +38,7 @@ func (r *Report) getPhysicalDisksFromWMI(debug bool) error {
 			}
 			myDisk.Model = strings.TrimSpace(v.Model)
 			myDisk.SerialNumber = strings.TrimSpace(v.SerialNumber)
+			myDisk.SizeInUnits = convertBytesToUnits(v.Size)
 
 			if debug {
 				log.Println("[DEBUG]: bit locker status info has been requested for: ", myDisk.DeviceID)

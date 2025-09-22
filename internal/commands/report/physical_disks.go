@@ -1,27 +1,19 @@
 package report
 
 import (
-	"fmt"
 	"log"
 )
 
 func (r *Report) logPhysicalDisks() {
 	log.Printf("\n** 💾 Physical Disks *************************************************************************************************\n")
 	if len(r.LogicalDisks) > 0 {
-		for i, myDisk := range r.LogicalDisks {
-			diskUsage := fmt.Sprintf("Disk %s usage", myDisk.Label)
-			log.Printf("%-40s |  %d %% \n", diskUsage, myDisk.Usage)
-			diskFreeSpace := fmt.Sprintf("Disk %s free space", myDisk.Label)
-			log.Printf("%-40s |  %s \n", diskFreeSpace, myDisk.RemainingSpaceInUnits)
-			diskSize := fmt.Sprintf("Disk %s size", myDisk.Label)
-			log.Printf("%-40s |  %s \n", diskSize, myDisk.SizeInUnits)
-			diskVolumeName := fmt.Sprintf("Disk %s volume name", myDisk.Label)
-			log.Printf("%-40s |  %s \n", diskVolumeName, myDisk.VolumeName)
-			diskFS := fmt.Sprintf("Disk %s filesystem", myDisk.Label)
-			log.Printf("%-40s |  %s \n", diskFS, myDisk.Filesystem)
-			fmt.Printf("%-40s |  %s \n", "Bitlocker Status", myDisk.BitLockerStatus)
+		for i, myDisk := range r.PhysicalDisks {
+			log.Printf("%-40s |  %s \n", "Disk ID", myDisk.DeviceID)
+			log.Printf("%-40s |  %s \n", "Model", myDisk.Model)
+			log.Printf("%-40s |  %s \n", "Serial Number", myDisk.SerialNumber)
+			log.Printf("%-40s |  %s \n", "Size in units", myDisk.SizeInUnits)
 
-			if len(r.LogicalDisks) > 1 && i+1 != len(r.LogicalDisks) {
+			if len(r.PhysicalDisks) > 1 && i+1 != len(r.PhysicalDisks) {
 				log.Printf("---------------------------------------------------------------------------------------------------------------------\n")
 			}
 		}
