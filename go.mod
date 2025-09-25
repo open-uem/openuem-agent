@@ -1,6 +1,6 @@
 module github.com/open-uem/openuem-agent
 
-go 1.24.4
+go 1.25.1
 
 require (
 	github.com/ceshihao/windowsupdate v0.0.5
@@ -20,7 +20,7 @@ require (
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/nats-io/nats.go v1.43.0
-	github.com/open-uem/nats v0.0.0-20250814165459-fedd73db4ba6
+	github.com/open-uem/nats v0.0.0-20250923071457-64a09d499296
 	github.com/open-uem/openuem-ansible-config v0.0.0-20250710075757-9ef6e3390073
 	github.com/open-uem/utils v0.0.0-20250702121339-316c5b599cd3
 	github.com/open-uem/wingetcfg v0.0.0-20250625110454-5d9433af7cf3

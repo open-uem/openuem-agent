@@ -2,27 +2,7 @@ package report
 
 import (
 	"fmt"
-	"time"
 )
-
-type networkAdapterInfo struct {
-	Index               uint32
-	MACAddress          string
-	Name                string
-	NetConnectionStatus uint16
-	Speed               uint64
-}
-
-type networkAdapterConfiguration struct {
-	DefaultIPGateway     []string
-	DHCPEnabled          bool
-	DNSDomain            string
-	DHCPLeaseExpires     time.Time
-	DHCPLeaseObtained    time.Time
-	DNSServerSearchOrder []string
-	IPAddress            []string
-	IPSubnet             []string
-}
 
 func (r *Report) logNetworkAdapters() {
 	fmt.Printf("\n** 📶 Network adapters (Active) *************************************************************************************\n")

@@ -4,15 +4,6 @@ import (
 	"fmt"
 )
 
-type logicalDisk struct {
-	DeviceID   string
-	FreeSpace  uint64
-	Size       uint64
-	DriveType  uint32
-	FileSystem string
-	VolumeName string
-}
-
 func (r *Report) logLogicalDisks() {
 	fmt.Printf("\n** 💾 Logical Disks *************************************************************************************************\n")
 	if len(r.LogicalDisks) > 0 {

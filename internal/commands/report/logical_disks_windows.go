@@ -17,6 +17,15 @@ type bitLockerStatus struct {
 	EncryptionMethod int8
 }
 
+type logicalDisk struct {
+	DeviceID   string
+	FreeSpace  uint64
+	Size       uint64
+	DriveType  uint32
+	FileSystem string
+	VolumeName string
+}
+
 func (r *Report) getLogicalDisksFromWMI(debug bool) error {
 	var disksDst []logicalDisk
 
