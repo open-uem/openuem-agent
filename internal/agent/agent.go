@@ -1017,12 +1017,12 @@ func (a *Agent) StartRustDeskSubscribe() error {
 			return
 		}
 
-		if rd.IsFlatpak {
-			if err := rd.LaunchRustDesk(); err != nil {
-				rustdesk.RustDeskRespond(msg, "", err.Error())
-				return
-			}
-		}
+		// if rd.IsFlatpak {
+		// 	if err := rd.LaunchRustDesk(); err != nil {
+		// 		rustdesk.RustDeskRespond(msg, "", err.Error())
+		// 		return
+		// 	}
+		// }
 
 		// Send ID to the console
 		rustdesk.RustDeskRespond(msg, id, "")

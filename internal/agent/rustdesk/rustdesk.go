@@ -13,6 +13,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	openuem_nats "github.com/open-uem/nats"
+	"github.com/pelletier/go-toml/v2"
 )
 
 type RustDeskUser struct {
@@ -47,9 +48,11 @@ type RustDeskOptions struct {
 }
 
 type RustDeskPassword struct {
-	Password string `toml:"password"`
-	Salt     string `toml:"salt"`
-	EncID    string `toml:"enc_id"`
+	Password     string  `toml:"password"`
+	Salt         string  `toml:"salt"`
+	EncID        string  `toml:"enc_id"`
+	KeyConfirmed bool    `toml:"key_confirmed"`
+	KeyPair      [][]int `toml:"key_pair"`
 }
 
 func New() *RustDeskConfig {
@@ -59,8 +62,8 @@ func New() *RustDeskConfig {
 func (cfg *RustDeskConfig) SetRustDeskPassword(config []byte) error {
 	// The --password command requires root privileges which is not
 	// possible using Flatpak so we've to do a workaround
-	// creating an empty RustDesk.toml file with the password
-	// encrypted
+	// adding the the password in clear to RustDesk.toml
+	// this password is encrypted as soon as the RustDesk app is
 
 	// Unmarshal configuration data
 	var rdConfig openuem_nats.RustDesk
@@ -88,8 +91,43 @@ func (cfg *RustDeskConfig) SetRustDeskPassword(config []byte) error {
 			return err
 		}
 	} else {
-		log.Print("[ERROR]: cannot set RustDesk password for flatpak, disable the use of permanent password for this tenant")
-		return errors.New("cannot set RustDesk password for flatpak, disable the use of permanent password for this tenant")
+		rootConfigPath := filepath.Join(cfg.User.Home, ".var")
+		configPath := filepath.Join(rootConfigPath, "app", "com.rustdesk.RustDesk", "config", "rustdesk")
+		configFile := filepath.Join(configPath, "RustDesk.toml")
+
+		// Check if configuration file exists, if exists read it and create a backup
+		if _, err := os.Stat(configFile); err == nil {
+			config, err := os.ReadFile(configFile)
+			if err != nil {
+				log.Printf("[ERROR]: could not read RustDesk.toml config file reason: %v", err)
+				return err
+			}
+			if err := os.Rename(configFile, configFile+".bak"); err != nil {
+				return err
+			}
+
+			// Read TOML
+			cfgTOML := RustDeskPassword{}
+			toml.Unmarshal(config, &cfgTOML)
+
+			cfgTOML.Password = rdConfig.PermanentPassword
+
+			// Write new configuration
+			rdTOML, err := toml.Marshal(cfgTOML)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshall TOML file for RustDesk configuration, reason: %v", err)
+				return err
+			}
+
+			if err := os.WriteFile(configFile, rdTOML, 0600); err != nil {
+				log.Printf("[ERROR]: could not create TOML file for RustDesk configuration, reason: %v", err)
+				return err
+			}
+		} else {
+			//
+			log.Print("[ERROR]: cannot set RustDesk password for flatpak, disable the use of permanent password for this tenant")
+			return errors.New("cannot set RustDesk password for flatpak, disable the use of permanent password for this tenant")
+		}
 	}
 
 	// // Configuration file location

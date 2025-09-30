@@ -285,3 +285,7 @@ func GetSupportedRemoteDesktop(agentOS string) string {
 func GetAgentOS() string {
 	return "windows"
 }
+
+func IsWaylandDisplayServer() bool {
+	return false
+}

@@ -19,5 +19,6 @@ func (r *Report) getRemoteDesktopInfo(debug bool) error {
 	}
 
 	r.SupportedVNCServer = rd
+	r.IsWayland = remotedesktop.IsWaylandDisplayServer()
 	return nil
 }
