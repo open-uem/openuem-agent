@@ -13,7 +13,7 @@ func (r *Report) getRemoteDesktopInfo(debug bool) error {
 
 	rd := remotedesktop.GetSupportedRemoteDesktop(r.OS)
 	if rd == "" {
-		log.Println("[ERROR]: could not find a supported Remote Desktop service")
+		log.Println("[INFO]: could not find a supported VNC/RDP server")
 	} else {
 		log.Printf("[INFO]: supported Remote Desktop service found: %s", rd)
 	}
