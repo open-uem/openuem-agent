@@ -52,8 +52,17 @@ func getApplications(debug bool) (map[string]openuem_nats.Application, error) {
 		log.Printf("[INFO]: apps information has been retrieved from %s\\%s", "HKLM", APPS32BITS)
 	}
 
-	// Users
-	sids, err := GetSIDs()
+	// Bug: #94
+	// It seems that the following query has some problems in Windows 11 (maybe when computer is member of a domain)
+	// The query seems to fail to retrieve SIDs from other users, maybe we've accounts that are from a domain
+	// and SIDs cannot be retrieved affecting the WMI subsystem
+	// For now we can skip this as this query is only used to get apps that have been installed by use
+
+	// // Users
+	// sids, err := GetSIDs()
+
+	// We use the registry query instead
+	sids, err := GetSIDSFromRegistry()
 	if err != nil {
 		log.Println("[ERROR]: could not get user SIDs")
 		return nil, err
@@ -63,7 +72,7 @@ func getApplications(debug bool) (map[string]openuem_nats.Application, error) {
 		if debug {
 			log.Printf("[DEBUG]: apps information has been requested for %s", "HKCU\\APPS")
 		}
-		if err := getApplicationsFromRegistry(applications, registry.USERS, APPS, s.SID); err != nil {
+		if err := getApplicationsFromRegistry(applications, registry.USERS, APPS, s); err != nil {
 			if debug {
 				log.Printf("[DEBUG]: could not get apps information from HKEY_USERS for sid %s, reason: %v", s, err)
 			}
@@ -74,7 +83,7 @@ func getApplications(debug bool) (map[string]openuem_nats.Application, error) {
 		if debug {
 			log.Printf("[DEBUG]: apps information has been requested for %s", "HKCU\\APPS32BITS")
 		}
-		if err := getApplicationsFromRegistry(applications, registry.USERS, APPS32BITS, s.SID); err != nil {
+		if err := getApplicationsFromRegistry(applications, registry.USERS, APPS32BITS, s); err != nil {
 			if debug {
 				log.Printf("[DEBUG]: could not get apps information from HKEY_USERS (32bits) for sid %s, reason: %v", s, err)
 			}
@@ -152,6 +161,31 @@ func GetSID(username string) (string, error) {
 	}
 
 	return response[0].SID, nil
+}
+
+func GetSIDSFromRegistry() ([]string, error) {
+
+	response := []string{}
+
+	key := "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList"
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, key, registry.ENUMERATE_SUB_KEYS)
+	if err != nil {
+		return nil, err
+	}
+	defer k.Close()
+
+	names, err := k.ReadSubKeyNames(-1)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, name := range names {
+		if strings.HasPrefix(name, "S-1-5") {
+			response = append(response, name)
+		}
+	}
+
+	return response, nil
 }
 
 func GetSIDs() ([]struct{ SID string }, error) {
