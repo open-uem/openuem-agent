@@ -190,3 +190,7 @@ func notifyPINToUser(pin string) error {
 
 	return nil
 }
+
+func IsWaylandDisplayServer() bool {
+	return false
+}

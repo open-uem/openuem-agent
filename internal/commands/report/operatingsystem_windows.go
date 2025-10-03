@@ -92,7 +92,13 @@ func (r *Report) getOperatingSystemInfo(debug bool) error {
 	v := &osDst[0]
 	r.OperatingSystem.Version = "Undetected"
 	if v.Version != "" {
-		nt := getWindowsVersion(v.Version)
+		var nt *windowsVersion
+
+		if isWindowsServer(v.Caption) {
+			nt = getWindowsServerVersion(v.Version)
+		} else {
+			nt = getWindowsClientVersion(v.Version)
+		}
 		if nt != nil {
 			r.OperatingSystem.Version = fmt.Sprintf("%s %s", nt.name, nt.version)
 		}
@@ -171,14 +177,15 @@ func GetLoggedOnUsername() (string, error) {
 	return strings.TrimSpace(v.Username), nil
 }
 
-// func (r *Report) isWindowsServer() bool {
-// 	return strings.HasPrefix(r.OperatingSystem.Version, "Windows Server")
-// }
+func isWindowsServer(caption string) bool {
+	return strings.Contains(caption, "Server")
+}
 
-func getWindowsVersion(version string) *windowsVersion {
+func getWindowsClientVersion(version string) *windowsVersion {
 	var windowsVersions = map[string]windowsVersion{}
 
 	// Windows 11
+	windowsVersions["10.0.26200"] = windowsVersion{name: "Windows 11", version: "25H2"}
 	windowsVersions["10.0.26100"] = windowsVersion{name: "Windows 11", version: "24H2"}
 	windowsVersions["10.0.22631"] = windowsVersion{name: "Windows 11", version: "23H2"}
 	windowsVersions["10.0.22621"] = windowsVersion{name: "Windows 11", version: "22H2"}
@@ -218,7 +225,22 @@ func getWindowsVersion(version string) *windowsVersion {
 	windowsVersions["5.1.2700"] = windowsVersion{name: "Windows XP", version: ""}
 	windowsVersions["5.1.2600"] = windowsVersion{name: "Windows XP", version: ""}
 
+	// Windows 2000
+	windowsVersions["5.0.2195"] = windowsVersion{name: "Windows 2000", version: ""}
+
+	val, ok := windowsVersions[version]
+	if !ok {
+		return nil
+	} else {
+		return &val
+	}
+}
+
+func getWindowsServerVersion(version string) *windowsVersion {
+	var windowsVersions = map[string]windowsVersion{}
+
 	// Windows Server 2025
+	windowsVersions["10.0.26100"] = windowsVersion{name: "Windows Server 2025", version: "Preview"}
 
 	// Windows Server 2022
 	windowsVersions["10.0.25398"] = windowsVersion{name: "Windows Server 2022", version: "23H2"}
