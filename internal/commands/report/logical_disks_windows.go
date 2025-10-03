@@ -100,7 +100,7 @@ func getBitLockerStatus(driveLetter string) string {
 	}
 
 	if len(response) != 1 {
-		log.Printf("[WARN]: no bitlocker result for drive %s got %d rows: %v", driveLetter, len(response), err)
+		log.Printf("[INFO]: no bitlocker result for drive %s got %d rows: %v", driveLetter, len(response), err)
 		return "Unknown"
 	}
 
