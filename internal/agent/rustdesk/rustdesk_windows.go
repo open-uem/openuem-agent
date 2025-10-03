@@ -133,7 +133,7 @@ func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
 	return id, nil
 }
 
-func KillRustDeskProcess() error {
+func KillRustDeskProcess(username string) error {
 	args := []string{"/F", "/T", "/IM", "rustdesk.exe"}
 	if err := runtime.RunAsUser("taskkill", args); err != nil {
 		if !strings.Contains(err.Error(), "128") && !strings.Contains(err.Error(), "255") {
@@ -144,7 +144,7 @@ func KillRustDeskProcess() error {
 	return nil
 }
 
-func ConfigRollBack(isFlatpak bool) error {
+func ConfigRollBack(username string, isFlatpak bool) error {
 	configFile := "C:\\Windows\\ServiceProfiles\\LocalService\\AppData\\Roaming\\RustDesk\\config\\RustDesk2.toml"
 
 	// Check if configuration file exists, if exists create a backup
