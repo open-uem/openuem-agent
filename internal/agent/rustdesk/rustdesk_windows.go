@@ -44,7 +44,8 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 	if rdConfig.CustomRendezVousServer == "" &&
 		rdConfig.RelayServer == "" &&
 		rdConfig.Key == "" &&
-		rdConfig.APIServer == "" {
+		rdConfig.APIServer == "" &&
+		!rdConfig.DirectIPAccess {
 		log.Println("[INFO]: no RustDesk settings has been found for tenant, using RustDesk's default settings")
 	}
 

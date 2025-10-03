@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
@@ -31,7 +30,8 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 	if rdConfig.CustomRendezVousServer == "" &&
 		rdConfig.RelayServer == "" &&
 		rdConfig.Key == "" &&
-		rdConfig.APIServer == "" {
+		rdConfig.APIServer == "" &&
+		!rdConfig.DirectIPAccess {
 		log.Println("[INFO]: no RustDesk server settings have been found for tenant, using RustDesk's default settings")
 	}
 
@@ -222,11 +222,6 @@ func RestartRustDeskService(username string) error {
 		return err
 	}
 
-	out, _ := os.ReadFile("/System/Volumes/Data/private/var/root/Library/Preferences/com.carriez.RustDesk/RustDesk2.toml")
-	log.Println(string(out))
-
-	time.Sleep(2 * time.Second)
-
 	if err := StopRustDeskService(username); err != nil {
 		return err
 	}
@@ -234,9 +229,6 @@ func RestartRustDeskService(username string) error {
 	if err := StartRustDeskService(username); err != nil {
 		return err
 	}
-
-	out, _ = os.ReadFile("/Users/mood/Library/Preferences/com.carriez.RustDesk/RustDesk2.toml")
-	log.Println(string(out))
 
 	return nil
 }
@@ -254,13 +246,31 @@ func StartSystemRustDeskService(username string) error {
 }
 
 func StopRustDeskService(username string) error {
-	bin := "launchctl"
-	args := []string{"unload", "-w", "/Library/LaunchAgents/com.carriez.RustDesk_server.plist"}
-	return runtime.RunAsUserInBackground(username, bin, args, true)
+	u, err := user.Lookup(username)
+	if err != nil {
+		return err
+	}
+
+	// Reference: https://breardon.home.blog/2019/09/18/sudo-u-vs-launchctl-asuser/
+	cmd := exec.Command("/bin/launchctl", "asuser", u.Uid, "launchctl", "unload", "/Library/LaunchAgents/com.carriez.RustDesk_server.plist")
+	out, err := cmd.CombinedOutput()
+	if err != nil && strings.Contains(string(out), "5") {
+		return nil
+	}
+	return err
 }
 
 func StartRustDeskService(username string) error {
-	bin := "launchctl"
-	args := []string{"load", "-w", "/Library/LaunchAgents/com.carriez.RustDesk_server.plist"}
-	return runtime.RunAsUserInBackground(username, bin, args, true)
+	u, err := user.Lookup(username)
+	if err != nil {
+		return err
+	}
+
+	// Reference: https://breardon.home.blog/2019/09/18/sudo-u-vs-launchctl-asuser/
+	cmd := exec.Command("/bin/launchctl", "asuser", u.Uid, "launchctl", "load", "/Library/LaunchAgents/com.carriez.RustDesk_server.plist")
+	out, err := cmd.CombinedOutput()
+	if err != nil && strings.Contains(string(out), "5") {
+		return nil
+	}
+	return err
 }
