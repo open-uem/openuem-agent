@@ -26,5 +26,8 @@ func (r *Report) hasRustDesk(debug bool) {
 }
 
 func (r *Report) hasRustDeskService(debug bool) {
+	if debug {
+		log.Println("[INFO]: check if RustDesk service is available")
+	}
 	r.HasRustDeskService = false
 }
