@@ -103,7 +103,7 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 
 				// Kill Remote Desktop service as some remnants can be there
 				if err := runtime.RunAsUser("taskkill", []string{"/F", "/T", "/IM", "tvnserver.exe"}); err != nil {
-					log.Printf("Remote Desktop service kill error, %v\n", err)
+					log.Printf("[WARN]: Remote Desktop service kill error, %v\n", err)
 				}
 				return nil
 			},
@@ -164,8 +164,12 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 				return runtime.RunAsUser(`C:\Program Files\uvnc bvba\UltraVNC\winvnc.exe`, nil)
 			},
 			StopService: func() error {
-				args := []string{"-kill"}
-				return runtime.RunAsUser(`C:\Program Files\uvnc bvba\UltraVNC\winvnc.exe`, args)
+				args := []string{"/F", "/T", "/IM", "winvnc.exe"}
+				return runtime.RunAsUser("taskkill", args)
+
+				// 30/09/2025 No longer seems to work
+				// args := []string{"-kill"}
+				// return runtime.RunAsUser(`C:\Program Files\uvnc bvba\UltraVNC\winvnc.exe`, args)
 			},
 			Configure: func() error {
 				iniFile := `C:\Program Files\uvnc bvba\UltraVNC\ultravnc.ini`
@@ -284,4 +288,8 @@ func GetSupportedRemoteDesktop(agentOS string) string {
 
 func GetAgentOS() string {
 	return "windows"
+}
+
+func IsWaylandDisplayServer() bool {
+	return false
 }

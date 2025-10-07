@@ -10,6 +10,13 @@ import (
 	"strings"
 )
 
+type antivirusProduct struct {
+	DisplayName              string
+	ProductState             int
+	PathToSignedProductExe   string
+	PathToSignedReportingExe string
+}
+
 func (r *Report) getAntivirusInfo(debug bool) error {
 	if debug {
 		log.Println("[DEBUG]: antivirus info has been requested")

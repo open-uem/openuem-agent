@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/doncicuto/comshim"
@@ -17,7 +18,7 @@ import (
 )
 
 func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAddress string, sftpDisabled, remoteAssistanceDisabled bool, tenantID string, siteID string) (*Report, error) {
-	// var wg sync.WaitGroup
+	var wg sync.WaitGroup
 	var err error
 
 	if debug {
@@ -152,133 +153,39 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 		log.Println("[ERROR]: error retrieving applications info")
 	}
 
-	if err := report.getRemoteDesktopInfo(debug); err != nil {
-		log.Println("[ERROR]: error retrieving remote desktop info")
-	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.getRemoteDesktopInfo(debug); err != nil {
+			report.getRemoteDesktopInfo(debug)
+		}
+	}()
 
-	if err := report.getUpdateTaskInfo(debug); err != nil {
-		log.Println("[ERROR]: error getting OpenUEM update info")
-	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		report.hasRustDesk(debug)
+		report.hasRustDeskService(debug)
+	}()
 
-	// // These operations will be run using goroutines
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getComputerInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getComputerInfo(debug)
-	// 	}
-	// }()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.getUpdateTaskInfo(debug); err != nil {
+			// Retry
+			report.getUpdateTaskInfo(debug)
+		}
+	}()
 
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getOperatingSystemInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getOperatingSystemInfo(debug)
-	// 	}
-	// }()
-
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getOSInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getOSInfo(debug)
-	// 	}
-	// }()
-
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getMonitorsInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getMonitorsInfo(debug)
-	// 	}
-	// }()
-
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getMemorySlotsInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getMemorySlotsInfo(debug)
-	// 	}
-	// }()
-
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getPrintersInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getPrintersInfo(debug)
-	// 	}
-	// }()
-
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getSharesInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getSharesInfo(debug)
-	// 	}
-	// }()
-
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getAntivirusInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getAntivirusInfo(debug)
-	// 	}
-	// }()
-
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getNetworkAdaptersInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getNetworkAdaptersInfo(debug)
-	// 	}
-	// 	// Get network adapter with default gateway and set its ip address and MAC as the report IP/MAC address
-	// 	for _, n := range report.NetworkAdapters {
-	// 		if n.DefaultGateway != "" {
-	// 			if n.Addresses == "" {
-	// 				report.IP = ipAddress
-	// 			} else {
-	// 				report.IP = n.Addresses
-	// 			}
-	// 			report.MACAddress = n.MACAddress
-	// 			break
-	// 		}
-	// 	}
-	// }()
-
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getApplicationsInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getApplicationsInfo(debug)
-	// 	}
-	// }()
-
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getRemoteDesktopInfo(debug); err != nil {
-	// 		report.getRemoteDesktopInfo(debug)
-	// 	}
-	// }()
-
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	if err := report.getUpdateTaskInfo(debug); err != nil {
-	// 		// Retry
-	// 		report.getUpdateTaskInfo(debug)
-	// 	}
-	// }()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.getPhysicalDisksInfo(debug); err != nil {
+			log.Printf("[ERROR]: could not get physical disks information from WMI Win32_DiskDrive: %v", err)
+		} else {
+			log.Printf("[INFO]: physical disks information has been retrieved from WMI Win32_DiskDrive")
+		}
+	}()
 
 	// wg.Wait()
 

@@ -156,3 +156,32 @@ func SetPriorityWindows(pid int, priority uint32) error {
 
 	return nil
 }
+
+// Reference: https://blog.davidvassallo.me/2022/06/17/golang-in-windows-execute-command-as-another-user/
+func RunAsUserInBackground(cmdPath string, args []string) error {
+	pid, err := findProcessByName("explorer.exe")
+	if err != nil {
+		return err
+	}
+
+	token, err := getUserToken(int(pid))
+	if err != nil {
+		return err
+	}
+	defer token.Close()
+
+	cmd := exec.Command(cmdPath, args...)
+
+	// this is the important bit!
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Token:         token,
+		CreationFlags: 0x08000000, // Reference: https://stackoverflow.com/questions/42500570/how-to-hide-command-prompt-window-when-using-exec-in-golang
+	}
+
+	err = cmd.Start()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

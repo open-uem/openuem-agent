@@ -17,6 +17,15 @@ type bitLockerStatus struct {
 	EncryptionMethod int8
 }
 
+type logicalDisk struct {
+	DeviceID   string
+	FreeSpace  uint64
+	Size       uint64
+	DriveType  uint32
+	FileSystem string
+	VolumeName string
+}
+
 func (r *Report) getLogicalDisksFromWMI(debug bool) error {
 	var disksDst []logicalDisk
 
@@ -91,7 +100,7 @@ func getBitLockerStatus(driveLetter string) string {
 	}
 
 	if len(response) != 1 {
-		log.Printf("[WARN]: no bitlocker result for drive %s got %d rows: %v", driveLetter, len(response), err)
+		log.Printf("[INFO]: no bitlocker result for drive %s got %d rows: %v", driveLetter, len(response), err)
 		return "Unknown"
 	}
 

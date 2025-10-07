@@ -162,9 +162,26 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		report.hasRustDesk(debug)
+		report.hasRustDeskService(debug)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		if err := report.getUpdateTaskInfo(debug); err != nil {
 			// Retry
 			report.getUpdateTaskInfo(debug)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := report.getPhysicalDisksInfo(debug); err != nil {
+			log.Printf("[ERROR]: could not get physical disks information from WMI Win32_DiskDrive: %v", err)
+		} else {
+			log.Printf("[INFO]: physical disks information has been retrieved from WMI Win32_DiskDrive")
 		}
 	}()
 

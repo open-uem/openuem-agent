@@ -29,6 +29,7 @@ func (r *Report) Print() {
 
 	r.logComputer()
 	r.logOS()
+	r.logPhysicalDisks()
 	r.logLogicalDisks()
 	r.logMonitors()
 	r.logPrinters()

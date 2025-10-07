@@ -281,7 +281,7 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 	return &server, nil
 }
 
-func isWaylandDisplayServer() bool {
+func IsWaylandDisplayServer() bool {
 	// Get logged in username
 	username, err := runtime.GetLoggedInUser()
 	if err != nil {
@@ -312,7 +312,7 @@ func isWaylandDisplayServer() bool {
 
 func GetSupportedRemoteDesktop(agentOS string) string {
 	// Check if we're using a Wayland Display Server
-	if isWaylandDisplayServer() {
+	if IsWaylandDisplayServer() {
 		if _, err := os.Stat("/usr/bin/grdctl"); err == nil {
 			return "GnomeRemoteDesktopRDP"
 		}

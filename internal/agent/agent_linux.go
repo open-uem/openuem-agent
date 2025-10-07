@@ -216,6 +216,7 @@ func (a *Agent) StartRemoteDesktopSubscribe() error {
 	}
 	return nil
 }
+
 func (a *Agent) RebootSubscribe() error {
 	_, err := a.NATSConnection.QueueSubscribe("agent.reboot."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
 		log.Println("[INFO]: reboot request received")
