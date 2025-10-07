@@ -51,7 +51,7 @@ func (rd *RemoteDesktopService) Start(pin string, notifyUser bool) {
 	if rd.RequiresVNCProxy {
 		vncPort = getFirstVNCAvailablePort()
 		if vncPort == "" {
-			log.Println("[ERROR]: could get a free port for VNC")
+			log.Println("[ERROR]: could not get a free port for VNC")
 			return
 		}
 	}
@@ -110,17 +110,35 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 				openuemDir := filepath.Join(homeDir, ".openuem")
 				path := filepath.Join(openuemDir, "x11vncpasswd")
 
-				args := []string{"-display", ":0", "-auth", "guess", "-localhost", "-rfbauth", path, "-forever", "-rfbport", vncPort}
-				if err := runtime.RunAsUser(username, "/usr/bin/x11vnc", args, true); err != nil {
-					return err
+				// Feat #109 detect if x11vnc is a wrapper of x0vncserver (OpenSUSE Leap)
+				if _, err := os.Stat("/usr/bin/x0vncserver"); err == nil {
+					args := []string{"-display", ":0", "-localhost", "-rfbauth", path, "-rfbport", vncPort}
+					if err := runtime.RunAsUser(username, "/usr/bin/x0vncserver", args, true); err != nil {
+						return err
+					}
+				} else {
+					args := []string{"-display", ":0", "-auth", "guess", "-localhost", "-rfbauth", path, "-forever", "-rfbport", vncPort}
+					if err := runtime.RunAsUser(username, "/usr/bin/x11vnc", args, true); err != nil {
+						return err
+					}
 				}
+
 				return nil
 			},
 			StopService: func() error {
-				args := []string{"-R", "stop"}
-				if err := runtime.RunAsUser(username, "/usr/bin/x11vnc", args, true); err != nil {
-					return err
+				// Feat #109 detect if x11vnc is a wrapper of x0vncserver (OpenSUSE Leap)
+				if _, err := os.Stat("/usr/bin/x0vncserver"); err == nil {
+					args := []string{"x0vncserver"}
+					if err := runtime.RunAsUser(username, "/usr/bin/killall", args, true); err != nil {
+						return err
+					}
+				} else {
+					args := []string{"-R", "stop"}
+					if err := runtime.RunAsUser(username, "/usr/bin/x11vnc", args, true); err != nil {
+						return err
+					}
 				}
+
 				return nil
 			},
 			Configure: func() error {
