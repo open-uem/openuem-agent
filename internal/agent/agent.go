@@ -416,7 +416,7 @@ func (a *Agent) InstallPackageSubscribe() error {
 			return
 		}
 
-		if err := deploy.InstallPackage(action.PackageId); err != nil {
+		if err := deploy.InstallPackage(action.PackageId, "", false, a.Config.Debug); err != nil {
 			log.Printf("[ERROR]: could not deploy package using package manager, reason: %v\n", err)
 			action.Failed = true
 			if err := a.SendDeployResult(&action); err != nil {

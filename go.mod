@@ -23,7 +23,7 @@ require (
 	github.com/open-uem/nats v0.0.0-20250930102922-09c2a23b0598
 	github.com/open-uem/openuem-ansible-config v0.0.0-20250710075757-9ef6e3390073
 	github.com/open-uem/utils v0.0.0-20250702121339-316c5b599cd3
-	github.com/open-uem/wingetcfg v0.0.0-20250625110454-5d9433af7cf3
+	github.com/open-uem/wingetcfg v0.0.0-20251010181900-30110a8ab7b5
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/pkg/sftp v1.13.9
 	github.com/safchain/ethtool v0.6.1
@@ -49,7 +49,10 @@ require (
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/google/cabbie v1.0.2 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
+	github.com/google/glazier v0.0.0-20211029225403-9f766cca891d // indirect
+	github.com/iamacarpet/go-win64api v0.0.0-20240507095429-873e84e85847 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/kr/fs v0.1.0 // indirect
@@ -63,6 +66,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
+	github.com/scjalliance/comshim v0.0.0-20190308082608-cf06d2532c4e // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect

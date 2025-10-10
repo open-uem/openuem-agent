@@ -9,7 +9,7 @@ import (
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 )
 
-func InstallPackage(packageID string) error {
+func InstallPackage(packageID string, version string, keepUpdated bool, debug bool) error {
 	log.Printf("[INFO]: received a request to install package %s", packageID)
 
 	cmd := "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo"

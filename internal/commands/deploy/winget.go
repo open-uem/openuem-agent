@@ -16,7 +16,9 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func InstallPackage(packageID string) error {
+func InstallPackage(packageID string, version string, keepUpdated bool, debug bool) error {
+	var cmd *exec.Cmd
+
 	wgPath, err := locateWinGet()
 	if err != nil {
 		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
@@ -25,7 +27,11 @@ func InstallPackage(packageID string) error {
 
 	log.Printf("[INFO]: received a request to install package %s", packageID)
 
-	cmd := exec.Command(wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	if version != "" {
+		cmd = exec.Command(wgPath, "install", packageID, "--version", version, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	} else {
+		cmd = exec.Command(wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	}
 	err = cmd.Start()
 	if err != nil {
 		log.Printf("[ERROR]: could not start winget.exe command %v", err)
@@ -37,10 +43,26 @@ func InstallPackage(packageID string) error {
 		log.Println("[ERROR]: could not change process priority")
 	}
 
-	log.Printf("[INFO]: winget.exe is installing an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	if debug {
+		log.Printf("[DEBUG]: winget.exe is installing an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	}
 	err = cmd.Wait()
 	if err != nil {
-		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", err)
+		errCode := strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(err.Error(), "exit status "))), "0X", "0x")
+		errMessage, ok := wingetcfg.ErrorCodes[errCode]
+		if !ok {
+			errMessage = err.Error()
+		}
+
+		// Package is already installed and no applicable update is found
+		if errCode == "0x8A15002B" {
+			log.Printf("[INFO]: %s cannot be updated. %s", packageID, errMessage)
+			if !keepUpdated {
+				return nil
+			}
+		}
+
+		log.Printf("[ERROR]: there was an error running winget.exe: %v", errMessage)
 		return err
 	}
 	log.Printf("[INFO]: winget.exe has installed an application: %s", packageID)
@@ -70,7 +92,13 @@ func UpdatePackage(packageID string) error {
 	log.Printf("[INFO]: winget.exe is upgrading an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
 	err = cmd.Wait()
 	if err != nil {
-		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", err)
+		errCode := strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(err.Error(), "exit status "))), "0X", "0x")
+		errMessage, ok := wingetcfg.ErrorCodes[errCode]
+		if !ok {
+			errMessage = err.Error()
+		}
+
+		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", errMessage)
 		return err
 	}
 	log.Println("[INFO]: winget.exe has upgraded an application", wgPath)
@@ -100,7 +128,18 @@ func UninstallPackage(packageID string) error {
 	log.Printf("[INFO]: winget.exe is uninstalling the app %s\n", packageID)
 	err = cmd.Wait()
 	if err != nil {
-		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", err)
+		errCode := strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(err.Error(), "exit status "))), "0X", "0x")
+		errMessage, ok := wingetcfg.ErrorCodes[errCode]
+		if !ok {
+			errMessage = err.Error()
+		}
+
+		if errCode == "0x8A150014" {
+			log.Printf("[INFO]: %s cannot be updated. %s", packageID, errMessage)
+			return nil
+		}
+
+		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", errMessage)
 		return err
 	}
 	log.Println("[INFO]: winget.exe has uninstalled an application")

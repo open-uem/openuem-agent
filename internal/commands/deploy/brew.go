@@ -10,7 +10,7 @@ import (
 	openuem_runtime "github.com/open-uem/openuem-agent/internal/commands/runtime"
 )
 
-func InstallPackage(packageID string) error {
+func InstallPackage(packageID string, version string, keepUpdated bool, debug bool) error {
 	var args []string
 
 	isCask := false

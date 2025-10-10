@@ -19,21 +19,24 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/go-co-op/gocron/v2"
-	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	openuem_nats "github.com/open-uem/nats"
+	"github.com/open-uem/openuem-agent/internal/agent/dsc"
 	"github.com/open-uem/openuem-agent/internal/commands/deploy"
 	rd "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	"github.com/open-uem/openuem-agent/internal/commands/report"
-	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
 	openuem_utils "github.com/open-uem/utils"
 	"github.com/open-uem/wingetcfg/wingetcfg"
 	"golang.org/x/mod/semver"
-	"golang.org/x/sys/windows"
 	"gopkg.in/yaml.v3"
 )
+
+type TaskControl struct {
+	Success  []string             `json:"success"`
+	Executed map[string]time.Time `json:"executed"`
+}
 
 func (a *Agent) Start() {
 
@@ -382,213 +385,234 @@ func (a *Agent) GetWingetConfigureProfiles() {
 func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, deployments []string) error {
 	var cfg wingetcfg.WinGetCfg
 
+	// Unmarshall profile
 	if err := yaml.Unmarshal(config, &cfg); err != nil {
 		return err
 	}
 
-	cwd, err := openuem_utils.GetWd()
-	if err != nil {
-		log.Printf("[ERROR]: could not get working directory, reason %v", err)
-		return err
-	}
-
+	// Check that PowerShell > 7.4.6 is installed for DSC
 	powershellPath := "C:\\Program Files\\PowerShell\\7\\pwsh.exe"
-
-	// If PowerShell 7 is not installed install it with winget
-	if _, err := os.Stat(powershellPath); errors.Is(err, os.ErrNotExist) {
-		if err := deploy.InstallPackage("Microsoft.PowerShell"); err != nil {
-			log.Printf("[ERROR]: WinGet configuration requires PowerShell 7 and it could not be installed, reason %v", err)
-			return err
-		}
-
-		// Notify, OpenUEM that a new package has been deployed due to winget configure
-		if err := a.SendWinGetCfgDeploymentReport("Microsoft.PowerShell", "PowerShell 7-x64", "install"); err != nil {
-			return err
-		}
-	}
-
-	if a.Config.Debug {
-		log.Println("[DEBUG]: PowerShell 7 is installed")
-	}
-
-	// Check PowerShell 7 version
-	// Ref: https://stackoverflow.com/questions/1825585/determine-installed-powershell-version
-	out, err := exec.Command(powershellPath, "-Command", "Get-ItemPropertyValue", "-Path", "HKLM:\\SOFTWARE\\Microsoft\\PowerShellCore\\InstalledVersions\\*", "-Name", "SemanticVersion").Output()
-	if err != nil {
-		log.Printf("[ERROR]: could not get PowerShell 7 version with %s %s %s %s %s %s %s, reason %v", powershellPath, "-Command", "Get-ItemPropertyValue", "-Path", "HKLM:\\SOFTWARE\\Microsoft\\PowerShellCore\\InstalledVersions\\*", "-Name", "SemanticVersion", err)
+	if err := a.EnsurePowershell7(powershellPath); err != nil {
+		log.Printf("[ERROR]: could not ensure that PowerShell 7 is installed on the system, reason: %v", err)
 		return err
 	}
 
-	if a.Config.Debug {
-		log.Println("[DEBUG]: got PowerShell 7 version")
-	}
-
-	// if PowerShell version 7 is lower than 7.4.6 upgrade it
-	if semver.Compare("v"+strings.TrimSpace(string(out)), "v7.4.6") < 0 {
-		if _, err := os.Stat(powershellPath); errors.Is(err, os.ErrNotExist) {
-			if err := deploy.UpdatePackage("Microsoft.PowerShell"); err != nil {
-				log.Printf("[ERROR]: WinGet configuration requires PowerShell 7 and it could not be installed, reason %v", err)
-				return err
-			}
-
-			// Notify, OpenUEM that a new package has been deployed due to winget configure
-			if err := a.SendWinGetCfgDeploymentReport("Microsoft.PowerShell", "PowerShell 7-x64", "install"); err != nil {
-				return err
-			}
-		}
-	}
-
-	if a.Config.Debug {
-		log.Println("[DEBUG]: PowerShell 7 version was compared")
-	}
-
-	installedPackages, err := deploy.GetWinGetInstalledPackagesList()
-	if err != nil {
-		log.Printf("[ERROR]: could not list of packages installed with WinGet, reason: %v", err)
-		return err
-	}
-
-	// Check if packages were explicitely deleted and profile tries to install it again
-	// Notify which packages has been explicitely deleted to remove it from console
-	explicitelyDeleted := deploy.GetExplicitelyDeletedPackages(deployments, installedPackages)
-	if a.Config.Debug {
-		log.Println("[DEBUG]: explicitely deleted packages", explicitelyDeleted)
-	}
-	a.SendWinGetCfgExcludedPackage(explicitelyDeleted)
-
-	if a.Config.Debug {
-		log.Println("[DEBUG]: exclusions received from worker", exclusions)
-	}
-
-	// Remove exclusions to avoid reinstalling of explicitely deleted packages
-	if err := deploy.RemovePackagesFromCfg(&cfg, explicitelyDeleted, exclusions, installedPackages, a.Config.Debug); err != nil {
-		log.Printf("[ERROR]: could not remove explicitely deleted, exclusions or already installed or uninstalled packages from config file, reason: %v", err)
-	}
-
-	if a.Config.Debug {
-		log.Printf("[DEBUG]: config after removing explicitely deleted, exclusions or already installed or uninstalled packages: +%v", cfg)
-	}
-
-	errData := ""
-
-	// Remove openuem powershell config and execute them
-	scripts := deploy.RemovePowershellScriptsFromCfg(&cfg)
-	for name, taskConfig := range scripts {
-		if err := a.ReadConfig(); err != nil {
-			log.Printf("[ERROR]: could not read ScriptsRun from agent config")
-			if errData != "" {
-				errData += ", " + name + ": " + err.Error()
-			} else {
-				errData = name + ": " + err.Error()
-			}
-			continue
-		}
-
-		if taskConfig.RunConfig == "once" {
-			scriptsRun := strings.Split(a.Config.ScriptsRun, ",")
-			if !slices.Contains(scriptsRun, taskConfig.ID) {
-				if err := a.ExecutePowerShellScript(powershellPath, taskConfig.Script); err != nil {
-					if errData != "" {
-						errData += ", " + name + ": " + err.Error()
-					} else {
-						errData = name + ": " + err.Error()
-					}
-				}
-				// Save data in agent config
-				tasksRun := strings.Split(a.Config.ScriptsRun, ",")
-				tasksRun = append(tasksRun, taskConfig.ID)
-				a.Config.ScriptsRun = strings.Join(tasksRun, ",")
-				if err := a.Config.WriteConfig(); err != nil {
-					log.Printf("[ERROR]: could not write ScriptsRun to agent config")
-					if errData != "" {
-						errData += ", " + name + ": " + err.Error()
-					} else {
-						errData = name + ": " + err.Error()
-					}
-				}
-			} else {
-				log.Printf("[INFO]: powershell execution task %s has already run once", name)
-			}
-
-		} else {
-			if err := a.ExecutePowerShellScript(powershellPath, taskConfig.Script); err != nil {
-				if errData != "" {
-					errData += ", " + name + ": " + err.Error()
-				} else {
-					errData = name + ": " + err.Error()
-				}
-			}
-		}
-	}
-
-	// Run configuration
-	scriptPath := filepath.Join(cwd, "powershell", "configure.ps1")
-	configPath := filepath.Join(cwd, "powershell", fmt.Sprintf("openuem.%s.winget", uuid.New()))
-	if err := cfg.WriteConfigFile(configPath); err != nil {
-		return err
-	}
-
-	// Remove powershell configuration file if debug is not enabled
-	defer func() {
-		if !a.Config.Debug {
-			if err := os.Remove(configPath); err != nil {
-				log.Printf("[ERROR]: could not remove %s", configPath)
-			}
-		}
-	}()
-
-	if a.Config.Debug {
-		log.Println("[DEBUG]: Configure file was created")
-	}
-
-	log.Println("[INFO]: received a request to apply a configuration profile")
-
-	cmd := exec.Command(powershellPath, scriptPath, configPath)
-
-	executeErr := cmd.Start()
-	if executeErr != nil {
-		log.Printf("[ERROR]: could not start configuration profile process, reason: %v", executeErr)
-	} else {
-		// Set priority to below normal
-		err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
-		if err != nil {
-			log.Println("[ERROR]: could not change process priority")
-		}
-
-		executeErr = cmd.Wait()
-		if executeErr != nil {
-			log.Println("[ERROR]: configuration profile could not be applied")
-			data, err := os.ReadFile("C:\\Program Files\\OpenUEM Agent\\logs\\wingetcfg.txt")
-			if err != nil {
-				log.Println("[ERROR]: could not read wingetcfg.txt log")
-			}
-			if errData != "" {
-				errData = ", " + string(data)
-			} else {
-				errData = string(data)
-			}
-		} else {
-			log.Println("[INFO]: winget configuration have finished successfully")
-		}
-	}
-
-	// Report if application was successful or not
-	if err := a.SendWinGetCfgProfileApplicationReport(profileID, a.Config.UUID, executeErr == nil && errData == "", errData); err != nil {
-		log.Println("[ERROR]: could not report if profile was applied succesfully or no")
-	}
-
-	// Get list of installed packages again to check if packages where installed or uninstalled correctly
-	installedPackages, err = deploy.GetWinGetInstalledPackagesList()
-	if err != nil {
-		log.Printf("[ERROR]: could not list of packages installed with WinGet, reason: %v", err)
-		return err
-	}
-
-	// Check if packages have been installed (or uninstalled) and notify the agent worker
-	a.CheckIfCfgPackagesInstalled(cfg, installedPackages)
+	// Run tasks defined in the profile
+	a.RunTasks(cfg, powershellPath)
 
 	return nil
 }
+
+// func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, deployments []string) error {
+// 	var cfg wingetcfg.WinGetCfg
+
+// 	if err := yaml.Unmarshal(config, &cfg); err != nil {
+// 		return err
+// 	}
+
+// 	cwd, err := openuem_utils.GetWd()
+// 	if err != nil {
+// 		log.Printf("[ERROR]: could not get working directory, reason %v", err)
+// 		return err
+// 	}
+
+// 	powershellPath := "C:\\Program Files\\PowerShell\\7\\pwsh.exe"
+
+// 	// If PowerShell 7 is not installed install it with winget
+// 	if _, err := os.Stat(powershellPath); errors.Is(err, os.ErrNotExist) {
+// 		if err := deploy.InstallPackage("Microsoft.PowerShell"); err != nil {
+// 			log.Printf("[ERROR]: WinGet configuration requires PowerShell 7 and it could not be installed, reason %v", err)
+// 			return err
+// 		}
+
+// 		// Notify, OpenUEM that a new package has been deployed due to winget configure
+// 		if err := a.SendWinGetCfgDeploymentReport("Microsoft.PowerShell", "PowerShell 7-x64", "install"); err != nil {
+// 			return err
+// 		}
+// 	}
+
+// 	if a.Config.Debug {
+// 		log.Println("[DEBUG]: PowerShell 7 is installed")
+// 	}
+
+// 	// Check PowerShell 7 version
+// 	// Ref: https://stackoverflow.com/questions/1825585/determine-installed-powershell-version
+// 	out, err := exec.Command(powershellPath, "-Command", "Get-ItemPropertyValue", "-Path", "HKLM:\\SOFTWARE\\Microsoft\\PowerShellCore\\InstalledVersions\\*", "-Name", "SemanticVersion").Output()
+// 	if err != nil {
+// 		log.Printf("[ERROR]: could not get PowerShell 7 version with %s %s %s %s %s %s %s, reason %v", powershellPath, "-Command", "Get-ItemPropertyValue", "-Path", "HKLM:\\SOFTWARE\\Microsoft\\PowerShellCore\\InstalledVersions\\*", "-Name", "SemanticVersion", err)
+// 		return err
+// 	}
+
+// 	if a.Config.Debug {
+// 		log.Println("[DEBUG]: got PowerShell 7 version")
+// 	}
+
+// 	// if PowerShell version 7 is lower than 7.4.6 upgrade it
+// 	if semver.Compare("v"+strings.TrimSpace(string(out)), "v7.4.6") < 0 {
+// 		if _, err := os.Stat(powershellPath); errors.Is(err, os.ErrNotExist) {
+// 			if err := deploy.UpdatePackage("Microsoft.PowerShell"); err != nil {
+// 				log.Printf("[ERROR]: WinGet configuration requires PowerShell 7 and it could not be installed, reason %v", err)
+// 				return err
+// 			}
+
+// 			// Notify, OpenUEM that a new package has been deployed due to winget configure
+// 			if err := a.SendWinGetCfgDeploymentReport("Microsoft.PowerShell", "PowerShell 7-x64", "install"); err != nil {
+// 				return err
+// 			}
+// 		}
+// 	}
+
+// 	if a.Config.Debug {
+// 		log.Println("[DEBUG]: PowerShell 7 version was compared")
+// 	}
+
+// 	installedPackages, err := deploy.GetWinGetInstalledPackagesList()
+// 	if err != nil {
+// 		log.Printf("[ERROR]: could not list of packages installed with WinGet, reason: %v", err)
+// 		return err
+// 	}
+
+// 	// Check if packages were explicitely deleted and profile tries to install it again
+// 	// Notify which packages has been explicitely deleted to remove it from console
+// 	explicitelyDeleted := deploy.GetExplicitelyDeletedPackages(deployments, installedPackages)
+// 	if a.Config.Debug {
+// 		log.Println("[DEBUG]: explicitely deleted packages", explicitelyDeleted)
+// 	}
+// 	a.SendWinGetCfgExcludedPackage(explicitelyDeleted)
+
+// 	if a.Config.Debug {
+// 		log.Println("[DEBUG]: exclusions received from worker", exclusions)
+// 	}
+
+// 	// Remove exclusions to avoid reinstalling of explicitely deleted packages
+// 	if err := deploy.RemovePackagesFromCfg(&cfg, explicitelyDeleted, exclusions, installedPackages, a.Config.Debug); err != nil {
+// 		log.Printf("[ERROR]: could not remove explicitely deleted, exclusions or already installed or uninstalled packages from config file, reason: %v", err)
+// 	}
+
+// 	if a.Config.Debug {
+// 		log.Printf("[DEBUG]: config after removing explicitely deleted, exclusions or already installed or uninstalled packages: +%v", cfg)
+// 	}
+
+// 	errData := ""
+
+// 	// Remove openuem powershell config and execute them
+// 	scripts := deploy.RemovePowershellScriptsFromCfg(&cfg)
+// 	for name, taskConfig := range scripts {
+// 		if err := a.ReadConfig(); err != nil {
+// 			log.Printf("[ERROR]: could not read ScriptsRun from agent config")
+// 			if errData != "" {
+// 				errData += ", " + name + ": " + err.Error()
+// 			} else {
+// 				errData = name + ": " + err.Error()
+// 			}
+// 			continue
+// 		}
+
+// 		if taskConfig.RunConfig == "once" {
+// 			scriptsRun := strings.Split(a.Config.ScriptsRun, ",")
+// 			if !slices.Contains(scriptsRun, taskConfig.ID) {
+// 				if err := a.ExecutePowerShellScript(powershellPath, taskConfig.Script); err != nil {
+// 					if errData != "" {
+// 						errData += ", " + name + ": " + err.Error()
+// 					} else {
+// 						errData = name + ": " + err.Error()
+// 					}
+// 				}
+// 				// Save data in agent config
+// 				tasksRun := strings.Split(a.Config.ScriptsRun, ",")
+// 				tasksRun = append(tasksRun, taskConfig.ID)
+// 				a.Config.ScriptsRun = strings.Join(tasksRun, ",")
+// 				if err := a.Config.WriteConfig(); err != nil {
+// 					log.Printf("[ERROR]: could not write ScriptsRun to agent config")
+// 					if errData != "" {
+// 						errData += ", " + name + ": " + err.Error()
+// 					} else {
+// 						errData = name + ": " + err.Error()
+// 					}
+// 				}
+// 			} else {
+// 				log.Printf("[INFO]: powershell execution task %s has already run once", name)
+// 			}
+
+// 		} else {
+// 			if err := a.ExecutePowerShellScript(powershellPath, taskConfig.Script); err != nil {
+// 				if errData != "" {
+// 					errData += ", " + name + ": " + err.Error()
+// 				} else {
+// 					errData = name + ": " + err.Error()
+// 				}
+// 			}
+// 		}
+// 	}
+
+// 	// Run configuration
+// 	scriptPath := filepath.Join(cwd, "powershell", "configure.ps1")
+// 	configPath := filepath.Join(cwd, "powershell", fmt.Sprintf("openuem.%s.winget", uuid.New()))
+// 	if err := cfg.WriteConfigFile(configPath); err != nil {
+// 		return err
+// 	}
+
+// 	// Remove powershell configuration file if debug is not enabled
+// 	defer func() {
+// 		if !a.Config.Debug {
+// 			if err := os.Remove(configPath); err != nil {
+// 				log.Printf("[ERROR]: could not remove %s", configPath)
+// 			}
+// 		}
+// 	}()
+
+// 	if a.Config.Debug {
+// 		log.Println("[DEBUG]: Configure file was created")
+// 	}
+
+// 	log.Println("[INFO]: received a request to apply a configuration profile")
+
+// 	cmd := exec.Command(powershellPath, scriptPath, configPath)
+
+// 	executeErr := cmd.Start()
+// 	if executeErr != nil {
+// 		log.Printf("[ERROR]: could not start configuration profile process, reason: %v", executeErr)
+// 	} else {
+// 		// Set priority to below normal
+// 		err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
+// 		if err != nil {
+// 			log.Println("[ERROR]: could not change process priority")
+// 		}
+
+// 		executeErr = cmd.Wait()
+// 		if executeErr != nil {
+// 			log.Println("[ERROR]: configuration profile could not be applied")
+// 			data, err := os.ReadFile("C:\\Program Files\\OpenUEM Agent\\logs\\wingetcfg.txt")
+// 			if err != nil {
+// 				log.Println("[ERROR]: could not read wingetcfg.txt log")
+// 			}
+// 			if errData != "" {
+// 				errData = ", " + string(data)
+// 			} else {
+// 				errData = string(data)
+// 			}
+// 		} else {
+// 			log.Println("[INFO]: winget configuration have finished successfully")
+// 		}
+// 	}
+
+// 	// Report if application was successful or not
+// 	if err := a.SendWinGetCfgProfileApplicationReport(profileID, a.Config.UUID, executeErr == nil && errData == "", errData); err != nil {
+// 		log.Println("[ERROR]: could not report if profile was applied succesfully or no")
+// 	}
+
+// 	// Get list of installed packages again to check if packages where installed or uninstalled correctly
+// 	installedPackages, err = deploy.GetWinGetInstalledPackagesList()
+// 	if err != nil {
+// 		log.Printf("[ERROR]: could not list of packages installed with WinGet, reason: %v", err)
+// 		return err
+// 	}
+
+// 	// Check if packages have been installed (or uninstalled) and notify the agent worker
+// 	a.CheckIfCfgPackagesInstalled(cfg, installedPackages)
+
+// 	return nil
+// }
 
 func (a *Agent) CheckIfCfgPackagesInstalled(cfg wingetcfg.WinGetCfg, installed string) {
 	for _, r := range cfg.Properties.Resources {
@@ -839,4 +863,658 @@ func (a *Agent) ExecutePowerShellScript(powershellPath string, script string) er
 	}
 
 	return nil
+}
+
+func (a *Agent) RunTasks(cfg wingetcfg.WinGetCfg, powershellPath string) {
+	cwd, err := openuem_utils.GetWd()
+	if err != nil {
+		log.Printf("[ERROR]: could not get working directory, reason %v", err)
+		return
+	}
+
+	taskControlPath := filepath.Join(cwd, "powershell", "tasks.json")
+
+	taskControl, err := ReadTaskControlFile(taskControlPath)
+	if err != nil {
+		log.Printf("[ERROR]: tasks control file is not available, reason %v", err)
+		return
+	}
+
+	for _, resource := range cfg.Properties.Resources {
+		switch resource.Resource {
+		case wingetcfg.OpenUEMPowershell:
+			a.PowershellTask(resource, powershellPath)
+		case wingetcfg.WinGetLocalGroupResource:
+			if err := a.LocalGroupTask(resource, powershellPath, taskControlPath, taskControl); err != nil {
+				log.Println(err)
+			}
+		case wingetcfg.WinGetLocalUserResource:
+			// TODO - error management
+			a.LocalUserTask(resource, taskControlPath, taskControl)
+		case wingetcfg.WinGetMSIPackageResource:
+			a.MSIPackageTask(resource)
+		case wingetcfg.WinGetPackageResource:
+			// TODO - error management
+			a.PackageManagementTask(resource, taskControlPath, taskControl)
+		case wingetcfg.WinGetRegistryResource:
+			if err := a.RegistryTask(resource, taskControlPath, taskControl); err != nil {
+				log.Println(err)
+			}
+		}
+	}
+
+}
+
+func (a *Agent) EnsurePowershell7(powershellPath string) error {
+	// If PowerShell 7 is not installed install it with winget
+	if _, err := os.Stat(powershellPath); errors.Is(err, os.ErrNotExist) {
+		if err := deploy.InstallPackage("Microsoft.PowerShell", "", false, a.Config.Debug); err != nil {
+			return fmt.Errorf("could not install the required PowerShell, reason %v", err)
+		}
+
+		// Notify, OpenUEM that a new package has been deployed due to winget configure
+		if err := a.SendWinGetCfgDeploymentReport("Microsoft.PowerShell", "PowerShell 7-x64", "install"); err != nil {
+			return err
+		}
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: PowerShell 7 is installed")
+	}
+
+	// Check PowerShell 7 version
+	// Ref: https://stackoverflow.com/questions/1825585/determine-installed-powershell-version
+	out, err := exec.Command(powershellPath, "-Command", "Get-ItemPropertyValue", "-Path", "HKLM:\\SOFTWARE\\Microsoft\\PowerShellCore\\InstalledVersions\\*", "-Name", "SemanticVersion").Output()
+	if err != nil {
+		return fmt.Errorf("could not get PowerShell 7 version with %s %s %s %s %s %s %s, reason %v", powershellPath, "-Command", "Get-ItemPropertyValue", "-Path", "HKLM:\\SOFTWARE\\Microsoft\\PowerShellCore\\InstalledVersions\\*", "-Name", "SemanticVersion", err)
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: got PowerShell 7 version")
+	}
+
+	// if PowerShell version 7 is lower than 7.4.6 upgrade it
+	if semver.Compare("v"+strings.TrimSpace(string(out)), "v7.4.6") < 0 {
+		if _, err := os.Stat(powershellPath); errors.Is(err, os.ErrNotExist) {
+			if err := deploy.UpdatePackage("Microsoft.PowerShell"); err != nil {
+				return fmt.Errorf("could not update PowerShell 7 reason %v", err)
+			}
+
+			// Notify, OpenUEM that a new package has been deployed due to winget configure
+			if err := a.SendWinGetCfgDeploymentReport("Microsoft.PowerShell", "PowerShell 7-x64", "install"); err != nil {
+				return err
+			}
+		}
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: PowerShell 7 version was compared")
+	}
+
+	return nil
+}
+
+func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPath string, t *TaskControl) error {
+
+	packageName := r.Directives.Description
+
+	ensure, err := getEnsureKey(r)
+	if err != nil {
+		return err
+	}
+
+	key, ok := r.Settings["id"]
+	if !ok {
+		return errors.New("could not find the id key for a package management task")
+	}
+	packageID := key.(string)
+
+	version := ""
+	key, ok = r.Settings["version"]
+	if ok {
+		version = key.(string)
+	}
+
+	keepUpdated := false
+	key, ok = r.Settings["uselatest"]
+	if ok {
+		keepUpdated = key.(bool)
+	}
+
+	if ensure == "Present" {
+		taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
+
+		// if a package has to be kept udpdated but hasn't passed 24 hours since the last execution skip
+		if keepUpdated {
+			timeExecuted, ok := t.Executed[r.ID]
+			if ok {
+				hasPassed24h := time.Now().After(timeExecuted.Add(24 * time.Hour))
+				if !hasPassed24h {
+					return nil
+				}
+			}
+		}
+
+		if !taskAlreadySuccessful {
+			if err := deploy.InstallPackage(packageID, version, keepUpdated, a.Config.Debug); err != nil {
+				if keepUpdated && strings.Contains(err.Error(), "0x8a15002b") {
+					if t.Executed == nil {
+						t.Executed = map[string]time.Time{
+							r.ID: time.Now(),
+						}
+					} else {
+						t.Executed[r.ID] = time.Now()
+					}
+					return SetTaskAsExecuted(taskControlPath, t)
+				}
+				return err
+			}
+			if err := a.SendWinGetCfgDeploymentReport(packageID, packageName, "install"); err != nil {
+				log.Printf("[ERROR]: could not send WinGetCfg deployment report, reason: %v", err)
+				return err
+			}
+
+			// if package must not be kept updated, mark the task as successful
+			if !keepUpdated {
+				return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+			}
+		}
+	} else {
+		if err := deploy.UninstallPackage(packageID); err != nil {
+			return err
+		}
+		if err := a.SendWinGetCfgDeploymentReport(packageID, packageName, "uninstall"); err != nil {
+			log.Printf("[ERROR]: could not send WinGetCfg deployment report, reason: %v", err)
+			return err
+		}
+
+		return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+	}
+
+	return nil
+}
+
+func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string, t *TaskControl) error {
+	ensure, err := getEnsureKey(r)
+	if err != nil {
+		return err
+	}
+
+	key, err := getStringKey(r, "Key", -1, true)
+	if err != nil {
+		return err
+	}
+
+	force, err := getBoolKey(r, "Force", false)
+	if err != nil {
+		return err
+	}
+
+	valueName, err := getStringKey(r, "ValueName", -1, false)
+	if err != nil {
+		return err
+	}
+
+	valueData, err := getStringKey(r, "ValueData", -1, false)
+	if err != nil {
+		return err
+	}
+
+	propertyType, err := getStringKey(r, "ValueType", -1, false)
+	if err != nil {
+		return err
+	}
+
+	taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
+
+	if !taskAlreadySuccessful {
+
+		if ensure == "Present" {
+
+			if valueName == "" {
+				if valueData != "" {
+					if err := dsc.UpdateRegistryKeyDefaultValue(key, valueData); err != nil {
+						log.Println(err)
+						return err
+					}
+				} else {
+					if err := dsc.AddRegistryKey(key); err != nil {
+						log.Println(err)
+						return err
+					}
+				}
+
+			} else {
+
+				if !wingetcfg.IsValidRegistryValueType(propertyType) {
+					return fmt.Errorf("property type %s is not valid", propertyType)
+				}
+
+				if err := dsc.AddOrEditRegistryValue(key, valueName, propertyType, valueData, force); err != nil {
+					log.Println(err)
+					return err
+				}
+			}
+
+		} else {
+			force, err := getBoolKey(r, "Force", false)
+			if err != nil {
+				return err
+			}
+
+			valueName, err := getStringKey(r, "ValueName", -1, false)
+			if err != nil {
+				return err
+			}
+
+			if valueName == "" {
+				if err := dsc.RemoveRegistryKey(key, force); err != nil {
+					return err
+				}
+			} else {
+				if err := dsc.RemoveRegistryKeyValue(key, valueName); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (a *Agent) LocalUserTask(r *wingetcfg.WinGetResource, taskControlPath string, t *TaskControl) error {
+	ensure, err := getEnsureKey(r)
+	if err != nil {
+		return err
+	}
+
+	username, err := getStringKey(r, "UserName", 20, true)
+	if err != nil {
+		return err
+	}
+
+	taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
+
+	if !taskAlreadySuccessful {
+
+		// Create user
+		if ensure == "Present" {
+
+			// Set password if exist
+			password, err := getStringKey(r, "Password", -1, false)
+			if err != nil {
+				return err
+			}
+
+			// Options - Comment
+			comment, err := getStringKey(r, "Description", 48, false)
+			if err != nil {
+				return err
+			}
+
+			// Options - FullName
+			fullName, err := getStringKey(r, "FullName", 48, false)
+			if err != nil {
+				return err
+			}
+
+			// Options - Disabled
+			disabled, err := getBoolKey(r, "Disabled", false)
+			if err != nil {
+				return err
+			}
+
+			// Options - Password Change Not Allowed
+			passwordChangeNotAllowed, err := getBoolKey(r, "PasswordChangeNotAllowed", false)
+			if err != nil {
+				return err
+			}
+
+			// Options - Password never expires
+			passwordNeverExpires, err := getBoolKey(r, "PasswordNeverExpires", false)
+			if err != nil {
+				return err
+			}
+
+			// Options - Force password change at logon
+			changePasswordAtLogon, err := getBoolKey(r, "PasswordChangeRequired", false)
+			if err != nil {
+				return err
+			}
+
+			if err := dsc.CreateLocalUser(username, password, comment, fullName, disabled, passwordChangeNotAllowed, passwordNeverExpires, changePasswordAtLogon); err != nil {
+				log.Printf("[ERROR]: could not create the local user, reason: %v", err)
+				return err
+			}
+			log.Printf("[INFO]: the local user %s has been added", username)
+
+		} else {
+			if err := dsc.DeleteLocalUser(username); err != nil {
+				log.Printf("[ERROR]: could not remove the local user, reason: %v", err)
+				return err
+			}
+			log.Printf("[INFO]: the local user %s has been deleted", username)
+		}
+
+		return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+	}
+
+	return nil
+}
+
+func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, powerShellPath string, taskControlPath string, t *TaskControl) error {
+	ensure, err := getEnsureKey(r)
+	if err != nil {
+		return err
+	}
+
+	groupName, err := getStringKey(r, "GroupName", 64, true)
+	if err != nil {
+		return err
+	}
+
+	description, err := getStringKey(r, "Description", 256, false)
+	if err != nil {
+		return err
+	}
+
+	taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
+
+	if !taskAlreadySuccessful {
+
+		if ensure == "Present" {
+			members, err := getCommaSeparatedStringKey(r, "Members", false)
+			if err != nil {
+				return err
+			}
+
+			membersToInclude, err := getCommaSeparatedStringKey(r, "MembersToInclude", false)
+			if err != nil {
+				return err
+			}
+
+			membersToExclude, err := getCommaSeparatedStringKey(r, "MembersToExclude", false)
+			if err != nil {
+				return err
+			}
+
+			if members == "" && membersToInclude == "" && membersToExclude == "" {
+				if err := dsc.CreateLocalGroup(groupName, description); err != nil {
+					log.Printf("[ERROR]: could not create local group, reason: %v", err)
+					return err
+				}
+				log.Printf("[INFO]: the local group %s has been added", groupName)
+				return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+			}
+
+			if members != "" {
+				if !dsc.ExistsGroup(groupName) {
+					if err := dsc.CreateLocalGroup(groupName, description); err != nil {
+						log.Printf("[ERROR]: could not create local group, reason: %v", err)
+						return err
+					}
+					log.Printf("[INFO]: the local group %s has been added", groupName)
+				}
+
+				if err := dsc.AddMembersToLocalGroup(groupName, members); err != nil {
+					log.Printf("[ERROR]: could not add members to local group, reason: %v", err)
+					return err
+				}
+				log.Printf("[INFO]: members have been added to local group %s", groupName)
+				return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+
+			}
+
+			if membersToInclude != "" {
+				if err := dsc.AddMembersToLocalGroup(groupName, membersToInclude); err != nil {
+					log.Printf("[ERROR]: could not add members to local group, reason: %v", err)
+					return err
+				}
+				log.Printf("[INFO]: members have been added to local group %s", groupName)
+				return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+			}
+
+			if membersToExclude != "" {
+				if err := dsc.RemoveMembersFromLocalGroup(groupName, membersToExclude); err != nil {
+					log.Printf("[ERROR]: could not exclude members from local group, reason: %v", err)
+					return err
+				}
+				log.Printf("[INFO]: members have been removed from local group %s", groupName)
+				return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+			}
+
+		} else {
+			if err := dsc.RemoveLocalGroup(groupName); err != nil {
+				log.Printf("[ERROR]: could not delete local group, reason: %v", err)
+				return err
+			}
+			log.Printf("[INFO]: the local group %s has been deleted", groupName)
+			return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+		}
+	}
+
+	return nil
+}
+
+func (a *Agent) MSIPackageTask(resource *wingetcfg.WinGetResource) {
+
+}
+
+type PowerShellTask struct {
+	ID        string
+	Name      string
+	Script    string
+	RunConfig string
+}
+
+func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, powershellPath string) error {
+	errData := ""
+	task := PowerShellTask{}
+
+	script, ok := r.Settings["Script"]
+	if ok {
+		name, ok := r.Settings["Name"]
+		if ok {
+			id, ok := r.Settings["ID"]
+			if ok {
+				scriptRun, ok := r.Settings["ScriptRun"]
+				task.ID = id.(string)
+				task.Name = name.(string)
+				task.Script = script.(string)
+
+				if ok {
+					task.RunConfig = scriptRun.(string)
+				} else {
+					task.RunConfig = "once"
+				}
+			} else {
+				log.Println("[ERROR]: could not find ID key in task's settings")
+				return errors.New("could not find ID key in task's settings")
+			}
+		} else {
+			log.Println("[ERROR]: could not find Name key in task's settings")
+			return errors.New("could not find Name key in task's settings")
+		}
+	} else {
+		log.Println("[ERROR]: could not find Script key in task's settings")
+		return errors.New("could not find script key in task's settings")
+	}
+
+	if task.RunConfig == "once" {
+		scriptsRun := strings.Split(a.Config.ScriptsRun, ",")
+		if !slices.Contains(scriptsRun, task.ID) {
+			if err := a.ExecutePowerShellScript(powershellPath, task.Script); err != nil {
+				if errData != "" {
+					errData += ", " + task.Name + ": " + err.Error()
+				} else {
+					errData = task.Name + ": " + err.Error()
+				}
+			}
+			// Save data in agent config
+			tasksRun := strings.Split(a.Config.ScriptsRun, ",")
+			tasksRun = append(tasksRun, task.ID)
+			a.Config.ScriptsRun = strings.Join(tasksRun, ",")
+			if err := a.Config.WriteConfig(); err != nil {
+				log.Printf("[ERROR]: could not write ScriptsRun to agent config")
+				if errData != "" {
+					errData += ", " + task.Name + ": " + err.Error()
+				} else {
+					errData = task.Name + ": " + err.Error()
+				}
+			}
+		} else {
+			log.Printf("[INFO]: powershell execution task %s has already run once", task.Name)
+		}
+
+	} else {
+		if err := a.ExecutePowerShellScript(powershellPath, task.Script); err != nil {
+			if errData != "" {
+				errData += ", " + task.Name + ": " + err.Error()
+			} else {
+				errData = task.Name + ": " + err.Error()
+			}
+		}
+	}
+
+	if errData != "" {
+		return errors.New(errData)
+	}
+	return nil
+}
+
+func ReadTaskControlFile(taskControl string) (*TaskControl, error) {
+	if _, err := os.Stat(taskControl); err != nil {
+		f, err := os.Create(taskControl)
+		defer func() {
+			if err := f.Close(); err != nil {
+				log.Printf("[ERROR]: could not close the task control file, reason: %v", err)
+			}
+		}()
+		if err != nil {
+			log.Printf("[ERROR]: could not create the task control file, reason: %v", err)
+			return nil, err
+		}
+
+		t := TaskControl{}
+		data, err := json.Marshal(t)
+		if err != nil {
+			log.Printf("[ERROR]: could not marshall initial task control, reason: %v", err)
+		}
+		if _, err := f.Write(data); err != nil {
+			log.Printf("[ERROR]: could not write initial data to task control file, reason: %v", err)
+		}
+		return &t, nil
+	} else {
+		data, err := os.ReadFile(taskControl)
+		if err != nil {
+			log.Printf("[ERROR]: could not read the task control file, reason: %v", err)
+			return nil, err
+		}
+		t := TaskControl{}
+		if err := json.Unmarshal(data, &t); err != nil {
+			log.Printf("[ERROR]: could not unmarshall JSON data from the task control file, reason: %v", err)
+			return nil, err
+		}
+
+		return &t, nil
+	}
+}
+
+func SetTaskAsSuccessfull(taskID string, taskControlPath string, t *TaskControl) error {
+
+	t.Success = append(t.Success, taskID)
+
+	out, err := json.Marshal(t)
+	if err != nil {
+		log.Printf("[ERROR]: could not marshal JSON data for the task control file, reason: %v", err)
+		return err
+	}
+
+	if err := os.WriteFile(taskControlPath, out, 0660); err != nil {
+		log.Printf("[ERROR]: could not write JSON data to the task control file, reason: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+func SetTaskAsExecuted(taskControlPath string, t *TaskControl) error {
+	out, err := json.Marshal(t)
+	if err != nil {
+		log.Printf("[ERROR]: could not marshal JSON data for the task control file, reason: %v", err)
+		return err
+	}
+
+	if err := os.WriteFile(taskControlPath, out, 0660); err != nil {
+		log.Printf("[ERROR]: could not write executed task as JSON data to the task control file, reason: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+func getEnsureKey(r *wingetcfg.WinGetResource) (string, error) {
+	value, ok := r.Settings["Ensure"].(string)
+	if !ok {
+		return "", errors.New("could not find the Ensure key")
+	}
+	if value != "Present" && value != "Absent" {
+		return "", errors.New("unexpected Ensure key: " + value)
+	}
+
+	return value, nil
+}
+
+func getStringKey(r *wingetcfg.WinGetResource, key string, maxLength int, required bool) (string, error) {
+	v, ok := r.Settings[key]
+	if !ok {
+		if required {
+			return "", fmt.Errorf("%s is empty and is required", key)
+		}
+		return "", nil
+	}
+
+	value := v.(string)
+
+	if maxLength > 0 && len(value) > maxLength {
+		return "", fmt.Errorf("%s exceeds the %d character limit", key, maxLength)
+	}
+
+	return value, nil
+}
+
+func getBoolKey(r *wingetcfg.WinGetResource, key string, required bool) (bool, error) {
+	v, ok := r.Settings[key]
+	if !ok {
+		if required {
+			return false, fmt.Errorf("%s is empty and is required", key)
+		}
+		return false, nil
+	}
+
+	value := v.(bool)
+	if !ok {
+		return false, fmt.Errorf("could not find the %s key", key)
+	}
+
+	return value, nil
+}
+
+func getCommaSeparatedStringKey(r *wingetcfg.WinGetResource, key string, required bool) (string, error) {
+	v, ok := r.Settings[key]
+	if !ok {
+		if required {
+			return "", fmt.Errorf("%s is empty and is required", key)
+		}
+		return "", nil
+	}
+
+	values := strings.Split(v.(string), ";")
+
+	csValues := []string{}
+	for _, v := range values {
+		csValues = append(csValues, fmt.Sprintf("'%s'", v))
+	}
+
+	return strings.Join(csValues, ", "), nil
 }
