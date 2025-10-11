@@ -29,7 +29,6 @@ import (
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
 	openuem_utils "github.com/open-uem/utils"
 	"github.com/open-uem/wingetcfg/wingetcfg"
-	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
 )
 
@@ -390,15 +389,8 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 		return err
 	}
 
-	// Check that PowerShell > 7.4.6 is installed for DSC
-	powershellPath := "C:\\Program Files\\PowerShell\\7\\pwsh.exe"
-	if err := a.EnsurePowershell7(powershellPath); err != nil {
-		log.Printf("[ERROR]: could not ensure that PowerShell 7 is installed on the system, reason: %v", err)
-		return err
-	}
-
 	// Run tasks defined in the profile
-	a.RunTasks(cfg, powershellPath)
+	a.RunTasks(cfg)
 
 	return nil
 }
@@ -825,7 +817,7 @@ func (a *Agent) GetServerCertificate() {
 	}
 }
 
-func (a *Agent) ExecutePowerShellScript(powershellPath string, script string) error {
+func (a *Agent) ExecutePowerShellScript(script string) error {
 	if script != "" {
 		file, err := os.CreateTemp(os.TempDir(), "*.ps1")
 		if err != nil {
@@ -846,12 +838,12 @@ func (a *Agent) ExecutePowerShellScript(powershellPath string, script string) er
 				return errors.New("could not close temp ps1 file")
 			}
 
-			if out, err := exec.Command(powershellPath, "-File", file.Name()).CombinedOutput(); err != nil {
+			if out, err := exec.Command("PowerShell", "-File", file.Name()).CombinedOutput(); err != nil {
 				fmt.Printf("[ERROR]: could not execute powershell script, reason: %v, %s", err, string(out))
 				return errors.New("could not execute powershell script")
 			}
 			if a.Config.Debug {
-				log.Println("[DEBUG]: a script should have run:", powershellPath, "-File", file.Name())
+				log.Println("[DEBUG]: a script should have run:", "PowerShell -File", file.Name())
 			} else {
 				log.Println("[INFO]: a powershell script has been executed due to a configuration profile")
 			}
@@ -865,7 +857,7 @@ func (a *Agent) ExecutePowerShellScript(powershellPath string, script string) er
 	return nil
 }
 
-func (a *Agent) RunTasks(cfg wingetcfg.WinGetCfg, powershellPath string) {
+func (a *Agent) RunTasks(cfg wingetcfg.WinGetCfg) {
 	cwd, err := openuem_utils.GetWd()
 	if err != nil {
 		log.Printf("[ERROR]: could not get working directory, reason %v", err)
@@ -883,7 +875,7 @@ func (a *Agent) RunTasks(cfg wingetcfg.WinGetCfg, powershellPath string) {
 	for _, resource := range cfg.Properties.Resources {
 		switch resource.Resource {
 		case wingetcfg.OpenUEMPowershell:
-			a.PowershellTask(resource, powershellPath)
+			a.PowershellTask(resource)
 		case wingetcfg.WinGetLocalGroupResource:
 			if err := a.LocalGroupTask(resource, taskControlPath, taskControl); err != nil {
 				log.Println(err)
@@ -907,55 +899,6 @@ func (a *Agent) RunTasks(cfg wingetcfg.WinGetCfg, powershellPath string) {
 		}
 	}
 
-}
-
-func (a *Agent) EnsurePowershell7(powershellPath string) error {
-	// If PowerShell 7 is not installed install it with winget
-	if _, err := os.Stat(powershellPath); errors.Is(err, os.ErrNotExist) {
-		if err := deploy.InstallPackage("Microsoft.PowerShell", "", false, a.Config.Debug); err != nil {
-			return fmt.Errorf("could not install the required PowerShell, reason %v", err)
-		}
-
-		// Notify, OpenUEM that a new package has been deployed due to winget configure
-		if err := a.SendWinGetCfgDeploymentReport("Microsoft.PowerShell", "PowerShell 7-x64", "install"); err != nil {
-			return err
-		}
-	}
-
-	if a.Config.Debug {
-		log.Println("[DEBUG]: PowerShell 7 is installed")
-	}
-
-	// Check PowerShell 7 version
-	// Ref: https://stackoverflow.com/questions/1825585/determine-installed-powershell-version
-	out, err := exec.Command(powershellPath, "-Command", "Get-ItemPropertyValue", "-Path", "HKLM:\\SOFTWARE\\Microsoft\\PowerShellCore\\InstalledVersions\\*", "-Name", "SemanticVersion").Output()
-	if err != nil {
-		return fmt.Errorf("could not get PowerShell 7 version with %s %s %s %s %s %s %s, reason %v", powershellPath, "-Command", "Get-ItemPropertyValue", "-Path", "HKLM:\\SOFTWARE\\Microsoft\\PowerShellCore\\InstalledVersions\\*", "-Name", "SemanticVersion", err)
-	}
-
-	if a.Config.Debug {
-		log.Println("[DEBUG]: got PowerShell 7 version")
-	}
-
-	// if PowerShell version 7 is lower than 7.4.6 upgrade it
-	if semver.Compare("v"+strings.TrimSpace(string(out)), "v7.4.6") < 0 {
-		if _, err := os.Stat(powershellPath); errors.Is(err, os.ErrNotExist) {
-			if err := deploy.UpdatePackage("Microsoft.PowerShell"); err != nil {
-				return fmt.Errorf("could not update PowerShell 7 reason %v", err)
-			}
-
-			// Notify, OpenUEM that a new package has been deployed due to winget configure
-			if err := a.SendWinGetCfgDeploymentReport("Microsoft.PowerShell", "PowerShell 7-x64", "install"); err != nil {
-				return err
-			}
-		}
-	}
-
-	if a.Config.Debug {
-		log.Println("[DEBUG]: PowerShell 7 version was compared")
-	}
-
-	return nil
 }
 
 func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPath string, t *TaskControl) error {
@@ -1370,7 +1313,7 @@ type PowerShellTask struct {
 	RunConfig string
 }
 
-func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, powershellPath string) error {
+func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource) error {
 	errData := ""
 	task := PowerShellTask{}
 
@@ -1406,7 +1349,7 @@ func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, powershellPath strin
 	if task.RunConfig == "once" {
 		scriptsRun := strings.Split(a.Config.ScriptsRun, ",")
 		if !slices.Contains(scriptsRun, task.ID) {
-			if err := a.ExecutePowerShellScript(powershellPath, task.Script); err != nil {
+			if err := a.ExecutePowerShellScript(task.Script); err != nil {
 				if errData != "" {
 					errData += ", " + task.Name + ": " + err.Error()
 				} else {
@@ -1430,7 +1373,7 @@ func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, powershellPath strin
 		}
 
 	} else {
-		if err := a.ExecutePowerShellScript(powershellPath, task.Script); err != nil {
+		if err := a.ExecutePowerShellScript(task.Script); err != nil {
 			if errData != "" {
 				errData += ", " + task.Name + ": " + err.Error()
 			} else {
