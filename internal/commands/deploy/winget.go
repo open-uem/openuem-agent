@@ -135,7 +135,7 @@ func UninstallPackage(packageID string) error {
 		}
 
 		if errCode == "0x8A150014" {
-			log.Printf("[INFO]: %s cannot be updated. %s", packageID, errMessage)
+			log.Printf("[INFO]: %s cannot be uninstalled. %s", packageID, errMessage)
 			return nil
 		}
 

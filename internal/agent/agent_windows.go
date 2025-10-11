@@ -885,17 +885,21 @@ func (a *Agent) RunTasks(cfg wingetcfg.WinGetCfg, powershellPath string) {
 		case wingetcfg.OpenUEMPowershell:
 			a.PowershellTask(resource, powershellPath)
 		case wingetcfg.WinGetLocalGroupResource:
-			if err := a.LocalGroupTask(resource, powershellPath, taskControlPath, taskControl); err != nil {
+			if err := a.LocalGroupTask(resource, taskControlPath, taskControl); err != nil {
 				log.Println(err)
 			}
 		case wingetcfg.WinGetLocalUserResource:
-			// TODO - error management
-			a.LocalUserTask(resource, taskControlPath, taskControl)
+			if err := a.LocalUserTask(resource, taskControlPath, taskControl); err != nil {
+				log.Println(err)
+			}
 		case wingetcfg.WinGetMSIPackageResource:
-			a.MSIPackageTask(resource)
+			if err := a.MSIPackageTask(resource, taskControlPath, taskControl); err != nil {
+				log.Println(err)
+			}
 		case wingetcfg.WinGetPackageResource:
-			// TODO - error management
-			a.PackageManagementTask(resource, taskControlPath, taskControl)
+			if err := a.PackageManagementTask(resource, taskControlPath, taskControl); err != nil {
+				log.Println(err)
+			}
 		case wingetcfg.WinGetRegistryResource:
 			if err := a.RegistryTask(resource, taskControlPath, taskControl); err != nil {
 				log.Println(err)
@@ -1020,15 +1024,19 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 			}
 		}
 	} else {
-		if err := deploy.UninstallPackage(packageID); err != nil {
-			return err
-		}
-		if err := a.SendWinGetCfgDeploymentReport(packageID, packageName, "uninstall"); err != nil {
-			log.Printf("[ERROR]: could not send WinGetCfg deployment report, reason: %v", err)
-			return err
-		}
+		taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
 
-		return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+		if !taskAlreadySuccessful {
+			if err := deploy.UninstallPackage(packageID); err != nil {
+				return err
+			}
+			if err := a.SendWinGetCfgDeploymentReport(packageID, packageName, "uninstall"); err != nil {
+				log.Printf("[ERROR]: could not send WinGetCfg deployment report, reason: %v", err)
+				return err
+			}
+
+			return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+		}
 	}
 
 	return nil
@@ -1065,6 +1073,11 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 		return err
 	}
 
+	hex, err := getBoolKey(r, "Hex", false)
+	if err != nil {
+		return err
+	}
+
 	taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
 
 	if !taskAlreadySuccessful {
@@ -1074,26 +1087,29 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 			if valueName == "" {
 				if valueData != "" {
 					if err := dsc.UpdateRegistryKeyDefaultValue(key, valueData); err != nil {
-						log.Println(err)
+						log.Printf("[ERROR]: could not update registry %s default value, reason: %v", key, err)
 						return err
 					}
+					log.Printf("[INFO]: registry key default value %s has been updated", key)
 				} else {
 					if err := dsc.AddRegistryKey(key); err != nil {
-						log.Println(err)
+						log.Printf("[ERROR]: could not add registry key %s, reason: %v", key, err)
 						return err
 					}
+					log.Printf("[INFO]: registry key %s has been added", key)
 				}
 
 			} else {
-
 				if !wingetcfg.IsValidRegistryValueType(propertyType) {
 					return fmt.Errorf("property type %s is not valid", propertyType)
 				}
 
-				if err := dsc.AddOrEditRegistryValue(key, valueName, propertyType, valueData, force); err != nil {
-					log.Println(err)
+				if err := dsc.AddOrEditRegistryValue(key, valueName, propertyType, valueData, hex, force); err != nil {
+					log.Printf("[ERROR]: could not add registry value key %s, reason: %v", valueName, err)
 					return err
 				}
+
+				log.Printf("[INFO]: registry key value %s has been added", valueName)
 			}
 
 		} else {
@@ -1109,14 +1125,20 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 
 			if valueName == "" {
 				if err := dsc.RemoveRegistryKey(key, force); err != nil {
+					log.Printf("[ERROR]: could not remove registry key %s, reason: %v", key, err)
 					return err
 				}
+				log.Printf("[INFO]: registry key %s has been removed", key)
 			} else {
 				if err := dsc.RemoveRegistryKeyValue(key, valueName); err != nil {
+					log.Printf("[ERROR]: could not remove registry key value %s, reason: %v", valueName, err)
 					return err
 				}
+				log.Printf("[INFO]: registry key value %s has been removed", valueName)
 			}
 		}
+
+		return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
 	}
 
 	return nil
@@ -1202,7 +1224,7 @@ func (a *Agent) LocalUserTask(r *wingetcfg.WinGetResource, taskControlPath strin
 	return nil
 }
 
-func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, powerShellPath string, taskControlPath string, t *TaskControl) error {
+func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath string, t *TaskControl) error {
 	ensure, err := getEnsureKey(r)
 	if err != nil {
 		return err
@@ -1296,7 +1318,48 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, powerShellPath strin
 	return nil
 }
 
-func (a *Agent) MSIPackageTask(resource *wingetcfg.WinGetResource) {
+func (a *Agent) MSIPackageTask(r *wingetcfg.WinGetResource, taskControlPath string, t *TaskControl) error {
+	ensure, err := getEnsureKey(r)
+	if err != nil {
+		return err
+	}
+
+	path, err := getStringKey(r, "Path", -1, true)
+	if err != nil {
+		return err
+	}
+
+	arguments, err := getStringKey(r, "Arguments", -1, false)
+	if err != nil {
+		return err
+	}
+
+	logPath, err := getStringKey(r, "LogPath", -1, false)
+	if err != nil {
+		return err
+	}
+
+	taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
+
+	if !taskAlreadySuccessful {
+		if ensure == "Present" {
+			if err := dsc.InstallMSIPackage(path, arguments, logPath); err != nil {
+				log.Printf("[ERROR]: could not install MSI packagem reason: %v", err)
+				return err
+			}
+			log.Printf("[INFO]: MSI package has been installed from %s", path)
+			return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+		} else {
+			if err := dsc.UninstallMSIPackage(path, arguments, logPath); err != nil {
+				log.Printf("[ERROR]: could not uninstall MSI packagem reason: %v", err)
+				return err
+			}
+			log.Printf("[INFO]: MSI package %s has been uninstalled", path)
+			return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+		}
+	}
+
+	return nil
 
 }
 

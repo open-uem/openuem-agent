@@ -5,8 +5,8 @@ package dsc
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/open-uem/wingetcfg/wingetcfg"
@@ -25,24 +25,37 @@ func AddRegistryKey(key string) error {
 	return nil
 }
 
-func AddOrEditRegistryValue(path string, name string, propertyType string, value string, force bool) error {
+func AddOrEditRegistryValue(path string, name string, propertyType string, value string, hex bool, force bool) error {
 	command := fmt.Sprintf("New-ItemProperty -Path '%s' -Name '%s' -PropertyType '%s'", path, name, propertyType)
 
-	if propertyType != wingetcfg.RegistryValueTypeMultistring {
-		command += fmt.Sprintf(" -Value '%s'", value)
-	} else {
+	switch propertyType {
+	case wingetcfg.RegistryValueTypeDWord, wingetcfg.RegistryValueTypeQWord:
+		if hex {
+			i, err := strconv.ParseInt(value, 16, 64)
+			if err != nil {
+				return err
+			}
+			command += fmt.Sprintf(" -Value %d", i)
+		} else {
+			i, err := strconv.Atoi(value)
+			if err != nil {
+				return err
+			}
+			command += fmt.Sprintf(" -Value %d", i)
+		}
+	case wingetcfg.RegistryValueTypeMultistring:
 		values := []string{}
 		for v := range strings.SplitSeq(value, "\n") {
 			values = append(values, fmt.Sprintf("'%s'", v))
 		}
 		command += fmt.Sprintf(" -Value @(%s)", strings.Join(values, ", "))
+	case wingetcfg.RegistryValueTypeString, wingetcfg.RegistryValueTypeExpandString:
+		command += fmt.Sprintf(" -Value '%s'", value)
 	}
 
 	if force {
 		command += " -Force"
 	}
-
-	log.Println(command)
 
 	cmd := exec.Command("PowerShell", "-command", command)
 	out, err := cmd.CombinedOutput()
@@ -50,13 +63,6 @@ func AddOrEditRegistryValue(path string, name string, propertyType string, value
 		errMessages := strings.Split(string(out), ".")
 		return errors.New(errMessages[0])
 	}
-
-	// 	RegistryValueTypeString       string = "String"
-	// RegistryValueTypeBinary       string = "Binary"
-	// RegistryValueTypeDWord        string = "DWord"
-	// RegistryValueTypeQWord        string = "QWord"
-	// RegistryValueTypeMultistring  string = "MultiString"
-	// RegistryValueTypeExpandString string = "ExpandString"
 
 	return nil
 }
