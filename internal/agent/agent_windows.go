@@ -391,7 +391,12 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 
 	// Run tasks defined in the profile and report if profile was applied successfully
 	errProfile := a.RunTasks(cfg)
-	if err := a.SendWinGetCfgProfileApplicationReport(profileID, a.Config.UUID, errProfile == nil, errProfile.Error()); err != nil {
+	errData := ""
+	if errProfile != nil {
+		errData = errProfile.Error()
+	}
+
+	if err := a.SendWinGetCfgProfileApplicationReport(profileID, a.Config.UUID, errProfile == nil, errData); err != nil {
 		log.Println("[ERROR]: could not report if profile was applied succesfully or not")
 	}
 
@@ -630,14 +635,34 @@ func (a *Agent) ExecutePowerShellScript(script string) error {
 				return errors.New("could not close temp ps1 file")
 			}
 
+			// Get current Execution-Policy
+			out, err := exec.Command("PowerShell", "-command", "Get-ExecutionPolicy -Scope CurrentUser").CombinedOutput()
+			if err != nil {
+				fmt.Printf("[ERROR]: could not get current Powershell execution policy, reason: %v, %s", err, string(out))
+				return errors.New("could not get current Powershell execution policy")
+			}
+			currentExecutionPolicy := strings.TrimSpace(string(out))
+
+			// Set ExecutionPolicy temporarily to RemoteSigned
+			out, err = exec.Command("PowerShell", "-command", "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser").CombinedOutput()
+			if err != nil {
+				fmt.Printf("[ERROR]: could not set Powershell execution policy to RemoteSigned temporarily, reason: %v, %s", err, string(out))
+				return errors.New("could not set Powershell execution policy to RemoteSigned temporarily")
+			}
+			defer func() {
+				// Revert back to previous ExecutionPolicy
+				out, err = exec.Command("PowerShell", "-command", fmt.Sprintf("Set-ExecutionPolicy %s -Scope CurrentUser", currentExecutionPolicy)).CombinedOutput()
+				if err != nil {
+					fmt.Printf("[ERROR]: could not revert the Powershell execution policy to RemoteSigned temporarily, reason: %v, %s", err, string(out))
+				}
+			}()
+
 			if out, err := exec.Command("PowerShell", "-File", file.Name()).CombinedOutput(); err != nil {
 				fmt.Printf("[ERROR]: could not execute powershell script, reason: %v, %s", err, string(out))
 				return errors.New("could not execute powershell script")
 			}
 			if a.Config.Debug {
-				log.Println("[DEBUG]: a script should have run:", "PowerShell -File", file.Name())
-			} else {
-				log.Println("[INFO]: a powershell script has been executed due to a configuration profile")
+				log.Printf("[DEBUG]: a script should have run: PowerShell -File %s", file.Name())
 			}
 
 			if err := os.Remove(file.Name()); err != nil {
@@ -669,7 +694,7 @@ func (a *Agent) RunTasks(cfg wingetcfg.WinGetCfg) error {
 		var err error
 		switch resource.Resource {
 		case wingetcfg.OpenUEMPowershell:
-			a.PowershellTask(resource)
+			err = a.PowershellTask(resource, taskControlPath, taskControl)
 		case wingetcfg.WinGetLocalGroupResource:
 			err = a.LocalGroupTask(resource, taskControlPath, taskControl)
 		case wingetcfg.WinGetLocalUserResource:
@@ -683,10 +708,11 @@ func (a *Agent) RunTasks(cfg wingetcfg.WinGetCfg) error {
 		}
 
 		if err != nil {
+			when := time.Now().Local().Format(time.RFC822)
 			if errData != "" {
-				errData = ", " + err.Error()
+				errData += fmt.Sprintf(", [%s] %s", when, err.Error())
 			} else {
-				errData = err.Error()
+				errData = fmt.Sprintf("[%s] %s", when, err.Error())
 			}
 		}
 	}
@@ -819,9 +845,7 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 	}
 
 	taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
-
 	if !taskAlreadySuccessful {
-
 		if ensure == "Present" {
 
 			if valueName == "" {
@@ -1110,8 +1134,7 @@ type PowerShellTask struct {
 	RunConfig string
 }
 
-func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource) error {
-	errData := ""
+func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath string, t *TaskControl) error {
 	task := PowerShellTask{}
 
 	script, ok := r.Settings["Script"]
@@ -1143,45 +1166,27 @@ func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource) error {
 		return errors.New("could not find script key in task's settings")
 	}
 
-	if task.RunConfig == "once" {
-		scriptsRun := strings.Split(a.Config.ScriptsRun, ",")
-		if !slices.Contains(scriptsRun, task.ID) {
-			if err := a.ExecutePowerShellScript(task.Script); err != nil {
-				if errData != "" {
-					errData += ", " + task.Name + ": " + err.Error()
-				} else {
-					errData = task.Name + ": " + err.Error()
-				}
-			}
-			// Save data in agent config
-			tasksRun := strings.Split(a.Config.ScriptsRun, ",")
-			tasksRun = append(tasksRun, task.ID)
-			a.Config.ScriptsRun = strings.Join(tasksRun, ",")
-			if err := a.Config.WriteConfig(); err != nil {
-				log.Printf("[ERROR]: could not write ScriptsRun to agent config")
-				if errData != "" {
-					errData += ", " + task.Name + ": " + err.Error()
-				} else {
-					errData = task.Name + ": " + err.Error()
-				}
-			}
-		} else {
-			log.Printf("[INFO]: powershell execution task %s has already run once", task.Name)
-		}
+	taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
 
+	if task.RunConfig == "once" {
+		if !taskAlreadySuccessful {
+			scriptsRun := strings.Split(a.Config.ScriptsRun, ",")
+			if !slices.Contains(scriptsRun, task.ID) {
+				if err := a.ExecutePowerShellScript(task.Script); err != nil {
+					log.Printf("[ERROR]: errors were found running PowerShell, reason: %v", err)
+					return fmt.Errorf("errors were found running PowerShell, reason: %v", err)
+				}
+			}
+			log.Printf("[INFO]: powershell script %s run successfully", task.Name)
+			return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+		}
 	} else {
 		if err := a.ExecutePowerShellScript(task.Script); err != nil {
-			if errData != "" {
-				errData += ", " + task.Name + ": " + err.Error()
-			} else {
-				errData = task.Name + ": " + err.Error()
-			}
+			log.Printf("[ERROR]: errors were found running PowerShell, reason: %v", err)
+			return fmt.Errorf("errors were found running PowerShell, reason: %v", err)
 		}
 	}
 
-	if errData != "" {
-		return errors.New(errData)
-	}
 	return nil
 }
 
