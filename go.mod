@@ -23,7 +23,7 @@ require (
 	github.com/open-uem/nats v0.0.0-20250930102922-09c2a23b0598
 	github.com/open-uem/openuem-ansible-config v0.0.0-20250710075757-9ef6e3390073
 	github.com/open-uem/utils v0.0.0-20250702121339-316c5b599cd3
-	github.com/open-uem/wingetcfg v0.0.0-20251011071027-c1a8feda661b
+	github.com/open-uem/wingetcfg v0.0.0-20251011111407-80e823d91ea5
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/pkg/sftp v1.13.9
 	github.com/safchain/ethtool v0.6.1

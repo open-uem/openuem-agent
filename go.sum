@@ -142,6 +142,8 @@ github.com/open-uem/wingetcfg v0.0.0-20251011063702-d75f47e7cfe0 h1:f5DfQRevOlXg
 github.com/open-uem/wingetcfg v0.0.0-20251011063702-d75f47e7cfe0/go.mod h1:b2rmcb7kD/AODHdvHGZ8TpzhX4qrkdDPrEGM5FmOBxQ=
 github.com/open-uem/wingetcfg v0.0.0-20251011071027-c1a8feda661b h1:kotgoA7a48gMCXi4e0a6EEP/Kpptj5B60BxKJbI0XPE=
 github.com/open-uem/wingetcfg v0.0.0-20251011071027-c1a8feda661b/go.mod h1:b2rmcb7kD/AODHdvHGZ8TpzhX4qrkdDPrEGM5FmOBxQ=
+github.com/open-uem/wingetcfg v0.0.0-20251011111407-80e823d91ea5 h1:LQ6pwsgumUBcuw7cPy66jmLE/ZaIvbCZRGxcOFFkF24=
+github.com/open-uem/wingetcfg v0.0.0-20251011111407-80e823d91ea5/go.mod h1:b2rmcb7kD/AODHdvHGZ8TpzhX4qrkdDPrEGM5FmOBxQ=
 github.com/pelletier/go-toml/v2 v2.2.4 h1:mye9XuhQ6gvn5h28+VilKrrPoQVanw5PMw/TB0t5Ec4=
 github.com/pelletier/go-toml/v2 v2.2.4/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=

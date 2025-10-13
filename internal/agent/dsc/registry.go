@@ -12,8 +12,10 @@ import (
 	"github.com/open-uem/wingetcfg/wingetcfg"
 )
 
-func AddRegistryKey(key string) error {
+func AddRegistryKey(key string, force bool) error {
 	command := fmt.Sprintf("New-Item -Path '%s'", key)
+
+	command += " -Force"
 
 	cmd := exec.Command("PowerShell", "-command", command)
 	out, err := cmd.CombinedOutput()
