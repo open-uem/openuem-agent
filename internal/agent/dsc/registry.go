@@ -3,9 +3,7 @@
 package dsc
 
 import (
-	"errors"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 
@@ -17,14 +15,7 @@ func AddRegistryKey(key string, force bool) error {
 
 	command += " -Force"
 
-	cmd := exec.Command("PowerShell", "-command", command)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		errMessages := strings.Split(string(out), ".")
-		return errors.New(errMessages[0])
-	}
-
-	return nil
+	return RunTaskWithLowPriority(command)
 }
 
 func AddOrEditRegistryValue(path string, name string, propertyType string, value string, hex bool, force bool) error {
@@ -59,27 +50,13 @@ func AddOrEditRegistryValue(path string, name string, propertyType string, value
 		command += " -Force"
 	}
 
-	cmd := exec.Command("PowerShell", "-command", command)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		errMessages := strings.Split(string(out), ".")
-		return errors.New(errMessages[0])
-	}
-
-	return nil
+	return RunTaskWithLowPriority(command)
 }
 
 func UpdateRegistryKeyDefaultValue(path string, value string) error {
 	command := fmt.Sprintf("Set-Item -Path '%s' -Value '%s'", path, value)
 
-	cmd := exec.Command("PowerShell", "-command", command)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		errMessages := strings.Split(string(out), ".")
-		return errors.New(errMessages[0])
-	}
-
-	return nil
+	return RunTaskWithLowPriority(command)
 }
 
 func RemoveRegistryKey(key string, recursive bool) error {
@@ -89,25 +66,11 @@ func RemoveRegistryKey(key string, recursive bool) error {
 		command += " -Recurse"
 	}
 
-	cmd := exec.Command("PowerShell", "-command", command)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		errMessages := strings.Split(string(out), ".")
-		return errors.New(errMessages[0])
-	}
-
-	return nil
+	return RunTaskWithLowPriority(command)
 }
 
 func RemoveRegistryKeyValue(key string, name string) error {
 	command := fmt.Sprintf("Remove-ItemProperty -Path '%s' -Name", key)
 
-	cmd := exec.Command("PowerShell", "-command", command)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		errMessages := strings.Split(string(out), ".")
-		return errors.New(errMessages[0])
-	}
-
-	return nil
+	return RunTaskWithLowPriority(command)
 }

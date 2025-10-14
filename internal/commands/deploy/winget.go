@@ -3,6 +3,7 @@
 package deploy
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"log"
@@ -18,6 +19,7 @@ import (
 
 func InstallPackage(packageID string, version string, keepUpdated bool, debug bool) error {
 	var cmd *exec.Cmd
+	var out bytes.Buffer
 
 	wgPath, err := locateWinGet()
 	if err != nil {
@@ -32,6 +34,9 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 	} else {
 		cmd = exec.Command(wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
 	}
+
+	cmd.Stderr = &out
+
 	err = cmd.Start()
 	if err != nil {
 		log.Printf("[ERROR]: could not start winget.exe command %v", err)
@@ -51,7 +56,7 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 		errCode := strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(err.Error(), "exit status "))), "0X", "0x")
 		errMessage, ok := wingetcfg.ErrorCodes[errCode]
 		if !ok {
-			errMessage = err.Error()
+			errMessage = err.Error() + " " + out.String()
 		}
 
 		// Package is already installed and no applicable update is found

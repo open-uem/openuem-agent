@@ -37,10 +37,8 @@ func CreateLocalUser(username string, password string, comment string, fullName 
 		command += " -UserMayNotChangePassword"
 	}
 
-	cmd := exec.Command("PowerShell", "-command", command)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		errMessages := strings.Split(string(out), ".")
+	if err := RunTaskWithLowPriority(command); err != nil {
+		errMessages := strings.Split(err.Error(), ".")
 		return errors.New(errMessages[0])
 	}
 
@@ -60,12 +58,5 @@ func CreateLocalUser(username string, password string, comment string, fullName 
 func DeleteLocalUser(username string) error {
 	command := fmt.Sprintf("Remove-LocalUser -Name %s", username)
 
-	cmd := exec.Command("PowerShell", "-command", command)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		errMessages := strings.Split(string(out), ".")
-		return errors.New(errMessages[0])
-	}
-
-	return nil
+	return RunTaskWithLowPriority(command)
 }

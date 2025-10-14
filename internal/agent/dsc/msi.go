@@ -5,8 +5,6 @@ package dsc
 import (
 	"errors"
 	"fmt"
-	"os/exec"
-	"strings"
 )
 
 func InstallMSIPackage(path string, extraArguments string, logPath string) error {
@@ -31,14 +29,8 @@ func InstallMSIPackage(path string, extraArguments string, logPath string) error
 
 	// Execute command
 	command := fmt.Sprintf("Start-Process msiexec.exe -Wait -ArgumentList '%s'", arguments)
-	cmd := exec.Command("PowerShell", "-command", command)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		errMessages := strings.Split(string(out), ".")
-		return errors.New(errMessages[0])
-	}
 
-	return nil
+	return RunTaskWithLowPriority(command)
 }
 
 func UninstallMSIPackage(path string, extraArguments string, logPath string) error {
@@ -63,12 +55,6 @@ func UninstallMSIPackage(path string, extraArguments string, logPath string) err
 
 	// Execute command
 	command := fmt.Sprintf("Start-Process msiexec.exe -Wait -ArgumentList '%s'", arguments)
-	cmd := exec.Command("PowerShell", "-command", command)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		errMessages := strings.Split(string(out), ".")
-		return errors.New(errMessages[0])
-	}
 
-	return nil
+	return RunTaskWithLowPriority(command)
 }

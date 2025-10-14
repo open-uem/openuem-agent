@@ -3,10 +3,8 @@
 package dsc
 
 import (
-	"errors"
 	"fmt"
 	"os/exec"
-	"strings"
 )
 
 func CreateLocalGroup(groupName string, description string) error {
@@ -16,53 +14,25 @@ func CreateLocalGroup(groupName string, description string) error {
 		command += fmt.Sprintf(" -Description '%s'", description)
 	}
 
-	cmd := exec.Command("PowerShell", "-command", command)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		errMessages := strings.Split(string(out), ".")
-		return errors.New(errMessages[0])
-	}
-
-	return nil
+	return RunTaskWithLowPriority(command)
 }
 
 func RemoveLocalGroup(groupName string) error {
 	command := fmt.Sprintf("Remove-LocalGroup -Name '%s'", groupName)
 
-	cmd := exec.Command("PowerShell", "-command", command)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		errMessages := strings.Split(string(out), ".")
-		return errors.New(errMessages[0])
-	}
-
-	return nil
+	return RunTaskWithLowPriority(command)
 }
 
 func AddMembersToLocalGroup(groupName string, members string) error {
 	command := fmt.Sprintf("Add-LocalGroupMember -Name '%s' -Member %s", groupName, members)
 
-	cmd := exec.Command("PowerShell", "-command", command)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		errMessages := strings.Split(string(out), ".")
-		return errors.New(errMessages[0])
-	}
-
-	return nil
+	return RunTaskWithLowPriority(command)
 }
 
 func RemoveMembersFromLocalGroup(groupName string, members string) error {
 	command := fmt.Sprintf("Remove-LocalGroupMember -Name '%s' -Member %s", groupName, members)
 
-	cmd := exec.Command("PowerShell", "-command", command)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		errMessages := strings.Split(string(out), ".")
-		return errors.New(errMessages[0])
-	}
-
-	return nil
+	return RunTaskWithLowPriority(command)
 }
 
 func ExistsGroup(groupName string) bool {
