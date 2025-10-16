@@ -227,6 +227,22 @@ func GetXAuthority(uid, gid uint32) (string, error) {
 	return xauthority, nil
 }
 
+// Get WAYLAND_DISPLAY environment variable
+func GetWaylandDisplay(uid, gid uint32) (string, error) {
+	// Ref: https://unix.stackexchange.com/questions/429092/what-is-the-best-way-to-find-the-current-display-and-xauthority-in-non-interacti
+	envCmd := exec.Command("bash", "-c", `ps -u $(id -u) -o pid= | xargs -I{} cat /proc/{}/environ 2>/dev/null | tr '\0' '\n' | grep -m1 '^WAYLAND_DISPLAY='`)
+	envCmd.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)},
+	}
+	envOut, err := envCmd.Output()
+	if err != nil {
+		return "", err
+	}
+	waylandDisplay := string(envOut)
+
+	return waylandDisplay, nil
+}
+
 // Get DISPLAY environment variable
 func GetDisplay(uid, gid uint32) (string, error) {
 

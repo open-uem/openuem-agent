@@ -15,7 +15,7 @@ import (
 
 func (r *Report) getSystemUpdateInfo() error {
 	switch r.OS {
-	case "ubuntu", "debian", "linuxmint":
+	case "ubuntu", "debian", "linuxmint", "neon":
 		if err := r.getAptInformation(); err != nil {
 			log.Printf("[ERROR]: could not get pending security updates, reason: %v", err)
 		} else {

@@ -315,14 +315,18 @@ func IsWaylandDisplayServer() bool {
 
 	// Get XAUTHORITY
 	xauthorityEnv, err := runtime.GetXAuthority(uint32(uid), uint32(gid))
-	if err != nil {
-		log.Printf("[ERROR]: could not check if Wayland as I couldn't get XAUTHORITY env, reason: %v\n", err)
-		return false
+	if err == nil {
+		if strings.Contains(xauthorityEnv, "wayland") {
+			return true
+		}
 	}
 
-	xauthority := strings.TrimPrefix(xauthorityEnv, "XAUTHORITY=")
-	if strings.Contains(xauthority, "wayland") {
-		return true
+	// Get WAYLAND_DISPLAY
+	waylandDisplay, err := runtime.GetWaylandDisplay(uint32(uid), uint32(gid))
+	if err == nil {
+		if strings.Contains(waylandDisplay, "wayland") {
+			return true
+		}
 	}
 
 	return false
