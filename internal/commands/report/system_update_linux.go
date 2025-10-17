@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/open-uem/nats"
+	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 )
 
 func (r *Report) getSystemUpdateInfo() error {
@@ -42,6 +43,11 @@ func (r *Report) getAptInformation() error {
 	// Check if unattended is running
 	r.SystemUpdate.Status = checkUpdatesStatus()
 
+	// Check if gnome software updares is set
+	if r.SystemUpdate.Status == nats.NOT_CONFIGURED && IsGnomeDesktop() && IsGnomeSoftwareUpdatesEnabled() {
+		r.SystemUpdate.Status = nats.NOTIFY_SCHEDULED_INSTALLATION
+	}
+
 	// Check last time packages were installed
 	r.SystemUpdate.LastInstall = checkLastTimePackagesInstalled()
 
@@ -52,6 +58,11 @@ func (r *Report) getDnfInformation() error {
 
 	// Check if we've security updates that can be upgraded
 	r.SystemUpdate.PendingUpdates = checkDnfSecurityUpdatesAvailable()
+
+	// Check if gnome software updares is set
+	if r.SystemUpdate.Status == nats.NOT_CONFIGURED && IsGnomeDesktop() && IsGnomeSoftwareUpdatesEnabled() {
+		r.SystemUpdate.Status = nats.NOTIFY_SCHEDULED_INSTALLATION
+	}
 
 	// Check if unattended is running
 	r.SystemUpdate.Status = checkDnfUpdatesStatus()
@@ -176,4 +187,33 @@ func checkDnfUpdatesStatus() string {
 	} else {
 		return nats.NOT_CONFIGURED
 	}
+}
+
+func IsGnomeDesktop() bool {
+	session, err := runtime.GetUserEnv("DESKTOP_SESSION")
+	return err == nil && session == "gnome"
+}
+
+func IsGnomeSoftwareUpdatesEnabled() bool {
+	username, err := runtime.GetLoggedInUser()
+	if err != nil {
+		return false
+	}
+
+	args := []string{"read", "/org/gnome/software/download-updates"}
+	out, err := runtime.RunAsUserWithOutput(username, "/usr/bin/dconf", args, true)
+	if err != nil {
+		log.Printf("[INFO]: could not find the dconf entry for download-updates, reason %v", err)
+		return false
+	}
+
+	dconfOut := strings.TrimSpace(string(out))
+	if dconfOut != "" {
+		enabled, err := strconv.ParseBool(dconfOut)
+		if err != nil {
+			return false
+		}
+		return enabled
+	}
+	return false
 }

@@ -10,7 +10,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -103,7 +102,7 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 		"X11VNC": {
 			RequiresVNCProxy: true,
 			StartService: func(vncPort string) error {
-				homeDir, _, _, err := getUserInfo(username)
+				homeDir, _, _, err := runtime.GetUserInfo(username)
 				if err != nil {
 					return err
 				}
@@ -145,7 +144,7 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 				return nil
 			},
 			SavePIN: func(pin string) error {
-				homeDir, uid, gid, err := getUserInfo(username)
+				homeDir, uid, gid, err := runtime.GetUserInfo(username)
 				if err != nil {
 					return err
 				}
@@ -169,7 +168,7 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 				return nil
 			},
 			RemovePIN: func() error {
-				homeDir, _, _, err := getUserInfo(username)
+				homeDir, _, _, err := runtime.GetUserInfo(username)
 				if err != nil {
 					log.Printf("[ERROR]: could not get user info, reason: %v", err)
 					return err
@@ -203,7 +202,7 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 				return nil
 			},
 			Configure: func() error {
-				homeDir, uid, gid, err := getUserInfo(username)
+				homeDir, uid, gid, err := runtime.GetUserInfo(username)
 				if err != nil {
 					return err
 				}
@@ -248,7 +247,7 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 				return nil
 			},
 			RemovePIN: func() error {
-				homeDir, _, _, err := getUserInfo(username)
+				homeDir, _, _, err := runtime.GetUserInfo(username)
 				if err != nil {
 					log.Printf("[ERROR]: could not get user info, reason: %v", err)
 					return err
@@ -307,7 +306,7 @@ func IsWaylandDisplayServer() bool {
 		return false
 	}
 
-	_, uid, gid, err := getUserInfo(username)
+	_, uid, gid, err := runtime.GetUserInfo(username)
 	if err != nil {
 		log.Printf("[ERROR]: could not get user info, reason: %v\n", err)
 		return false
@@ -434,23 +433,4 @@ func copyFileContents(src, dst string) (err error) {
 	}
 	err = out.Sync()
 	return
-}
-
-func getUserInfo(username string) (homedir string, uid int, gid int, err error) {
-	u, err := user.Lookup(username)
-	if err != nil {
-		return "", -1, -1, err
-	}
-
-	uid, err = strconv.Atoi(u.Uid)
-	if err != nil {
-		return "", -1, -1, err
-	}
-
-	gid, err = strconv.Atoi(u.Gid)
-	if err != nil {
-		return "", -1, -1, err
-	}
-
-	return u.HomeDir, uid, gid, nil
 }
