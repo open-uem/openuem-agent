@@ -32,11 +32,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type TaskControl struct {
-	Success  []string             `json:"success"`
-	Executed map[string]time.Time `json:"executed"`
-}
-
 func (a *Agent) Start() {
 
 	log.Println("[INFO]: agent has been started!")
@@ -374,7 +369,6 @@ func (a *Agent) GetWingetConfigureProfiles() {
 		}
 
 		if err := a.ApplyConfiguration(p.ProfileID, cfg, p.Exclusions, p.Deployments); err != nil {
-			// TODO inform that this profile has an error to agent worker
 			log.Printf("[ERROR]: could not apply YAML configuration file with winget, reason: %v", err)
 			continue
 		}
@@ -389,8 +383,55 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 		return err
 	}
 
+	// Read task control file
+	cwd, err := openuem_utils.GetWd()
+	if err != nil {
+		log.Printf("[ERROR]: could not get working directory, reason %v", err)
+		return err
+	}
+	taskControlPath := filepath.Join(cwd, "powershell", "tasks.json")
+	taskControl, err := dsc.ReadTaskControlFile(taskControlPath)
+
+	if err != nil {
+		log.Printf("[ERROR]: tasks control file is not available, reason %v", err)
+		return err
+	}
+
+	ID := strconv.Itoa(profileID)
+	if taskControl.ProfilesRunning == nil {
+		taskControl.ProfilesRunning = map[string]time.Time{
+			ID: time.Now(),
+		}
+	} else {
+		when, ok := taskControl.ProfilesRunning[ID]
+		if !ok {
+			taskControl.ProfilesRunning[ID] = time.Now()
+		} else {
+			// Clear stalled profile for more than 24 hours
+			if time.Now().After(when.Add(24 * time.Hour)) {
+				log.Printf("[INFO]: found previous task %s that hasn't be re-run for more than 24 hours", ID)
+				taskControl.ProfilesRunning[ID] = time.Now()
+			} else {
+				log.Printf("[INFO]: previous profile %s is marked as running, not relaunching, ", ID)
+				return nil
+			}
+		}
+	}
+	if err := dsc.SaveTaskControl(taskControlPath, taskControl); err != nil {
+		log.Printf("[ERROR]: could not save new profile %s running, reason: %v", ID, err)
+		return err
+	}
+
+	defer func() {
+		delete(taskControl.ProfilesRunning, ID)
+		if err := dsc.SaveTaskControl(taskControlPath, taskControl); err != nil {
+			log.Printf("[ERROR]: could not remove profile %s from running, reason: %v", ID, err)
+			return
+		}
+	}()
+
 	// Run tasks defined in the profile and report if profile was applied successfully
-	errProfile := a.RunTasks(cfg)
+	errProfile := a.RunTasks(cfg, profileID, taskControlPath, taskControl)
 	errData := ""
 	if errProfile != nil {
 		errData = errProfile.Error()
@@ -674,21 +715,7 @@ func (a *Agent) ExecutePowerShellScript(script string) error {
 	return nil
 }
 
-func (a *Agent) RunTasks(cfg wingetcfg.WinGetCfg) error {
-	cwd, err := openuem_utils.GetWd()
-	if err != nil {
-		log.Printf("[ERROR]: could not get working directory, reason %v", err)
-		return err
-	}
-
-	taskControlPath := filepath.Join(cwd, "powershell", "tasks.json")
-
-	taskControl, err := ReadTaskControlFile(taskControlPath)
-	if err != nil {
-		log.Printf("[ERROR]: tasks control file is not available, reason %v", err)
-		return err
-	}
-
+func (a *Agent) RunTasks(cfg wingetcfg.WinGetCfg, profileID int, taskControlPath string, taskControl *dsc.TaskControl) error {
 	errData := ""
 	for _, resource := range cfg.Properties.Resources {
 		var err error
@@ -724,7 +751,7 @@ func (a *Agent) RunTasks(cfg wingetcfg.WinGetCfg) error {
 	return nil
 }
 
-func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPath string, t *TaskControl) error {
+func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl) error {
 
 	packageName := r.Directives.Description
 
@@ -775,7 +802,7 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 					} else {
 						t.Executed[r.ID] = time.Now()
 					}
-					return SetTaskAsExecuted(taskControlPath, t)
+					return dsc.SaveTaskControl(taskControlPath, t)
 				}
 				return err
 			}
@@ -786,7 +813,7 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 
 			// if package must not be kept updated, mark the task as successful
 			if !keepUpdated {
-				return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+				return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
 			}
 		}
 	} else {
@@ -801,14 +828,14 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 				return err
 			}
 
-			return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+			return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
 		}
 	}
 
 	return nil
 }
 
-func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string, t *TaskControl) error {
+func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl) error {
 	ensure, err := getEnsureKey(r)
 	if err != nil {
 		return err
@@ -902,13 +929,13 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 			}
 		}
 
-		return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+		return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
 	}
 
 	return nil
 }
 
-func (a *Agent) LocalUserTask(r *wingetcfg.WinGetResource, taskControlPath string, t *TaskControl) error {
+func (a *Agent) LocalUserTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl) error {
 	ensure, err := getEnsureKey(r)
 	if err != nil {
 		return err
@@ -982,13 +1009,13 @@ func (a *Agent) LocalUserTask(r *wingetcfg.WinGetResource, taskControlPath strin
 			log.Printf("[INFO]: the local user %s has been deleted", username)
 		}
 
-		return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+		return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
 	}
 
 	return nil
 }
 
-func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath string, t *TaskControl) error {
+func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl) error {
 	ensure, err := getEnsureKey(r)
 	if err != nil {
 		return err
@@ -1030,7 +1057,7 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath stri
 					return fmt.Errorf("could not create local group, reason: %v", err)
 				}
 				log.Printf("[INFO]: the local group %s has been added", groupName)
-				return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+				return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
 			}
 
 			if members != "" {
@@ -1047,7 +1074,7 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath stri
 					return fmt.Errorf("could not add members to local group, reason: %v", err)
 				}
 				log.Printf("[INFO]: members have been added to local group %s", groupName)
-				return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+				return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
 
 			}
 
@@ -1057,7 +1084,7 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath stri
 					return fmt.Errorf("could not add members to local group, reason: %v", err)
 				}
 				log.Printf("[INFO]: members have been added to local group %s", groupName)
-				return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+				return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
 			}
 
 			if membersToExclude != "" {
@@ -1066,7 +1093,7 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath stri
 					return fmt.Errorf("could not exclude members from local group, reason: %v", err)
 				}
 				log.Printf("[INFO]: members have been removed from local group %s", groupName)
-				return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+				return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
 			}
 
 		} else {
@@ -1075,14 +1102,14 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath stri
 				return fmt.Errorf("could not delete local group, reason: %v", err)
 			}
 			log.Printf("[INFO]: the local group %s has been deleted", groupName)
-			return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+			return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
 		}
 	}
 
 	return nil
 }
 
-func (a *Agent) MSIPackageTask(r *wingetcfg.WinGetResource, taskControlPath string, t *TaskControl) error {
+func (a *Agent) MSIPackageTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl) error {
 	ensure, err := getEnsureKey(r)
 	if err != nil {
 		return err
@@ -1112,14 +1139,14 @@ func (a *Agent) MSIPackageTask(r *wingetcfg.WinGetResource, taskControlPath stri
 				return fmt.Errorf("could not install MSI package reason: %v", err)
 			}
 			log.Printf("[INFO]: MSI package has been installed from %s", path)
-			return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+			return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
 		} else {
 			if err := dsc.UninstallMSIPackage(path, arguments, logPath); err != nil {
 				log.Printf("[ERROR]: could not uninstall MSI package reason: %v", err)
 				return fmt.Errorf("could not uninstall MSI package reason: %v", err)
 			}
 			log.Printf("[INFO]: MSI package %s has been uninstalled", path)
-			return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+			return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
 		}
 	}
 
@@ -1134,7 +1161,7 @@ type PowerShellTask struct {
 	RunConfig string
 }
 
-func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath string, t *TaskControl) error {
+func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl) error {
 	task := PowerShellTask{}
 
 	script, ok := r.Settings["Script"]
@@ -1178,84 +1205,13 @@ func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath stri
 				}
 			}
 			log.Printf("[INFO]: powershell script %s run successfully", task.Name)
-			return SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+			return dsc.SetTaskAsSuccessfull(task.ID, taskControlPath, t)
 		}
 	} else {
 		if err := a.ExecutePowerShellScript(task.Script); err != nil {
 			log.Printf("[ERROR]: errors were found running PowerShell, reason: %v", err)
 			return fmt.Errorf("errors were found running PowerShell, reason: %v", err)
 		}
-	}
-
-	return nil
-}
-
-func ReadTaskControlFile(taskControl string) (*TaskControl, error) {
-	if _, err := os.Stat(taskControl); err != nil {
-		f, err := os.Create(taskControl)
-		defer func() {
-			if err := f.Close(); err != nil {
-				log.Printf("[ERROR]: could not close the task control file, reason: %v", err)
-			}
-		}()
-		if err != nil {
-			log.Printf("[ERROR]: could not create the task control file, reason: %v", err)
-			return nil, err
-		}
-
-		t := TaskControl{}
-		data, err := json.Marshal(t)
-		if err != nil {
-			log.Printf("[ERROR]: could not marshall initial task control, reason: %v", err)
-		}
-		if _, err := f.Write(data); err != nil {
-			log.Printf("[ERROR]: could not write initial data to task control file, reason: %v", err)
-		}
-		return &t, nil
-	} else {
-		data, err := os.ReadFile(taskControl)
-		if err != nil {
-			log.Printf("[ERROR]: could not read the task control file, reason: %v", err)
-			return nil, err
-		}
-		t := TaskControl{}
-		if err := json.Unmarshal(data, &t); err != nil {
-			log.Printf("[ERROR]: could not unmarshall JSON data from the task control file, reason: %v", err)
-			return nil, err
-		}
-
-		return &t, nil
-	}
-}
-
-func SetTaskAsSuccessfull(taskID string, taskControlPath string, t *TaskControl) error {
-
-	t.Success = append(t.Success, taskID)
-
-	out, err := json.Marshal(t)
-	if err != nil {
-		log.Printf("[ERROR]: could not marshal JSON data for the task control file, reason: %v", err)
-		return err
-	}
-
-	if err := os.WriteFile(taskControlPath, out, 0660); err != nil {
-		log.Printf("[ERROR]: could not write JSON data to the task control file, reason: %v", err)
-		return err
-	}
-
-	return nil
-}
-
-func SetTaskAsExecuted(taskControlPath string, t *TaskControl) error {
-	out, err := json.Marshal(t)
-	if err != nil {
-		log.Printf("[ERROR]: could not marshal JSON data for the task control file, reason: %v", err)
-		return err
-	}
-
-	if err := os.WriteFile(taskControlPath, out, 0660); err != nil {
-		log.Printf("[ERROR]: could not write executed task as JSON data to the task control file, reason: %v", err)
-		return err
 	}
 
 	return nil
