@@ -165,7 +165,7 @@ func getRustDeskUserInfo() (*RustDeskUser, error) {
 	return &rdUser, nil
 }
 
-func (cfg *RustDeskConfig) KillRustDeskProcess(username string) error {
+func (cfg *RustDeskConfig) KillRustDeskProcess() error {
 	processes, err := process.Processes()
 	if err != nil {
 		return err
@@ -183,7 +183,7 @@ func (cfg *RustDeskConfig) KillRustDeskProcess(username string) error {
 	}
 
 	// Restart RustDeskService
-	if err := RestartRustDeskService(username); err != nil {
+	if err := RestartRustDeskService(cfg.User.Username); err != nil {
 		log.Printf("[ERROR]: could not start RustDesk service, reason: %v", err)
 		return err
 	}
@@ -191,7 +191,7 @@ func (cfg *RustDeskConfig) KillRustDeskProcess(username string) error {
 	return nil
 }
 
-func ConfigRollBack(username string, isFlatpak bool) error {
+func (cfg *RustDeskConfig) ConfigRollBack() error {
 
 	// Configuration file location
 	configPath := "/System/Volumes/Data/private/var/root/Library/Preferences/com.carriez.RustDesk"
@@ -205,7 +205,7 @@ func ConfigRollBack(username string, isFlatpak bool) error {
 	}
 
 	// Restart RustDeskService
-	if err := RestartRustDeskService(username); err != nil {
+	if err := RestartRustDeskService(cfg.User.Username); err != nil {
 		log.Printf("[ERROR]: could not start RustDesk service, reason: %v", err)
 		return err
 	}
@@ -214,11 +214,11 @@ func ConfigRollBack(username string, isFlatpak bool) error {
 }
 
 func RestartRustDeskService(username string) error {
-	if err := StopSystemRustDeskService(username); err != nil {
+	if err := StopSystemRustDeskService(); err != nil {
 		return err
 	}
 
-	if err := StartSystemRustDeskService(username); err != nil {
+	if err := StartSystemRustDeskService(); err != nil {
 		return err
 	}
 
@@ -233,13 +233,13 @@ func RestartRustDeskService(username string) error {
 	return nil
 }
 
-func StopSystemRustDeskService(username string) error {
+func StopSystemRustDeskService() error {
 	command := "launchctl unload /Library/LaunchDaemons/com.carriez.RustDesk_service.plist"
 	cmd := exec.Command("bash", "-c", command)
 	return cmd.Run()
 }
 
-func StartSystemRustDeskService(username string) error {
+func StartSystemRustDeskService() error {
 	command := "launchctl load /Library/LaunchDaemons/com.carriez.RustDesk_service.plist"
 	cmd := exec.Command("bash", "-c", command)
 	return cmd.Run()
