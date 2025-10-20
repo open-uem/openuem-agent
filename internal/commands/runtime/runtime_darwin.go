@@ -5,6 +5,7 @@ package runtime
 import (
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"os/user"
 	"strconv"
@@ -116,20 +117,37 @@ func GetXAuthority(uid, gid uint32) (string, error) {
 	return xauthority, nil
 }
 
-// Get DISPLAY environment variable
-func GetDisplay(uid, gid uint32) (string, error) {
+func RunAsUserInBackground(username, cmdPath string, args []string, env bool) error {
+	cmd := exec.Command(cmdPath, args...)
 
-	// Ref: https://unix.stackexchange.com/questions/429092/what-is-the-best-way-to-find-the-current-display-and-xauthority-in-non-interacti
-	envCmd := exec.Command("bash", "-c", `ps -u $(id -u) -o pid= | xargs -I{} cat /proc/{}/environ 2>/dev/null | tr '\0' '\n' | grep -m1 '^DISPLAY='`)
-	envCmd.SysProcAttr = &syscall.SysProcAttr{
-		Credential: &syscall.Credential{Uid: uid, Gid: gid},
-	}
-	envOut, err := envCmd.Output()
+	u, err := user.Lookup(username)
 	if err != nil {
-		log.Println("[ERROR]: could not execute bash script to get Display")
-		return "", err
+		return err
 	}
-	xauthority := string(envOut)
 
-	return xauthority, nil
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return err
+	}
+
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return err
+	}
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)},
+	}
+
+	// Run command adding env variables
+	if env {
+		cmd.Env = append(os.Environ(), "USER="+u.Username, "HOME="+u.HomeDir)
+	}
+
+	if err := cmd.Start(); err != nil {
+		log.Printf("[ERROR]: run as user %s found an err: %v", username, err)
+		return err
+	}
+
+	return nil
 }

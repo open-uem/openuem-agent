@@ -66,7 +66,8 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 	if rdConfig.CustomRendezVousServer == "" &&
 		rdConfig.RelayServer == "" &&
 		rdConfig.Key == "" &&
-		rdConfig.APIServer == "" {
+		rdConfig.APIServer == "" &&
+		!rdConfig.DirectIPAccess {
 		log.Println("[INFO]: no RustDesk server settings have been found for tenant, using RustDesk's default settings")
 	}
 
@@ -209,7 +210,7 @@ func getRustDeskUserInfo() (*RustDeskUser, error) {
 	return &rdUser, nil
 }
 
-func KillRustDeskProcess() error {
+func KillRustDeskProcess(username string) error {
 	processes, err := process.Processes()
 	if err != nil {
 		return err
@@ -236,7 +237,7 @@ func KillRustDeskProcess() error {
 	return nil
 }
 
-func ConfigRollBack(isFlatpak bool) error {
+func ConfigRollBack(username string, isFlatpak bool) error {
 
 	rdUser, err := getRustDeskUserInfo()
 	if err != nil {

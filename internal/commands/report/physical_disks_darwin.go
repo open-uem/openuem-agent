@@ -29,7 +29,9 @@ func (r *Report) getPhysicalDisksInfo(debug bool) error {
 	var devices SPSerialATADataTypes
 	r.PhysicalDisks = []openuem_nats.PhysicalDisk{}
 
-	log.Println("[DEBUG]: physical disk info retrieval started")
+	if debug {
+		log.Println("[DEBUG]: physical disk info retrieval started")
+	}
 
 	out, err := exec.Command("system_profiler", "-json", "SPSerialATADataType").Output()
 	if err != nil {

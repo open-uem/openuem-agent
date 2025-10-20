@@ -25,7 +25,9 @@ func (r *Report) getPhysicalDisksInfo(debug bool) error {
 	var blockDevices BlockDevices
 	r.PhysicalDisks = []openuem_nats.PhysicalDisk{}
 
-	log.Println("[DEBUG]: physical disk info retrieval started")
+	if debug {
+		log.Println("[DEBUG]: physical disk info retrieval started")
+	}
 
 	out, err := exec.Command("lsblk", "--json", "--nodeps", "--bytes", "-o", "name,serial,model,size").Output()
 	if err != nil {

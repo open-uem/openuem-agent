@@ -20,6 +20,10 @@ type physicalDisk struct {
 func (r *Report) getPhysicalDisksFromWMI(debug bool) error {
 	var disksDst []physicalDisk
 
+	if debug {
+		log.Println("[DEBUG]: physical disk info retrieval started")
+	}
+
 	namespace := `root\cimv2`
 	qDiskDrive := "SELECT DeviceID, Model, Size, SerialNumber FROM Win32_DiskDrive"
 
@@ -40,16 +44,17 @@ func (r *Report) getPhysicalDisksFromWMI(debug bool) error {
 			myDisk.SerialNumber = strings.TrimSpace(v.SerialNumber)
 			myDisk.SizeInUnits = convertBytesToUnits(v.Size)
 
-			if debug {
-				log.Println("[DEBUG]: bit locker status info has been requested for: ", myDisk.DeviceID)
-			}
-
 			r.PhysicalDisks = append(r.PhysicalDisks, myDisk)
 			if debug {
 				log.Println("[DEBUG]: physical disk info finished for: ", myDisk.DeviceID)
 			}
 		}
 	}
+
+	if debug {
+		log.Println("[DEBUG]: physical disk info retrieval finished")
+	}
+
 	return nil
 }
 
