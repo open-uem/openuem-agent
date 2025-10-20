@@ -1036,18 +1036,18 @@ func (a *Agent) StartRustDeskSubscribe() error {
 
 func (a *Agent) StopRustDeskSubscribe() error {
 	_, err := a.NATSConnection.QueueSubscribe("agent.rustdesk.stop."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
-		if err := rustdesk.KillRustDeskProcess(); err != nil {
-			rustdesk.RustDeskRespond(msg, "", err.Error())
-			return
-		}
-
 		rd := rustdesk.New()
+
 		if err := rd.GetInstallationInfo(); err != nil {
 			rustdesk.RustDeskRespond(msg, "", err.Error())
 			return
 		}
+		if err := rd.KillRustDeskProcess(); err != nil {
+			rustdesk.RustDeskRespond(msg, "", err.Error())
+			return
+		}
 
-		if err := rustdesk.ConfigRollBack(rd.IsFlatpak); err != nil {
+		if err := rd.ConfigRollBack(); err != nil {
 			rustdesk.RustDeskRespond(msg, "", err.Error())
 			return
 		}

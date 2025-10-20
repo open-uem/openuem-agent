@@ -18,10 +18,10 @@ func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
 	return "", nil
 }
 
-func KillRustDeskProcess() error {
+func (cfg *RustDeskConfig) KillRustDeskProcess() error {
 	return nil
 }
 
-func ConfigRollBack(isFlatpak bool) error {
+func (cfg *RustDeskConfig) ConfigRollBack() error {
 	return nil
 }
