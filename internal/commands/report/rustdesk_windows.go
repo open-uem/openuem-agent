@@ -31,3 +31,7 @@ func (r *Report) hasRustDeskService(debug bool) {
 	}
 	r.HasRustDeskService = false
 }
+
+func (r *Report) isFlatpakRustDesk() bool {
+	return false
+}

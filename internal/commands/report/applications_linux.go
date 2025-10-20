@@ -26,7 +26,7 @@ func (r *Report) getApplicationsInfo(debug bool) error {
 	}
 
 	switch os {
-	case "debian", "ubuntu", "linuxmint":
+	case "debian", "ubuntu", "linuxmint", "neon":
 		command = `dpkg --search '*.desktop' | awk '{print $1}' | cut -f 1 -d ':'  | sort --unique`
 	case "opensuse-leap":
 		command = `zypper --quiet search -i -f --provides "*.desktop" | awk '{print $3}' | sort --unique`
@@ -47,7 +47,7 @@ func (r *Report) getApplicationsInfo(debug bool) error {
 		if p != "" && strings.TrimSpace(p) != "Name" {
 			app := openuem_nats.Application{}
 			switch os {
-			case "debian", "ubuntu", "linuxmint":
+			case "debian", "ubuntu", "linuxmint", "neon":
 				app.Name, app.Version, app.Publisher = getDpkgInfo(p)
 			case "fedora", "opensuse-leap", "almalinux", "redhat", "rocky":
 				app.Name, app.Version, app.Publisher = getRPMInfo(p)
