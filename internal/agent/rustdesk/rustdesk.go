@@ -102,8 +102,12 @@ func (cfg *RustDeskConfig) SetRustDeskPassword(config []byte) error {
 				log.Printf("[ERROR]: could not read RustDesk.toml config file reason: %v", err)
 				return err
 			}
-			if err := os.Rename(configFile, configFile+".bak"); err != nil {
-				return err
+
+			backupPath := configFile + ".bak"
+			if _, err := os.Stat(backupPath); err != nil {
+				if err := os.Rename(configFile, backupPath); err != nil {
+					return err
+				}
 			}
 
 			// Read TOML

@@ -30,7 +30,6 @@ require (
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/zcalusic/sysinfo v1.1.3
 	golang.org/x/crypto v0.43.0
-	golang.org/x/mod v0.29.0
 	golang.org/x/net v0.46.0
 	gopkg.in/ini.v1 v1.67.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -49,10 +48,7 @@ require (
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/google/cabbie v1.0.2 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
-	github.com/google/glazier v0.0.0-20211029225403-9f766cca891d // indirect
-	github.com/iamacarpet/go-win64api v0.0.0-20240507095429-873e84e85847 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/kr/fs v0.1.0 // indirect
@@ -69,7 +65,6 @@ require (
 	github.com/shoenig/go-m1cpu v0.1.7 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
-	github.com/scjalliance/comshim v0.0.0-20190308082608-cf06d2532c4e // indirect
 	github.com/tklauser/go-sysconf v0.3.15 // indirect
 	github.com/tklauser/numcpus v0.10.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect

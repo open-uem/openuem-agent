@@ -79,10 +79,14 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		return err
 	}
 
-	// Check if configuration file exists, if exists create a backup
+	// Check if configuration file exists, if exists create a backup unless a previous backup exists to prevent
+	// that the admin forgot to revert it (closed the tab)
 	if _, err := os.Stat(configFile); err == nil {
-		if err := CopyFile(configFile, configFile+".bak"); err != nil {
-			return err
+		backupPath := configFile + ".bak"
+		if _, err := os.Stat(backupPath); err != nil {
+			if err := CopyFile(configFile, backupPath); err != nil {
+				return err
+			}
 		}
 	}
 
