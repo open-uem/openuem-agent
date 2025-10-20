@@ -27,7 +27,7 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 		return err
 	}
 
-	log.Printf("[INFO]: received a request to install package %s", packageID)
+	log.Printf("[INFO]: received a request to install package %s using winget", packageID)
 
 	if version != "" {
 		cmd = exec.Command(wgPath, "install", packageID, "--version", version, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
@@ -112,6 +112,8 @@ func UpdatePackage(packageID string) error {
 }
 
 func UninstallPackage(packageID string) error {
+	log.Printf("[INFO]: received a request to remove package %s using brew", packageID)
+
 	wgPath, err := locateWinGet()
 	if err != nil {
 		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)

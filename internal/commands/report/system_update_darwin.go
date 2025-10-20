@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/open-uem/nats"
-	openuem_nats "github.com/open-uem/nats"
 )
 
 func (r *Report) getSystemUpdateInfo() error {
@@ -106,10 +105,10 @@ func (r *Report) getUpdatesHistory() error {
 
 	lines := strings.Split(string(out), "\n")
 
-	updates := []openuem_nats.Update{}
+	updates := []nats.Update{}
 	for _, entry := range lines {
 		if entry != "" {
-			update := openuem_nats.Update{}
+			update := nats.Update{}
 			trimmedSpaces := strings.Join(strings.Fields(entry), " ")
 			reg := regexp.MustCompile(`\d{1,2}/\d{1,2}/\d{4}, \d{2}:\d{2}:\d{2}`)
 			matches := reg.FindAllStringSubmatch(trimmedSpaces, -1)

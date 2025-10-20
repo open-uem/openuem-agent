@@ -49,7 +49,7 @@ func UpdatePackage(packageID string) error {
 }
 
 func UninstallPackage(packageID string) error {
-	log.Printf("[INFO]: received a request to remove package %s", packageID)
+	log.Printf("[INFO]: received a request to remove package %s using flatpak", packageID)
 
 	cmd := "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo"
 	if err := exec.Command("bash", "-c", cmd).Run(); err != nil {

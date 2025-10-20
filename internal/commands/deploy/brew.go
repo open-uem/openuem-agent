@@ -18,7 +18,7 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 		isCask = true
 		packageID = strings.TrimPrefix(packageID, "cask-")
 	}
-	log.Printf("[INFO]: received a request to install package %s", packageID)
+	log.Printf("[INFO]: received a request to install package %s using brew", packageID)
 
 	brewPath := getBrewPath()
 
@@ -88,7 +88,7 @@ func UninstallPackage(packageID string) error {
 		isCask = true
 		packageID = strings.TrimPrefix(packageID, "cask-")
 	}
-	log.Printf("[INFO]: received a request to remove package %s", packageID)
+	log.Printf("[INFO]: received a request to remove package %s using brew", packageID)
 
 	brewPath := getBrewPath()
 
