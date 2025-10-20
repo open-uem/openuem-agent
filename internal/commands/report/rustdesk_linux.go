@@ -50,3 +50,11 @@ func (r *Report) hasRustDesk(debug bool) {
 func (r *Report) hasRustDeskService(debug bool) {
 	r.HasRustDeskService = false
 }
+
+func (r *Report) isFlatpakRustDesk() {
+	flatpakOpenUEMPath := "/var/lib/flatpak/exports/bin/com.rustdesk.RustDesk"
+	if _, err := os.Stat(flatpakOpenUEMPath); err == nil {
+		r.IsFlatpakRustDesk = true
+		return
+	}
+}
