@@ -10,7 +10,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -51,7 +50,7 @@ func (rd *RemoteDesktopService) Start(pin string, notifyUser bool) {
 	if rd.RequiresVNCProxy {
 		vncPort = getFirstVNCAvailablePort()
 		if vncPort == "" {
-			log.Println("[ERROR]: could get a free port for VNC")
+			log.Println("[ERROR]: could not get a free port for VNC")
 			return
 		}
 	}
@@ -103,31 +102,49 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 		"X11VNC": {
 			RequiresVNCProxy: true,
 			StartService: func(vncPort string) error {
-				homeDir, _, _, err := getUserInfo(username)
+				homeDir, _, _, err := runtime.GetUserInfo(username)
 				if err != nil {
 					return err
 				}
 				openuemDir := filepath.Join(homeDir, ".openuem")
 				path := filepath.Join(openuemDir, "x11vncpasswd")
 
-				args := []string{"-display", ":0", "-auth", "guess", "-localhost", "-rfbauth", path, "-forever", "-rfbport", vncPort}
-				if err := runtime.RunAsUser(username, "/usr/bin/x11vnc", args, true); err != nil {
-					return err
+				// Feat #109 detect if x11vnc is a wrapper of x0vncserver (OpenSUSE Leap)
+				if _, err := os.Stat("/usr/bin/x0vncserver"); err == nil {
+					args := []string{"-display", ":0", "-localhost", "-rfbauth", path, "-rfbport", vncPort}
+					if err := runtime.RunAsUser(username, "/usr/bin/x0vncserver", args, true); err != nil {
+						return err
+					}
+				} else {
+					args := []string{"-display", ":0", "-auth", "guess", "-localhost", "-rfbauth", path, "-forever", "-rfbport", vncPort}
+					if err := runtime.RunAsUser(username, "/usr/bin/x11vnc", args, true); err != nil {
+						return err
+					}
 				}
+
 				return nil
 			},
 			StopService: func() error {
-				args := []string{"-R", "stop"}
-				if err := runtime.RunAsUser(username, "/usr/bin/x11vnc", args, true); err != nil {
-					return err
+				// Feat #109 detect if x11vnc is a wrapper of x0vncserver (OpenSUSE Leap)
+				if _, err := os.Stat("/usr/bin/x0vncserver"); err == nil {
+					args := []string{"x0vncserver"}
+					if err := runtime.RunAsUser(username, "/usr/bin/killall", args, true); err != nil {
+						return err
+					}
+				} else {
+					args := []string{"-R", "stop"}
+					if err := runtime.RunAsUser(username, "/usr/bin/x11vnc", args, true); err != nil {
+						return err
+					}
 				}
+
 				return nil
 			},
 			Configure: func() error {
 				return nil
 			},
 			SavePIN: func(pin string) error {
-				homeDir, uid, gid, err := getUserInfo(username)
+				homeDir, uid, gid, err := runtime.GetUserInfo(username)
 				if err != nil {
 					return err
 				}
@@ -151,7 +168,7 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 				return nil
 			},
 			RemovePIN: func() error {
-				homeDir, _, _, err := getUserInfo(username)
+				homeDir, _, _, err := runtime.GetUserInfo(username)
 				if err != nil {
 					log.Printf("[ERROR]: could not get user info, reason: %v", err)
 					return err
@@ -185,7 +202,7 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 				return nil
 			},
 			Configure: func() error {
-				homeDir, uid, gid, err := getUserInfo(username)
+				homeDir, uid, gid, err := runtime.GetUserInfo(username)
 				if err != nil {
 					return err
 				}
@@ -230,7 +247,7 @@ func GetSupportedRemoteDesktopService(agentOS, sid, proxyPort string) (*RemoteDe
 				return nil
 			},
 			RemovePIN: func() error {
-				homeDir, _, _, err := getUserInfo(username)
+				homeDir, _, _, err := runtime.GetUserInfo(username)
 				if err != nil {
 					log.Printf("[ERROR]: could not get user info, reason: %v", err)
 					return err
@@ -289,7 +306,7 @@ func IsWaylandDisplayServer() bool {
 		return false
 	}
 
-	_, uid, gid, err := getUserInfo(username)
+	_, uid, gid, err := runtime.GetUserInfo(username)
 	if err != nil {
 		log.Printf("[ERROR]: could not get user info, reason: %v\n", err)
 		return false
@@ -297,14 +314,18 @@ func IsWaylandDisplayServer() bool {
 
 	// Get XAUTHORITY
 	xauthorityEnv, err := runtime.GetXAuthority(uint32(uid), uint32(gid))
-	if err != nil {
-		log.Printf("[ERROR]: could not check if Wayland as I couldn't get XAUTHORITY env, reason: %v\n", err)
-		return false
+	if err == nil {
+		if strings.Contains(xauthorityEnv, "wayland") {
+			return true
+		}
 	}
 
-	xauthority := strings.TrimPrefix(xauthorityEnv, "XAUTHORITY=")
-	if strings.Contains(xauthority, "wayland") {
-		return true
+	// Get WAYLAND_DISPLAY
+	waylandDisplay, err := runtime.GetWaylandDisplay(uint32(uid), uint32(gid))
+	if err == nil {
+		if strings.Contains(waylandDisplay, "wayland") {
+			return true
+		}
 	}
 
 	return false
@@ -412,23 +433,4 @@ func copyFileContents(src, dst string) (err error) {
 	}
 	err = out.Sync()
 	return
-}
-
-func getUserInfo(username string) (homedir string, uid int, gid int, err error) {
-	u, err := user.Lookup(username)
-	if err != nil {
-		return "", -1, -1, err
-	}
-
-	uid, err = strconv.Atoi(u.Uid)
-	if err != nil {
-		return "", -1, -1, err
-	}
-
-	gid, err = strconv.Atoi(u.Gid)
-	if err != nil {
-		return "", -1, -1, err
-	}
-
-	return u.HomeDir, uid, gid, nil
 }

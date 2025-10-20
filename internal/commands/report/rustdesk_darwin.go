@@ -44,3 +44,7 @@ func (r *Report) hasRustDesk(debug bool) {
 		log.Println("[INFO]: RustDesk is not available")
 	}
 }
+
+func (r *Report) isFlatpakRustDesk() bool {
+	return false
+}

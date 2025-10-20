@@ -128,10 +128,8 @@ func (r *Report) getNetworkAdaptersFromLinux() error {
 	return nil
 }
 
-// Reference: https://github.com/net-byte/go-gateway/blob/main/gateway_linux.go
-// License: https://github.com/net-byte/go-gateway/blob/main/LICENSE
 func getDefaultGateway() (string, error) {
-	cmd := "route -n | grep 'UG[ \t]' | awk 'NR==1{print $2}'"
+	cmd := "ip route show default | awk '/default/ {print $3}'"
 	out, err := exec.Command("bash", "-c", cmd).Output()
 	if err != nil {
 		return "", err
