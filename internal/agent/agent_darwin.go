@@ -710,6 +710,12 @@ func (a *Agent) InstallCommunityGeneralCollection() error {
 		return err
 	}
 
+	defer func() {
+		if err := os.Remove(pbFile.Name()); err != nil {
+			log.Printf("[INFO]: could not remove playbook to install the general collection")
+		}
+	}()
+
 	if !a.Config.Debug {
 		defer func() {
 			if err := os.Remove(pbFile.Name()); err != nil {
