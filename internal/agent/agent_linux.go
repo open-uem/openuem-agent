@@ -565,6 +565,14 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte) error {
 		return err
 	}
 
+	defer func() {
+		delete(taskControl.ProfilesRunning, ID)
+		if err := dsc.SaveTaskControl(taskControlPath, taskControl); err != nil {
+			log.Printf("[ERROR]: could not remove profile %s from running, reason: %v", ID, err)
+			return
+		}
+	}()
+
 	pbFile, err := os.CreateTemp(ansibleFolder, "*.yml")
 	if err != nil {
 		log.Printf("[ERROR]: could not create playbook file %v", err)
