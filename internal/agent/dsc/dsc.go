@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -61,6 +62,11 @@ func ReadTaskControlFile(taskControl string) (*TaskControl, error) {
 }
 
 func SetTaskAsSuccessfull(taskID string, taskControlPath string, t *TaskControl) error {
+
+	taskAlreadySuccessful := slices.Contains(t.Success, taskID)
+	if taskAlreadySuccessful {
+		return nil
+	}
 
 	t.Success = append(t.Success, taskID)
 

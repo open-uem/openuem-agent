@@ -1197,8 +1197,7 @@ func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath stri
 		return errors.New("could not find script key in task's settings")
 	}
 
-	taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
-
+	taskAlreadySuccessful := slices.Contains(t.Success, task.ID)
 	if task.RunConfig == "once" {
 		if !taskAlreadySuccessful {
 			scriptsRun := strings.Split(a.Config.ScriptsRun, ",")
