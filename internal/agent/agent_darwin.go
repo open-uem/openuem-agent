@@ -32,6 +32,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	openuem_nats "github.com/open-uem/nats"
+	"github.com/open-uem/openuem-agent/internal/agent/dsc"
 	rd "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	openuem_runtime "github.com/open-uem/openuem-agent/internal/commands/runtime"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
@@ -531,6 +532,39 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte) error {
 	ansibleFolder, err := CreatePlaybooksFolder()
 	if err != nil {
 		log.Printf("[ERROR]: could not create playbooks folder %v", err)
+		return err
+	}
+
+	taskControlPath := filepath.Join(ansibleFolder, "tasks.json")
+	taskControl, err := dsc.ReadTaskControlFile(taskControlPath)
+
+	if err != nil {
+		log.Printf("[ERROR]: tasks control file is not available, reason %v", err)
+		return err
+	}
+
+	ID := strconv.Itoa(profileID)
+	if taskControl.ProfilesRunning == nil {
+		taskControl.ProfilesRunning = map[string]time.Time{
+			ID: time.Now(),
+		}
+	} else {
+		when, ok := taskControl.ProfilesRunning[ID]
+		if !ok {
+			taskControl.ProfilesRunning[ID] = time.Now()
+		} else {
+			// Clear stalled profile for more than 24 hours
+			if time.Now().After(when.Add(24 * time.Hour)) {
+				log.Printf("[INFO]: found previous task %s that hasn't be re-run for more than 24 hours", ID)
+				taskControl.ProfilesRunning[ID] = time.Now()
+			} else {
+				log.Printf("[INFO]: previous profile %s is marked as running, not relaunching, ", ID)
+				return nil
+			}
+		}
+	}
+	if err := dsc.SaveTaskControl(taskControlPath, taskControl); err != nil {
+		log.Printf("[ERROR]: could not save new profile %s running, reason: %v", ID, err)
 		return err
 	}
 
