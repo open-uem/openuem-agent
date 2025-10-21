@@ -336,6 +336,10 @@ func (a *Agent) GetWingetConfigureProfiles() {
 	msg, err := a.NATSConnection.Request("wingetcfg.profiles", data, 5*time.Minute)
 	if err != nil {
 		log.Printf("[ERROR]: could not send request to agent worker, reason: %v", err)
+		if err := a.Config.SetRestartRequiredFlag(); err != nil {
+			log.Printf("[ERROR]: could not set restart required flag, reason: %v\n", err)
+			return
+		}
 	}
 
 	if a.Config.Debug {
