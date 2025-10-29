@@ -416,7 +416,7 @@ func (a *Agent) InstallPackageSubscribe() error {
 			return
 		}
 
-		if err := deploy.InstallPackage(action.PackageId); err != nil {
+		if err := deploy.InstallPackage(action.PackageId, "", false, a.Config.Debug); err != nil {
 			log.Printf("[ERROR]: could not deploy package using package manager, reason: %v\n", err)
 			action.Failed = true
 			if err := a.SendDeployResult(&action); err != nil {
@@ -1037,17 +1037,17 @@ func (a *Agent) StartRustDeskSubscribe() error {
 func (a *Agent) StopRustDeskSubscribe() error {
 	_, err := a.NATSConnection.QueueSubscribe("agent.rustdesk.stop."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
 		rd := rustdesk.New()
+
 		if err := rd.GetInstallationInfo(); err != nil {
 			rustdesk.RustDeskRespond(msg, "", err.Error())
 			return
 		}
-
-		if err := rustdesk.KillRustDeskProcess(rd.User.Username); err != nil {
+		if err := rd.KillRustDeskProcess(); err != nil {
 			rustdesk.RustDeskRespond(msg, "", err.Error())
 			return
 		}
 
-		if err := rustdesk.ConfigRollBack(rd.User.Username, rd.IsFlatpak); err != nil {
+		if err := rd.ConfigRollBack(); err != nil {
 			rustdesk.RustDeskRespond(msg, "", err.Error())
 			return
 		}

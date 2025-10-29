@@ -80,10 +80,14 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		return err
 	}
 
-	// Check if configuration file exists, if exists create a backup
+	// Check if configuration file exists, if exists create a backup unless a previous backup exists to prevent
+	// that the admin forgot to revert it (closed the tab)
 	if _, err := os.Stat(configFile); err == nil {
-		if err := CopyFile(configFile, configFile+".bak"); err != nil {
-			return err
+		backupPath := configFile + ".bak"
+		if _, err := os.Stat(backupPath); err != nil {
+			if err := CopyFile(configFile, backupPath); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -134,7 +138,7 @@ func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
 	return id, nil
 }
 
-func KillRustDeskProcess(username string) error {
+func (cfg *RustDeskConfig) KillRustDeskProcess() error {
 	args := []string{"/F", "/T", "/IM", "rustdesk.exe"}
 	if err := runtime.RunAsUser("taskkill", args); err != nil {
 		if !strings.Contains(err.Error(), "128") && !strings.Contains(err.Error(), "255") {
@@ -145,7 +149,7 @@ func KillRustDeskProcess(username string) error {
 	return nil
 }
 
-func ConfigRollBack(username string, isFlatpak bool) error {
+func (cfg *RustDeskConfig) ConfigRollBack() error {
 	configFile := "C:\\Windows\\ServiceProfiles\\LocalService\\AppData\\Roaming\\RustDesk\\config\\RustDesk2.toml"
 
 	// Check if configuration file exists, if exists create a backup

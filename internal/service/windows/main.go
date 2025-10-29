@@ -4,12 +4,17 @@ package main
 
 import (
 	"log"
+	"runtime"
 
 	"github.com/open-uem/openuem-agent/internal/logger"
 	"golang.org/x/sys/windows/svc"
 )
 
 func main() {
+
+	// the agent will use two CPUs at maximum
+	runtime.GOMAXPROCS(2)
+
 	// Instantiate logger
 	l := logger.New()
 

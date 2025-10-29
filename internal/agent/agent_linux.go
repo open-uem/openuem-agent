@@ -30,6 +30,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	openuem_nats "github.com/open-uem/nats"
+	"github.com/open-uem/openuem-agent/internal/agent/dsc"
 	rd "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
 	ansiblecfg "github.com/open-uem/openuem-ansible-config/ansible"
@@ -466,6 +467,10 @@ func (a *Agent) GetUnixConfigureProfiles() {
 	msg, err := a.NATSConnection.Request("ansiblecfg.profiles", data, 5*time.Minute)
 	if err != nil {
 		log.Printf("[ERROR]: could not send request to agent worker, reason: %v", err)
+		if err := a.Config.SetRestartRequiredFlag(); err != nil {
+			log.Printf("[ERROR]: could not set restart required flag, reason: %v\n", err)
+			return
+		}
 	}
 
 	if a.Config.Debug {
@@ -526,6 +531,47 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte) error {
 		log.Printf("[ERROR]: could not create playbooks folder %v", err)
 		return err
 	}
+
+	taskControlPath := filepath.Join(ansibleFolder, "tasks.json")
+	taskControl, err := dsc.ReadTaskControlFile(taskControlPath)
+
+	if err != nil {
+		log.Printf("[ERROR]: tasks control file is not available, reason %v", err)
+		return err
+	}
+
+	ID := strconv.Itoa(profileID)
+	if taskControl.ProfilesRunning == nil {
+		taskControl.ProfilesRunning = map[string]time.Time{
+			ID: time.Now(),
+		}
+	} else {
+		when, ok := taskControl.ProfilesRunning[ID]
+		if !ok {
+			taskControl.ProfilesRunning[ID] = time.Now()
+		} else {
+			// Clear stalled profile for more than 24 hours
+			if time.Now().After(when.Add(24 * time.Hour)) {
+				log.Printf("[INFO]: found previous task %s that hasn't be re-run for more than 24 hours", ID)
+				taskControl.ProfilesRunning[ID] = time.Now()
+			} else {
+				log.Printf("[INFO]: previous profile %s is marked as running, not relaunching, ", ID)
+				return nil
+			}
+		}
+	}
+	if err := dsc.SaveTaskControl(taskControlPath, taskControl); err != nil {
+		log.Printf("[ERROR]: could not save new profile %s running, reason: %v", ID, err)
+		return err
+	}
+
+	defer func() {
+		delete(taskControl.ProfilesRunning, ID)
+		if err := dsc.SaveTaskControl(taskControlPath, taskControl); err != nil {
+			log.Printf("[ERROR]: could not remove profile %s from running, reason: %v", ID, err)
+			return
+		}
+	}()
 
 	pbFile, err := os.CreateTemp(ansibleFolder, "*.yml")
 	if err != nil {
@@ -642,6 +688,12 @@ func installCommunityGeneralCollection() error {
 		log.Printf("[ERROR]: could not close playbook file %v", err)
 		return err
 	}
+
+	defer func() {
+		if err := os.Remove(pbFile.Name()); err != nil {
+			log.Printf("[INFO]: could not remove playbook to install the general collection")
+		}
+	}()
 
 	galaxyInstallCollectionCmd := galaxy.NewAnsibleGalaxyCollectionInstallCmd(
 		galaxy.WithGalaxyCollectionInstallOptions(&galaxy.AnsibleGalaxyCollectionInstallOptions{

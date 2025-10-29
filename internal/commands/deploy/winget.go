@@ -3,6 +3,7 @@
 package deploy
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"log"
@@ -11,10 +12,15 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 	"github.com/open-uem/wingetcfg/wingetcfg"
+	"golang.org/x/sys/windows"
 )
 
-func InstallPackage(packageID string) error {
+func InstallPackage(packageID string, version string, keepUpdated bool, debug bool) error {
+	var cmd *exec.Cmd
+	var out bytes.Buffer
+
 	wgPath, err := locateWinGet()
 	if err != nil {
 		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
@@ -23,17 +29,45 @@ func InstallPackage(packageID string) error {
 
 	log.Printf("[INFO]: received a request to install package %s using winget", packageID)
 
-	cmd := exec.Command(wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	if version != "" {
+		cmd = exec.Command(wgPath, "install", packageID, "--version", version, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	} else {
+		cmd = exec.Command(wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	}
+
+	cmd.Stderr = &out
+
 	err = cmd.Start()
 	if err != nil {
 		log.Printf("[ERROR]: could not start winget.exe command %v", err)
 		return err
 	}
 
-	log.Printf("[INFO]: winget.exe is installing an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
+	if err != nil {
+		log.Println("[ERROR]: could not change process priority")
+	}
+
+	if debug {
+		log.Printf("[DEBUG]: winget.exe is installing an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	}
 	err = cmd.Wait()
 	if err != nil {
-		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", err)
+		errCode := strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(err.Error(), "exit status "))), "0X", "0x")
+		errMessage, ok := wingetcfg.ErrorCodes[errCode]
+		if !ok {
+			errMessage = err.Error() + " " + out.String()
+		}
+
+		// Package is already installed and no applicable update is found
+		if errCode == "0x8A15002B" {
+			log.Printf("[INFO]: %s cannot be updated. %s", packageID, errMessage)
+			if !keepUpdated {
+				return nil
+			}
+		}
+
+		log.Printf("[ERROR]: there was an error running winget.exe: %v", errMessage)
 		return err
 	}
 	log.Printf("[INFO]: winget.exe has installed an application: %s", packageID)
@@ -55,10 +89,21 @@ func UpdatePackage(packageID string) error {
 		return err
 	}
 
+	err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
+	if err != nil {
+		log.Println("[ERROR]: could not change process priority")
+	}
+
 	log.Printf("[INFO]: winget.exe is upgrading an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
 	err = cmd.Wait()
 	if err != nil {
-		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", err)
+		errCode := strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(err.Error(), "exit status "))), "0X", "0x")
+		errMessage, ok := wingetcfg.ErrorCodes[errCode]
+		if !ok {
+			errMessage = err.Error()
+		}
+
+		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", errMessage)
 		return err
 	}
 	log.Println("[INFO]: winget.exe has upgraded an application", wgPath)
@@ -82,10 +127,26 @@ func UninstallPackage(packageID string) error {
 		return err
 	}
 
+	err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
+	if err != nil {
+		log.Println("[ERROR]: could not change process priority")
+	}
+
 	log.Printf("[INFO]: winget.exe is uninstalling the app %s\n", packageID)
 	err = cmd.Wait()
 	if err != nil {
-		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", err)
+		errCode := strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(err.Error(), "exit status "))), "0X", "0x")
+		errMessage, ok := wingetcfg.ErrorCodes[errCode]
+		if !ok {
+			errMessage = err.Error()
+		}
+
+		if errCode == "0x8A150014" {
+			log.Printf("[INFO]: %s cannot be uninstalled. %s", packageID, errMessage)
+			return nil
+		}
+
+		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", errMessage)
 		return err
 	}
 	log.Println("[INFO]: winget.exe has uninstalled an application")
@@ -119,11 +180,11 @@ func locateWinGet() (string, error) {
 	return wgPath, nil
 }
 
-func GetExplicitelyDeletedPackages(deployments []string) []string {
+func GetExplicitelyDeletedPackages(deployments []string, installed string) []string {
 	deleted := []string{}
 
 	for _, d := range deployments {
-		if !IsWinGetPackageInstalled(d) {
+		if !strings.Contains(installed, d) {
 			deleted = append(deleted, d)
 		}
 	}
@@ -131,34 +192,43 @@ func GetExplicitelyDeletedPackages(deployments []string) []string {
 	return deleted
 }
 
-func IsWinGetPackageInstalled(packageID string) bool {
+func GetWinGetInstalledPackagesList() (string, error) {
 	wgPath, err := locateWinGet()
 	if err != nil {
 		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
-		return false
+		return "", err
 	}
 
-	if err := exec.Command(wgPath, "list", "-q", packageID).Run(); err != nil {
-		if !strings.Contains(err.Error(), "0x8a150014") {
-			log.Printf("[ERROR]: an error was found running winget.exe list command %v", err)
-		}
-		return false
+	out, err := exec.Command(wgPath, "list").Output()
+	if err != nil {
+		return "", err
 	}
 
-	return true
+	return string(out), nil
 }
 
-func RemovePackagesFromCfg(cfg *wingetcfg.WinGetCfg, exclusions []string) error {
-	if len(exclusions) == 0 {
-		return nil
+func RemovePackagesFromCfg(cfg *wingetcfg.WinGetCfg, explicitelyDeleted []string, exclusions []string, installed string, debug bool) error {
+	if debug {
+		log.Println("[DEBUG]: Installed packages ", installed)
 	}
 
 	validResources := []*wingetcfg.WinGetResource{}
 	for _, r := range cfg.Properties.Resources {
 		if r.Resource == wingetcfg.WinGetPackageResource {
-			if !slices.Contains(exclusions, r.Settings["id"].(string)) || (slices.Contains(exclusions, r.Settings["id"].(string)) && r.Settings["Ensure"].(string) == "Absent") {
+			isPackageExcluded := slices.Contains(exclusions, r.Settings["id"].(string))
+			isPackageExplicitelyDeleted := slices.Contains(explicitelyDeleted, r.Settings["id"].(string))
+			isAlreadyInstalled := strings.Contains(installed, r.Settings["id"].(string))
+			isInstallAction := r.Settings["Ensure"].(string) == "Present"
+
+			if debug {
+				log.Printf("[DEBUG]: Package %s, Is installed? %t, Excluded? %t, Explicitely Deleted %t,", r.Settings["id"], isAlreadyInstalled, isPackageExcluded, isPackageExplicitelyDeleted)
+			}
+
+			if !isPackageExcluded && !isPackageExplicitelyDeleted &&
+				((isInstallAction && !isAlreadyInstalled) || (!isInstallAction && isAlreadyInstalled)) {
 				validResources = append(validResources, r)
 			}
+
 		} else {
 			validResources = append(validResources, r)
 		}

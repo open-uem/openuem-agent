@@ -102,108 +102,56 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 		log.Println("[DEBUG]: launching goroutines")
 	}
 
-	// These operations will be run using goroutines
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := report.getComputerInfo(debug); err != nil {
-			// Retry
-			report.getComputerInfo(debug)
-		}
-	}()
+	if err := report.getComputerInfo(debug); err != nil {
+		log.Println("[ERROR]: error retrieving computer info")
+	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := report.getOperatingSystemInfo(debug); err != nil {
-			// Retry
-			report.getOperatingSystemInfo(debug)
-		}
-	}()
+	if err := report.getOperatingSystemInfo(debug); err != nil {
+		log.Println("[ERROR]: error retrieving operating system info")
+	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := report.getOSInfo(debug); err != nil {
-			// Retry
-			report.getOSInfo(debug)
-		}
-	}()
+	if err := report.getOSInfo(debug); err != nil {
+		log.Println("[ERROR]: error retrieving additional operating system info")
+	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := report.getMonitorsInfo(debug); err != nil {
-			// Retry
-			report.getMonitorsInfo(debug)
-		}
-	}()
+	if err := report.getMonitorsInfo(debug); err != nil {
+		log.Println("[ERROR]: error retrieving monitors info")
+	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := report.getMemorySlotsInfo(debug); err != nil {
-			// Retry
-			report.getMemorySlotsInfo(debug)
-		}
-	}()
+	if err := report.getMemorySlotsInfo(debug); err != nil {
+		log.Println("[ERROR]: error retrieving memory slots info")
+	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := report.getPrintersInfo(debug); err != nil {
-			// Retry
-			report.getPrintersInfo(debug)
-		}
-	}()
+	if err := report.getPrintersInfo(debug); err != nil {
+		log.Println("[ERROR]: error retrieving printers info")
+	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := report.getSharesInfo(debug); err != nil {
-			// Retry
-			report.getSharesInfo(debug)
-		}
-	}()
+	if err := report.getSharesInfo(debug); err != nil {
+		log.Println("[ERROR]: error retrieving shares info")
+	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := report.getAntivirusInfo(debug); err != nil {
-			// Retry
-			report.getAntivirusInfo(debug)
-		}
-	}()
+	if err := report.getAntivirusInfo(debug); err != nil {
+		log.Println("[ERROR]: error retrieving antivirus info")
+	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := report.getNetworkAdaptersInfo(debug); err != nil {
-			// Retry
-			report.getNetworkAdaptersInfo(debug)
-		}
-		// Get network adapter with default gateway and set its ip address and MAC as the report IP/MAC address
-		for _, n := range report.NetworkAdapters {
-			if n.DefaultGateway != "" {
-				if n.Addresses == "" {
-					report.IP = ipAddress
-				} else {
-					report.IP = n.Addresses
-				}
-				report.MACAddress = n.MACAddress
-				break
+	if err := report.getNetworkAdaptersInfo(debug); err != nil {
+		log.Println("[ERROR]: error retrieving network adapters info")
+	}
+	for _, n := range report.NetworkAdapters {
+		if n.DefaultGateway != "" {
+			if n.Addresses == "" {
+				report.IP = ipAddress
+			} else {
+				report.IP = n.Addresses
 			}
+			report.MACAddress = n.MACAddress
+			break
 		}
-	}()
+	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := report.getApplicationsInfo(debug); err != nil {
-			// Retry
-			report.getApplicationsInfo(debug)
-		}
-	}()
+	if err := report.getApplicationsInfo(debug); err != nil {
+		log.Println("[ERROR]: error retrieving applications info")
+	}
 
 	wg.Add(1)
 	go func() {
@@ -238,7 +186,7 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 		}
 	}()
 
-	wg.Wait()
+	// wg.Wait()
 
 	// These tasks can affect previous tasks
 	if err := report.getSystemUpdateInfo(debug); err != nil {

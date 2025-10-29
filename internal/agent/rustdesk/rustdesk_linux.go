@@ -109,10 +109,14 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		return err
 	}
 
-	// Check if configuration file exists, if exists create a backup
+	// Check if configuration file exists, if exists create a backup unless a previous backup exists to prevent
+	// that the admin forgot to revert it (closed the tab)
 	if _, err := os.Stat(configFile); err == nil {
-		if err := CopyFile(configFile, configFile+".bak"); err != nil {
-			return err
+		backupPath := configFile + ".bak"
+		if _, err := os.Stat(backupPath); err != nil {
+			if err := CopyFile(configFile, backupPath); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -210,7 +214,7 @@ func getRustDeskUserInfo() (*RustDeskUser, error) {
 	return &rdUser, nil
 }
 
-func KillRustDeskProcess(username string) error {
+func (cfg *RustDeskConfig) KillRustDeskProcess() error {
 	processes, err := process.Processes()
 	if err != nil {
 		return err
@@ -227,17 +231,19 @@ func KillRustDeskProcess(username string) error {
 		}
 	}
 
-	// Restart the RustDesk service
-	command := "/usr/bin/systemctl restart rustdesk"
-	cmd := exec.Command("bash", "-c", command)
-	if err := cmd.Run(); err != nil {
-		return err
+	if !cfg.IsFlatpak {
+		// Restart the RustDesk service
+		command := "/usr/bin/systemctl restart rustdesk"
+		cmd := exec.Command("bash", "-c", command)
+		if err := cmd.Run(); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func ConfigRollBack(username string, isFlatpak bool) error {
+func (cfg *RustDeskConfig) ConfigRollBack() error {
 
 	rdUser, err := getRustDeskUserInfo()
 	if err != nil {
@@ -246,7 +252,7 @@ func ConfigRollBack(username string, isFlatpak bool) error {
 
 	configFile := ""
 
-	if isFlatpak {
+	if cfg.IsFlatpak {
 		configPath := filepath.Join(rdUser.Home, ".var", "app", "com.rustdesk.RustDesk", "config", "rustdesk")
 		configFile = filepath.Join(configPath, "RustDesk2.toml")
 	} else {
@@ -262,7 +268,7 @@ func ConfigRollBack(username string, isFlatpak bool) error {
 	}
 
 	// Restart the RustDesk service to apply the new configuration if not flatpak
-	if !isFlatpak {
+	if !cfg.IsFlatpak {
 		command := "/usr/bin/systemctl restart rustdesk"
 		cmd := exec.Command("bash", "-c", command)
 		if err := cmd.Run(); err != nil {
