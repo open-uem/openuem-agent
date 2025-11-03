@@ -54,7 +54,6 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 	configPath := ""
 
 	configPath = "C:\\Windows\\ServiceProfiles\\LocalService\\AppData\\Roaming\\RustDesk\\config"
-	configFile = filepath.Join(configPath, "RustDesk2.toml")
 
 	// Create TOML file
 	cfgTOML := RustDeskOptions{
@@ -80,8 +79,21 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 		return err
 	}
 
-	// Check if configuration file exists, if exists create a backup unless a previous backup exists to prevent
+	// Check if RustDesk.toml file exists, if exists create a backup unless a previous backup exists to prevent
 	// that the admin forgot to revert it (closed the tab)
+	configFile = filepath.Join(configPath, "RustDesk.toml")
+	if _, err := os.Stat(configFile); err == nil {
+		backupPath := configFile + ".bak"
+		if _, err := os.Stat(backupPath); err != nil {
+			if err := CopyFile(configFile, backupPath); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Check if RustDesk2.toml file exists, if exists create a backup unless a previous backup exists to prevent
+	// that the admin forgot to revert it (closed the tab)
+	configFile = filepath.Join(configPath, "RustDesk2.toml")
 	if _, err := os.Stat(configFile); err == nil {
 		backupPath := configFile + ".bak"
 		if _, err := os.Stat(backupPath); err != nil {
@@ -150,11 +162,20 @@ func (cfg *RustDeskConfig) KillRustDeskProcess() error {
 }
 
 func (cfg *RustDeskConfig) ConfigRollBack() error {
-	configFile := "C:\\Windows\\ServiceProfiles\\LocalService\\AppData\\Roaming\\RustDesk\\config\\RustDesk2.toml"
+	configFile := "C:\\Windows\\ServiceProfiles\\LocalService\\AppData\\Roaming\\RustDesk\\config\\RustDesk.toml"
 
-	// Check if configuration file exists, if exists create a backup
+	// Check if configuration file backup exists, if exists revert the backup
 	if _, err := os.Stat(configFile + ".bak"); err == nil {
 		if err := os.Rename(configFile+".bak", configFile); err != nil {
+			return err
+		}
+	}
+
+	configFile2 := "C:\\Windows\\ServiceProfiles\\LocalService\\AppData\\Roaming\\RustDesk\\config\\RustDesk2.toml"
+
+	// Check if configuration file backup exists, if exists revert the backup
+	if _, err := os.Stat(configFile2 + ".bak"); err == nil {
+		if err := os.Rename(configFile2+".bak", configFile2); err != nil {
 			return err
 		}
 	}
