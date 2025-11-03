@@ -188,6 +188,10 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 
 	// wg.Wait()
 
+	if err := report.getWANAddress(); err != nil {
+		log.Printf("[ERROR]: could not get WAN address: %v", err)
+	}
+
 	// These tasks can affect previous tasks
 	if err := report.getSystemUpdateInfo(debug); err != nil {
 		// Retry
