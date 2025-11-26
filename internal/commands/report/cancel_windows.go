@@ -9,7 +9,7 @@ import (
 	"github.com/yusufpapurcu/wmi"
 )
 
-func WMIQueryWithContext(ctx context.Context, query string, dst interface{}, namespace string) error {
+func WMIQueryWithContext(ctx context.Context, query string, dst any, namespace string) error {
 	if _, ok := ctx.Deadline(); !ok {
 		ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
