@@ -110,7 +110,6 @@ func (r *Report) getNetworkAdaptersFromLinux() error {
 
 		myNetworkAdapter.Addresses = strings.Join(strAddresses, ",")
 		myNetworkAdapter.Subnet = strings.Join(subnets, ",")
-		myNetworkAdapter.DefaultGateway, err = getDefaultGateway()
 		myNetworkAdapter.DNSServers = getDNSservers()
 		myNetworkAdapter.DNSDomain = getDNSDomain()
 
@@ -118,6 +117,7 @@ func (r *Report) getNetworkAdaptersFromLinux() error {
 			myNetworkAdapter.DHCPEnabled = isDHCPEnabled(strAddresses[0])
 		}
 
+		myNetworkAdapter.DefaultGateway, err = getDefaultGateway()
 		if err != nil {
 			log.Printf("[ERROR]: could not get default gateway, %v\n", err)
 		}
