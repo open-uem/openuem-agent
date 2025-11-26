@@ -72,6 +72,10 @@ func (r *Report) getOperatingSystemInfo(debug bool) error {
 		LastBootUpTime time.Time
 	}
 
+	var csInfo []struct {
+		Domain string
+	}
+
 	if debug {
 		log.Println("[DEBUG]: operating system info has been requested")
 	}
@@ -107,6 +111,18 @@ func (r *Report) getOperatingSystemInfo(debug bool) error {
 	r.OperatingSystem.Description = v.Caption
 	r.OperatingSystem.InstallDate = v.InstallDate.Local()
 	r.OperatingSystem.LastBootUpTime = v.LastBootUpTime.Local()
+
+	// Get domain
+	qComputerSystem := "SELECT Domain FROM Win32_ComputerSystem"
+	if err = WMIQueryWithContext(ctx, qComputerSystem, &csInfo, namespace); err != nil {
+		return err
+	}
+	if len(csInfo) != 1 {
+		return fmt.Errorf("got wrong computer system result set")
+	}
+
+	cs := &csInfo[0]
+	r.OperatingSystem.Domain = cs.Domain
 
 	return nil
 }
