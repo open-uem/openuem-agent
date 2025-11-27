@@ -59,16 +59,16 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 
 	// Create TOML file
 	cfgTOML := RustDeskOptions{
-		Optional: RustDeskOptionsEntries{},
+		Optional: RustDeskOptionsEntries{
+			CustomRendezVousServer: rdConfig.CustomRendezVousServer,
+			RelayServer:            rdConfig.RelayServer,
+			Key:                    rdConfig.Key,
+			ApiServer:              rdConfig.APIServer,
+		},
 	}
 
 	if rdConfig.DirectIPAccess {
 		cfgTOML.Optional.UseDirectIPAccess = "Y"
-	} else {
-		cfgTOML.Optional.CustomRendezVousServer = rdConfig.CustomRendezVousServer
-		cfgTOML.Optional.RelayServer = rdConfig.RelayServer
-		cfgTOML.Optional.Key = rdConfig.Key
-		cfgTOML.Optional.ApiServer = rdConfig.APIServer
 	}
 
 	if rdConfig.Whitelist != "" {
