@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	openuem_nats "github.com/open-uem/nats"
 )
@@ -47,85 +48,70 @@ func (r *Report) getApplicationsInfo(debug bool) error {
 	}
 	desktopFiles = slices.Compact(desktopFiles)
 
-	// TODO LINUX app.InstallDate
+	appNames := []string{}
+
+	// app.InstallDate not available for snap and .deb packages
 	for _, p := range desktopFiles {
 		if p != "" && strings.TrimSpace(p) != "Name" {
 			app := openuem_nats.Application{}
-			switch os {
-			case "debian", "ubuntu", "linuxmint", "neon":
-				myApp, err := getDpkgInfo(p)
+
+			if strings.Contains(p, "flatpak/exports") {
+				myApp, err := getFlatpakInfo(p)
 				if err != nil {
 					continue
 				}
 				app = *myApp
-				if app.Name != "" {
+				if app.Name != "" && !slices.Contains(appNames, app.Name) {
 					r.Applications = append(r.Applications, app)
-				}
-
-			case "fedora", "opensuse-leap", "almalinux", "redhat", "rocky":
-				app.Name, app.Version, app.Publisher = getRPMInfo(p)
-				if app.Name != "" {
-					r.Applications = append(r.Applications, app)
-				}
-			case "manjaro", "arch":
-				app.Name, app.Version, app.Publisher = getPackmanInfo(p)
-				if app.Name != "" {
-					r.Applications = append(r.Applications, app)
+					appNames = append(appNames, app.Name)
 				}
 			}
 
+			if strings.Contains(p, "snapd/desktop") {
+				myApp, err := getSnapInfo(p)
+				if err != nil {
+					continue
+				}
+				app = *myApp
+				if app.Name != "" && !slices.Contains(appNames, app.Name) {
+					r.Applications = append(r.Applications, app)
+					appNames = append(appNames, app.Name)
+				}
+			}
+			switch os {
+			case "debian", "ubuntu", "linuxmint", "neon":
+				if !strings.Contains(p, "flatpak/exports") && !strings.Contains(p, "snapd/desktop") {
+					myApp, err := getDpkgInfo(p)
+					if err != nil {
+						continue
+					}
+					app = *myApp
+					if app.Name != "" && !slices.Contains(appNames, app.Name) {
+						r.Applications = append(r.Applications, app)
+						appNames = append(appNames, app.Name)
+					}
+				}
+
+			case "fedora", "opensuse-leap", "almalinux", "redhat", "rocky":
+				if !strings.Contains(p, "flatpak/exports") && !strings.Contains(p, "snapd/desktop") {
+					myApp, err := getRPMInfo(p)
+					if err != nil {
+						continue
+					}
+					app = *myApp
+					if app.Name != "" && !slices.Contains(appNames, app.Name) {
+						r.Applications = append(r.Applications, app)
+						appNames = append(appNames, app.Name)
+					}
+				}
+				// case "manjaro", "arch":
+				// 	app.Name, app.Version, app.Publisher = getPackmanInfo(p)
+				// 	if app.Name != "" {
+				// 		r.Applications = append(r.Applications, app)
+				// 	}
+			}
 		}
 	}
-
-	// // Now let's get flatpak apps
-	// flatpakCommand := `flatpak list | grep system | awk -F'\t' '{print $1 "***" $3}'`
-	// out, err = exec.Command("bash", "-c", flatpakCommand).Output()
-	// if err != nil {
-	// 	log.Println("[INFO]: could not get apps installed with flatpak")
-	// } else {
-	// 	for p := range strings.SplitSeq(string(out), "\n") {
-	// 		if p != "" {
-	// 			app := openuem_nats.Application{}
-	// 			data := strings.Split(p, "***")
-	// 			app.Name = strings.TrimSpace(data[0])
-	// 			if len(data) > 1 {
-	// 				app.Version = strings.TrimSpace(data[1])
-	// 			} else {
-	// 				app.Version = "-"
-	// 			}
-	// 			app.Publisher = "Flatpak"
-
-	// 			r.Applications = append(r.Applications, app)
-	// 		}
-	// 	}
-	// }
-
-	// And snap - Duplicates ubuntu installs so we comment this snipper for the future
-	// snapCommand := `snap list | grep -v 'Rev' | awk '{print $1 "---" $2 "---" $5}'`
-	// out, err = exec.Command("bash", "-c", snapCommand).Output()
-	// if err != nil {
-	// 	log.Println("[INFO]: could not get apps installed with snap")
-	// } else {
-	// 	for p := range strings.SplitSeq(string(out), "\n") {
-	// 		if p != "" {
-	// 			app := openuem_nats.Application{}
-	// 			data := strings.Split(p, "---")
-	// 			app.Name = strings.TrimSpace(data[0])
-	// 			if len(data) > 1 {
-	// 				app.Version = strings.TrimSpace(data[1])
-	// 			} else {
-	// 				app.Version = "-"
-	// 			}
-	// 			if len(data) > 2 {
-	// 				app.Publisher = strings.TrimSuffix(strings.TrimSpace(data[2]), "**")
-	// 			} else {
-	// 				app.Publisher = "Snap"
-	// 			}
-
-	// 			r.Applications = append(r.Applications, app)
-	// 		}
-	// 	}
-	// }
 
 	log.Println("[INFO]: desktop apps information has been retrieved from package manager")
 
@@ -148,7 +134,7 @@ func getDpkgInfo(desktopFilePath string) (*openuem_nats.Application, error) {
 		break
 	}
 
-	// Find the package name that provides .deskop file
+	// Find the package name that provides .desktop file
 	command := fmt.Sprintf(`dpkg -S %s 2>/dev/null | awk '{print $1}' | cut -f 1 -d ':'  | sort --unique`, desktopFilePath)
 	out, err := exec.Command("bash", "-c", command).Output()
 	if err != nil {
@@ -159,7 +145,6 @@ func getDpkgInfo(desktopFilePath string) (*openuem_nats.Application, error) {
 	command = fmt.Sprintf(`dpkg -s %s`, string(out))
 	out, err = exec.Command("bash", "-c", command).Output()
 	if err != nil {
-		log.Println(err)
 		return nil, errors.New("could not find deb package")
 	}
 
@@ -198,74 +183,97 @@ func getDpkgInfo(desktopFilePath string) (*openuem_nats.Application, error) {
 	return &app, nil
 }
 
-func getRPMInfo(packageName string) (name string, version string, publisher string) {
-	name = ""
-	version = ""
-	publisher = ""
+func getRPMInfo(desktopFilePath string) (*openuem_nats.Application, error) {
+	app := openuem_nats.Application{}
 
-	out, err := exec.Command("rpm", "-qi", packageName).Output()
+	desktopFile, err := os.ReadFile(desktopFilePath)
 	if err != nil {
-		return name, version, publisher
+		return nil, err
 	}
 
-	reg := regexp.MustCompile(`Name        : \s*(.*?)\s`)
-	matches := reg.FindAllStringSubmatch(string(out), -1)
+	// Get app's name from desktop file for a more precise name as suggested by @carlesgs
+	reg := regexp.MustCompile(`Name=(.*?)\n`)
+	matches := reg.FindAllStringSubmatch(string(desktopFile), -1)
 	for _, v := range matches {
-		name = v[1]
+		app.Name = v[1]
 		break
+	}
+
+	// Find the package name that provides .desktop file
+	command := fmt.Sprintf(`rpm -qf %s 2>/dev/null`, desktopFilePath)
+	out, err := exec.Command("bash", "-c", command).Output()
+	if err != nil {
+		return nil, errors.New("could not find rpm package that creates .desktop file")
+	}
+
+	pkgName := strings.TrimSpace(string(out))
+	command = fmt.Sprintf(`export LC_ALL=C && rpm -qi %s`, pkgName)
+	out, err = exec.Command("bash", "-c", command).Output()
+	if err != nil {
+		return nil, errors.New("could not find rpm package")
 	}
 
 	reg = regexp.MustCompile(`Version     : \s*(.*?)\s`)
 	matches = reg.FindAllStringSubmatch(string(out), -1)
 	for _, v := range matches {
-		version = v[1]
+		app.Version = v[1]
 		break
 	}
 
 	reg = regexp.MustCompile(`Vendor      : \s*(.*?)\s`)
 	matches = reg.FindAllStringSubmatch(string(out), -1)
 	for _, v := range matches {
-		publisher = v[1]
+		app.Publisher = v[1]
 		break
 	}
 
-	return name, version, publisher
-}
-
-func getPackmanInfo(packageName string) (name string, version string, publisher string) {
-	name = ""
-	version = ""
-	publisher = ""
-
-	command := fmt.Sprintf("LANG=en_US.UTF-8 pacman -Si %s", packageName)
-	out, err := exec.Command("bash", "-c", command).Output()
-	if err != nil {
-		return name, version, publisher
-	}
-
-	reg := regexp.MustCompile(`Name            : \s*(.*?)\s`)
-	matches := reg.FindAllStringSubmatch(string(out), -1)
-	for _, v := range matches {
-		name = v[1]
-		break
-	}
-
-	reg = regexp.MustCompile(`Version         : \s*(.*?)\s`)
+	reg = regexp.MustCompile(`Install Date:\s*(.*?)\n`)
 	matches = reg.FindAllStringSubmatch(string(out), -1)
 	for _, v := range matches {
-		version = v[1]
-		break
+		t, err := time.Parse("Mon Jan 2 15:04:05 2006", v[1])
+		if err == nil {
+			app.InstallDate = t.Local().Format(time.DateOnly)
+			break
+		}
 	}
 
-	reg = regexp.MustCompile(`Packager        : \s*(.*?)\s<`)
-	matches = reg.FindAllStringSubmatch(string(out), -1)
-	for _, v := range matches {
-		publisher = v[1]
-		break
-	}
-
-	return name, version, publisher
+	return &app, nil
 }
+
+// func getPackmanInfo(packageName string) (name string, version string, publisher string) {
+// 	name = ""
+// 	version = ""
+// 	publisher = ""
+
+// 	command := fmt.Sprintf("LANG=en_US.UTF-8 pacman -Si %s", packageName)
+// 	out, err := exec.Command("bash", "-c", command).Output()
+// 	if err != nil {
+// 		return name, version, publisher
+// 	}
+
+// 	reg := regexp.MustCompile(`Name            : \s*(.*?)\s`)
+// 	matches := reg.FindAllStringSubmatch(string(out), -1)
+// 	for _, v := range matches {
+// 		name = v[1]
+// 		break
+// 	}
+
+// 	reg = regexp.MustCompile(`Version         : \s*(.*?)\s`)
+// 	matches = reg.FindAllStringSubmatch(string(out), -1)
+// 	for _, v := range matches {
+// 		version = v[1]
+// 		break
+// 	}
+
+// 	reg = regexp.MustCompile(`Packager        : \s*(.*?)\s<`)
+// 	matches = reg.FindAllStringSubmatch(string(out), -1)
+// 	for _, v := range matches {
+// 		publisher = v[1]
+// 		break
+// 	}
+
+// 	return name, version, publisher
+// }
 
 func findDesktopFilesInDir(root string) []string {
 	var a []string
@@ -279,6 +287,101 @@ func findDesktopFilesInDir(root string) []string {
 		return nil
 	})
 	return a
+}
+
+func getSnapInfo(desktopFilePath string) (*openuem_nats.Application, error) {
+	app := openuem_nats.Application{}
+
+	desktopFile, err := os.ReadFile(desktopFilePath)
+	if err != nil {
+		return nil, err
+	}
+	// Get app's name from desktop file for a more precise name as suggested by @carlesgs
+	reg := regexp.MustCompile(`\nName=(.*?)\n`)
+	matches := reg.FindAllStringSubmatch(string(desktopFile), -1)
+	for _, v := range matches {
+		app.Name = v[1]
+		break
+	}
+
+	// Find the package name from snap info
+	pkgName := filepath.Base(desktopFilePath)
+	if app.Name == "" {
+		app.Name = pkgName
+	}
+	out, err := exec.Command("snap", "info", pkgName).Output()
+	if err != nil {
+		return nil, errors.New("could not find snap package that creates .desktop file")
+	}
+
+	// Get package name
+	reg = regexp.MustCompile(`name: \s*(.*?)\s`)
+	matches = reg.FindAllStringSubmatch(string(out), -1)
+	for _, v := range matches {
+		pkgName = v[1]
+		break
+	}
+
+	// Find the package name from snap info
+	command := fmt.Sprintf(`snap list %s | awk 'NR>1 {print $2}'`, pkgName)
+	out, err = exec.Command("bash", "-c", command).Output()
+	if err != nil {
+		return nil, errors.New("could not find or parse snap package in snap list")
+	}
+	if string(out) != "" {
+		app.Version = string(out)
+	}
+
+	app.Publisher = "Snap"
+
+	return &app, nil
+}
+
+func getFlatpakInfo(desktopFilePath string) (*openuem_nats.Application, error) {
+	app := openuem_nats.Application{}
+
+	flatpak := strings.TrimSuffix(filepath.Base(desktopFilePath), ".desktop")
+
+	desktopFile, err := os.ReadFile(desktopFilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get app's name from desktop file for a more precise name as suggested by @carlesgs
+	reg := regexp.MustCompile(`Name=(.*?)\n`)
+	matches := reg.FindAllStringSubmatch(string(desktopFile), -1)
+	for _, v := range matches {
+		app.Name = v[1]
+		break
+	}
+
+	// Find the package info
+	command := fmt.Sprintf(`export LC_ALL=C && flatpak info %s`, flatpak)
+	out, err := exec.Command("bash", "-c", command).Output()
+	if err != nil {
+		return nil, errors.New("could not find flatpak package that creates .desktop file")
+	}
+
+	reg = regexp.MustCompile(`Version: \s*(.*?)\s`)
+	matches = reg.FindAllStringSubmatch(string(out), -1)
+	for _, v := range matches {
+		app.Version = v[1]
+		break
+	}
+
+	app.Publisher = "Flatpak"
+
+	reg = regexp.MustCompile(`Date: \s*(.*?)\s`)
+	matches = reg.FindAllStringSubmatch(string(out), -1)
+	for _, v := range matches {
+		t, err := time.Parse("2006-01-02", v[1])
+		if err == nil {
+			app.InstallDate = t.Local().Format(time.DateOnly)
+			break
+		}
+	}
+
+	return &app, nil
 }
 
 func findHomeDirs() []string {
