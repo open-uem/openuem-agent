@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/open-uem/nats"
+	openuem_nats "github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/shirou/gopsutil/v3/process"
@@ -251,6 +252,20 @@ func (cfg *RustDeskConfig) ConfigRollBack() error {
 	}
 
 	configFile := ""
+	if cfg.IsFlatpak {
+		configPath := filepath.Join(rdUser.Home, ".var", "app", "com.rustdesk.RustDesk", "config", "rustdesk")
+		configFile = filepath.Join(configPath, "RustDesk.toml")
+	} else {
+		configPath := filepath.Join("root", ".config", "rustdesk")
+		configFile = filepath.Join(configPath, "RustDesk.toml")
+	}
+
+	// Check if configuration file exists, if exists create a backup
+	if _, err := os.Stat(configFile + ".bak"); err == nil {
+		if err := os.Rename(configFile+".bak", configFile); err != nil {
+			return err
+		}
+	}
 
 	if cfg.IsFlatpak {
 		configPath := filepath.Join(rdUser.Home, ".var", "app", "com.rustdesk.RustDesk", "config", "rustdesk")
@@ -273,6 +288,97 @@ func (cfg *RustDeskConfig) ConfigRollBack() error {
 		cmd := exec.Command("bash", "-c", command)
 		if err := cmd.Run(); err != nil {
 			return err
+		}
+	}
+
+	return nil
+}
+
+func (cfg *RustDeskConfig) SetRustDeskPassword(config []byte) error {
+	// The --password command requires root privileges which is not
+	// possible using Flatpak so we've to do a workaround
+	// adding the the password in clear to RustDesk.toml
+	// this password is encrypted as soon as the RustDesk app is
+
+	// Unmarshal configuration data
+	var rdConfig openuem_nats.RustDesk
+	if err := json.Unmarshal(config, &rdConfig); err != nil {
+		log.Println("[ERROR]: could not unmarshall RustDesk configuration")
+		return err
+	}
+
+	// If no password is set skip
+	if rdConfig.PermanentPassword == "" {
+		return nil
+	}
+
+	if !cfg.IsFlatpak {
+		// Check if RustDesk.toml file exists (where password resides), if exists create a backup unless a previous backup exists to prevent
+		// that the admin forgot to revert it (closed the tab)
+		configPath := filepath.Join("root", ".config", "rustdesk")
+		configFile := filepath.Join(configPath, "RustDesk.toml")
+		if _, err := os.Stat(configFile); err == nil {
+			backupPath := configFile + ".bak"
+			if _, err := os.Stat(backupPath); err != nil {
+				if err := CopyFile(configFile, backupPath); err != nil {
+					return err
+				}
+			}
+		}
+
+		// Set RustDesk password using command
+		cmd := exec.Command(cfg.Binary, "--password", rdConfig.PermanentPassword)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("[ERROR]: could not execute RustDesk command to set password, reason: %v", err)
+			return err
+		}
+
+		if strings.TrimSpace(string(out)) != "Done!" {
+			log.Printf("[ERROR]: could not change RustDesk password, reason: %s", string(out))
+			return err
+		}
+	} else {
+		rootConfigPath := filepath.Join(cfg.User.Home, ".var")
+		configPath := filepath.Join(rootConfigPath, "app", "com.rustdesk.RustDesk", "config", "rustdesk")
+		configFile := filepath.Join(configPath, "RustDesk.toml")
+
+		// Check if configuration file exists, if exists read it and create a backup
+		if _, err := os.Stat(configFile); err == nil {
+			config, err := os.ReadFile(configFile)
+			if err != nil {
+				log.Printf("[ERROR]: could not read RustDesk.toml config file reason: %v", err)
+				return err
+			}
+
+			backupPath := configFile + ".bak"
+			if _, err := os.Stat(backupPath); err != nil {
+				if err := os.Rename(configFile, backupPath); err != nil {
+					return err
+				}
+			}
+
+			// Read TOML
+			cfgTOML := RustDeskPassword{}
+			toml.Unmarshal(config, &cfgTOML)
+
+			cfgTOML.Password = rdConfig.PermanentPassword
+
+			// Write new configuration
+			rdTOML, err := toml.Marshal(cfgTOML)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshall TOML file for RustDesk configuration, reason: %v", err)
+				return err
+			}
+
+			if err := os.WriteFile(configFile, rdTOML, 0600); err != nil {
+				log.Printf("[ERROR]: could not create TOML file for RustDesk configuration, reason: %v", err)
+				return err
+			}
+		} else {
+			//
+			log.Print("[ERROR]: cannot set RustDesk password for flatpak, disable the use of permanent password for this tenant")
+			return errors.New("cannot set RustDesk password for flatpak, disable the use of permanent password for this tenant")
 		}
 	}
 

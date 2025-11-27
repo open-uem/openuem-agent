@@ -372,7 +372,7 @@ func notifyPINToUser(pin string) error {
 
 	// Reference: https://ubuntuforums.org/showthread.php?t=2348109 for font size
 	// "--icon", "/opt/openuem-agent/bin/icon.png" is not supported by Debian
-	args := []string{"--info", "--title", "OpenUEM Remote Assistance", "--text", fmt.Sprintf("<span foreground='blue' size='xx-large'>PIN: %s</span>", pin), "--width", "300", "--timeout", "30"}
+	args := []string{"--info", "--title", "OpenUEM Remote Assistance", "--text", fmt.Sprintf("<span foreground='blue' size='xx-large'>PIN: %s</span>", pin), "--width", "300", "&"}
 	if err := runtime.RunAsUser(username, "zenity", args, true); err != nil {
 		return err
 	}
