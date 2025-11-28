@@ -59,6 +59,12 @@ func (r *Report) getNetworkAdaptersFromLinux() error {
 		log.Printf("[ERROR]: could not get linux interfaces, %v\n", err)
 		return err
 	}
+
+	gateway, gwInterface, err := getDefaultGateway()
+	if err != nil {
+		log.Printf("[ERROR]: could not get default gateway, %v\n", err)
+	}
+
 	for _, i := range ifaces {
 		myNetworkAdapter := openuem_nats.NetworkAdapter{}
 		myNetworkAdapter.Name = i.Name
@@ -122,9 +128,8 @@ func (r *Report) getNetworkAdaptersFromLinux() error {
 			myNetworkAdapter.DHCPEnabled = isDHCPEnabled(strAddresses[0])
 		}
 
-		myNetworkAdapter.DefaultGateway, err = getDefaultGateway()
-		if err != nil {
-			log.Printf("[ERROR]: could not get default gateway, %v\n", err)
+		if gwInterface == i.Name {
+			myNetworkAdapter.DefaultGateway = gateway
 		}
 
 		r.NetworkAdapters = append(r.NetworkAdapters, myNetworkAdapter)
@@ -133,19 +138,26 @@ func (r *Report) getNetworkAdaptersFromLinux() error {
 	return nil
 }
 
-func getDefaultGateway() (string, error) {
-	cmd := "ip route show default | awk '/default/ {print $3}'"
+func getDefaultGateway() (string, string, error) {
+	cmd := "ip route show default | awk '/default/ {print $3, $5}'"
 	out, err := exec.Command("bash", "-c", cmd).Output()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	commandOutput := strings.TrimSpace(string(out))
-	ipv4 := net.ParseIP(commandOutput)
-	if ipv4 == nil {
-		return "", errors.New("could not parse route command response")
+
+	d := strings.Split(commandOutput, " ")
+	if len(d) != 2 {
+		return "", "", errors.New("could not get default gateway and the interface used to reach it")
 	}
-	return commandOutput, nil
+
+	ipv4 := net.ParseIP(d[0])
+	if ipv4 == nil {
+		return "", "", errors.New("could not parse default gateway IP address")
+	}
+
+	return d[0], d[1], nil
 }
 
 func getDNSservers() string {
