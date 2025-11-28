@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/open-uem/nats"
+	openuem_nats "github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/shirou/gopsutil/v3/process"
@@ -195,7 +196,16 @@ func (cfg *RustDeskConfig) ConfigRollBack() error {
 
 	// Configuration file location
 	configPath := "/System/Volumes/Data/private/var/root/Library/Preferences/com.carriez.RustDesk"
-	configFile := filepath.Join(configPath, "RustDesk2.toml")
+	configFile := filepath.Join(configPath, "RustDesk.toml")
+
+	// Check if configuration backup exists, if exists rename the file
+	if _, err := os.Stat(configFile + ".bak"); err == nil {
+		if err := os.Rename(configFile+".bak", configFile); err != nil {
+			return err
+		}
+	}
+
+	configFile = filepath.Join(configPath, "RustDesk2.toml")
 
 	// Check if configuration backup exists, if exists rename the file
 	if _, err := os.Stat(configFile + ".bak"); err == nil {
@@ -273,4 +283,52 @@ func StartRustDeskService(username string) error {
 		return nil
 	}
 	return err
+}
+
+func (cfg *RustDeskConfig) SetRustDeskPassword(config []byte) error {
+	// The --password command requires root privileges which is not
+	// possible using Flatpak so we've to do a workaround
+	// adding the the password in clear to RustDesk.toml
+	// this password is encrypted as soon as the RustDesk app is
+
+	// Unmarshal configuration data
+	var rdConfig openuem_nats.RustDesk
+	if err := json.Unmarshal(config, &rdConfig); err != nil {
+		log.Println("[ERROR]: could not unmarshall RustDesk configuration")
+		return err
+	}
+
+	// If no password is set skip
+	if rdConfig.PermanentPassword == "" {
+		return nil
+	}
+
+	// Check if RustDesk.toml file exists (where password resides), if exists create a backup unless a previous backup exists to prevent
+	// that the admin forgot to revert it (closed the tab)
+	// Configuration file location
+	configPath := "/System/Volumes/Data/private/var/root/Library/Preferences/com.carriez.RustDesk"
+	configFile := filepath.Join(configPath, "RustDesk.toml")
+	if _, err := os.Stat(configFile); err == nil {
+		backupPath := configFile + ".bak"
+		if _, err := os.Stat(backupPath); err != nil {
+			if err := CopyFile(configFile, backupPath); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Set RustDesk password using command
+	cmd := exec.Command(cfg.Binary, "--password", rdConfig.PermanentPassword)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("[ERROR]: could not execute RustDesk command to set password, reason: %v", err)
+		return err
+	}
+
+	if strings.TrimSpace(string(out)) != "Done!" {
+		log.Printf("[ERROR]: could not change RustDesk password, reason: %s", string(out))
+		return err
+	}
+
+	return nil
 }

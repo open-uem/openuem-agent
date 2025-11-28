@@ -153,40 +153,32 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 		log.Println("[ERROR]: error retrieving applications info")
 	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := report.getRemoteDesktopInfo(debug); err != nil {
 			report.getRemoteDesktopInfo(debug)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		report.hasRustDesk(debug)
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := report.getUpdateTaskInfo(debug); err != nil {
 			// Retry
 			report.getUpdateTaskInfo(debug)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := report.getPhysicalDisksInfo(debug); err != nil {
 			log.Printf("[ERROR]: could not get physical disks information: %v", err)
 		} else {
 			log.Printf("[INFO]: physical disks information has been retrieved")
 		}
-	}()
+	})
 
-	// wg.Wait()
+	wg.Wait()
 
 	if err := report.getWANAddress(); err != nil {
 		log.Printf("[ERROR]: could not get WAN address: %v", err)
