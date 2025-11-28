@@ -7,29 +7,29 @@ import (
 	"net/http"
 )
 
-type FreeAPIResponse struct {
-	IPAddress string `json:"ipAddress"`
+type IPConfigAPIResponse struct {
+	IPAddress string `json:"ip"`
 }
 
 func (r *Report) getWANAddress() error {
-	url := "https://free.freeipapi.com/api/json"
+	url := "https://ipconfig.io/json"
 
 	response, err := http.Get(url)
 	if err != nil {
-		log.Printf("[ERROR]: request to freeipapi.com found an error: %v", err)
+		log.Printf("[ERROR]: request to ipconfig.io found an error: %v", err)
 		return err
 	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		log.Printf("[ERROR]: could not read freeipapi.com response, reason: %v", err)
+		log.Printf("[ERROR]: could not read ipconfig.io response, reason: %v", err)
 		return err
 	}
 
-	data := FreeAPIResponse{}
+	data := IPConfigAPIResponse{}
 	if err := json.Unmarshal(body, &data); err != nil {
-		log.Printf("[ERROR]: could not unmarshall freeipapi.com response, reason: %v", err)
+		log.Printf("[ERROR]: could not unmarshall ipconfig.io response, reason: %v", err)
 		return err
 	}
 
