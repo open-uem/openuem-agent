@@ -58,72 +58,57 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 	}
 
 	// These operations will be run using goroutines
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := report.getComputerInfo(debug); err != nil {
 			// Retry
 			report.getComputerInfo(debug)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := report.getMemorySlotsInfo(debug); err != nil {
 			// Retry
 			report.getMemorySlotsInfo(debug)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := report.getOperatingSystemInfo(debug); err != nil {
 			// Retry
 			report.getOperatingSystemInfo(debug)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := report.getMonitorsInfo(debug); err != nil {
 			// Retry
 			report.getMonitorsInfo(debug)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := report.getPrintersInfo(debug); err != nil {
 			// Retry
 			report.getPrintersInfo(debug)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := report.getSharesInfo(); err != nil {
 			// Retry
 			report.getSharesInfo()
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		defer wg.Done()
 		if err := report.getAntivirusInfo(); err != nil {
 			// Retry
 			report.getAntivirusInfo()
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := report.getNetworkAdaptersInfo(debug); err != nil {
 			// Retry
 			report.getNetworkAdaptersInfo(debug)
@@ -140,54 +125,45 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 				break
 			}
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := report.getApplicationsInfo(debug); err != nil {
 			// Retry
 			report.getApplicationsInfo(debug)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		defer wg.Done()
 		if err := report.getRemoteDesktopInfo(debug); err != nil {
 			report.getRemoteDesktopInfo(debug)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		report.hasRustDesk(debug)
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := report.getUpdateTaskInfo(debug); err != nil {
 			// Retry
 			report.getUpdateTaskInfo(debug)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := report.getPhysicalDisksInfo(debug); err != nil {
 			log.Printf("[ERROR]: could not get physical disks information: %v", err)
 		} else {
 			log.Printf("[INFO]: physical disks information has been retrieved")
 		}
-	}()
+	})
 
 	wg.Wait()
 
 	if err := report.getWANAddress(); err != nil {
-		log.Printf("[ERROR]: could not get WAN address: %v", err)
+		log.Printf("[INFO]: could not get WAN address: %v", err)
 	}
 
 	// These tasks can affect previous tasks
