@@ -154,7 +154,12 @@ func checkLastTimePackagesInstalled() time.Time {
 		return time.Time{}
 	}
 
-	t, err := time.Parse("2006-01-02 15:04:05", history)
+	loc, err := time.LoadLocation("Local")
+	if err != nil {
+		return time.Time{}
+	}
+
+	t, err := time.ParseInLocation("2006-01-02 15:04:05", history, loc)
 	if err != nil {
 		log.Printf("[ERROR]: could not parse time string %s from APT history log, reason: %v", string(out), err)
 		return time.Time{}
@@ -179,11 +184,16 @@ func checkDnfLastTimePackagesInstalled() time.Time {
 		return time.Time{}
 	}
 
-	if t, err = time.Parse("2006-01-02 15:04", history); err == nil {
+	loc, err := time.LoadLocation("Local")
+	if err != nil {
+		return time.Time{}
+	}
+
+	if t, err = time.ParseInLocation("2006-01-02 15:04", history, loc); err == nil {
 		return t
 	}
 
-	if t, err = time.Parse("2006-01-02 15:04:05", history); err == nil {
+	if t, err = time.ParseInLocation("2006-01-02 15:04:05", history, loc); err == nil {
 		return t
 	}
 
@@ -200,11 +210,11 @@ func checkDnfLastTimePackagesInstalled() time.Time {
 		return time.Time{}
 	}
 
-	if t, err = time.Parse("2006-01-02 15:04", history); err == nil {
+	if t, err = time.ParseInLocation("2006-01-02 15:04", history, loc); err == nil {
 		return t
 	}
 
-	if t, err = time.Parse("2006-01-02 15:04:05", history); err == nil {
+	if t, err = time.ParseInLocation("2006-01-02 15:04:05", history, loc); err == nil {
 		return t
 	}
 
@@ -214,10 +224,13 @@ func checkDnfLastTimePackagesInstalled() time.Time {
 func checkDnfUpdatesStatus() string {
 	_, err := os.Stat("/etc/dnf/automatic.conf")
 	if err == nil {
-		return nats.NOTIFY_SCHEDULED_INSTALLATION
-	} else {
-		return nats.NOT_CONFIGURED
+		conf, err := os.ReadFile("/etc/dnf/automatic.conf")
+		if err == nil && strings.Contains(string(conf), "apply_updates=True") {
+			return nats.NOTIFY_SCHEDULED_INSTALLATION
+		}
 	}
+
+	return nats.NOT_CONFIGURED
 }
 
 // func checkZypperLastTimePackagesInstalled() time.Time {
