@@ -151,6 +151,7 @@ func checkLastTimePackagesInstalled() time.Time {
 	history := strings.TrimSpace(string(out))
 	if history == "" {
 		log.Println("[INFO]: no info available from /var/log/apt/history.log")
+		return time.Time{}
 	}
 
 	t, err := time.Parse("2006-01-02 15:04:05", history)
@@ -175,6 +176,7 @@ func checkDnfLastTimePackagesInstalled() time.Time {
 	history := strings.TrimSpace(string(out))
 	if history == "" {
 		log.Println("[INFO]: no info available from dnf history list")
+		return time.Time{}
 	}
 
 	if t, err = time.Parse("2006-01-02 15:04", history); err == nil {
@@ -195,6 +197,7 @@ func checkDnfLastTimePackagesInstalled() time.Time {
 	history = strings.TrimSpace(string(out))
 	if history == "" {
 		log.Println("[INFO]: no info available from dnf history list")
+		return time.Time{}
 	}
 
 	if t, err = time.Parse("2006-01-02 15:04", history); err == nil {

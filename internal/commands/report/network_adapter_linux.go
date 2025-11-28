@@ -9,13 +9,13 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
 
 	openuem_nats "github.com/open-uem/nats"
 	"github.com/safchain/ethtool"
-	"github.com/zcalusic/sysinfo"
 )
 
 func (r *Report) getNetworkAdaptersInfo(debug bool) error {
@@ -34,13 +34,17 @@ func (r *Report) getNetworkAdaptersInfo(debug bool) error {
 }
 
 func (r *Report) getNetworkAdaptersFromLinux() error {
-	var si sysinfo.SysInfo
-
 	detectedNICs := []string{}
 
-	si.GetSysInfo()
-	for _, n := range si.Network {
-		detectedNICs = append(detectedNICs, n.Name)
+	physicalAdapters := getPhysicalAdapters()
+	virtualAdapters := getVirtualAdapters()
+
+	if len(physicalAdapters) > 0 {
+		detectedNICs = append(detectedNICs, physicalAdapters...)
+	}
+
+	if len(virtualAdapters) > 0 {
+		detectedNICs = append(detectedNICs, virtualAdapters...)
 	}
 
 	ethHandle, err := ethtool.NewEthtool()
@@ -83,6 +87,7 @@ func (r *Report) getNetworkAdaptersFromLinux() error {
 				speedInBps = speedInBps / 1000
 			}
 			myNetworkAdapter.Speed = fmt.Sprintf("%d %s", speedInBps, speedInUnits)
+			myNetworkAdapter.Virtual = slices.Contains(virtualAdapters, i.Name)
 		}
 
 		iface, err := net.InterfaceByName(i.Name)
@@ -189,4 +194,63 @@ func getDNSDomain() string {
 	}
 
 	return strings.TrimSpace(string(out))
+}
+
+// Based on code from https://github.com/zcalusic/sysinf
+// Copyright © 2016 Zlatko Čalušić
+// Use of this source code is governed by an MIT-style license that can be found in the LICENSE file.
+// Ref: https://github.com/zcalusic/sysinfo/blob/v1.1.3/network.go#L112
+func getPhysicalAdapters() []string {
+	adapters := []string{}
+
+	sysClassNet := "/sys/class/net"
+	devices, err := os.ReadDir(sysClassNet)
+	if err != nil {
+		log.Printf("[ERROR]: could not read /sys/class/net directory, reason: %v", err)
+		return adapters
+	}
+
+	for _, link := range devices {
+		fullpath := path.Join(sysClassNet, link.Name())
+		dev, err := os.Readlink(fullpath)
+		if err != nil {
+			continue
+		}
+
+		if strings.HasPrefix(dev, "../../devices/virtual/") {
+			continue
+		}
+
+		adapters = append(adapters, link.Name())
+	}
+	return adapters
+}
+
+// Based on code from https://github.com/zcalusic/sysinf
+// Copyright © 2016 Zlatko Čalušić
+// Use of this source code is governed by an MIT-style license that can be found in the LICENSE file.
+// Ref: https://github.com/zcalusic/sysinfo/blob/v1.1.3/network.go#L112
+func getVirtualAdapters() []string {
+	adapters := []string{}
+
+	sysClassNet := "/sys/class/net"
+	devices, err := os.ReadDir(sysClassNet)
+	if err != nil {
+		log.Printf("[ERROR]: could not read /sys/class/net directory, reason: %v", err)
+		return adapters
+	}
+
+	for _, link := range devices {
+		fullpath := path.Join(sysClassNet, link.Name())
+		dev, err := os.Readlink(fullpath)
+		if err != nil {
+			log.Printf("[ERROR]: could not read %s link, reason: %v", fullpath, err)
+			continue
+		}
+
+		if strings.HasPrefix(dev, "../../devices/virtual/") {
+			adapters = append(adapters, link.Name())
+		}
+	}
+	return adapters
 }
