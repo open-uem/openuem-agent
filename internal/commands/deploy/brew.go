@@ -34,8 +34,8 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 		return err
 	}
 
-	if err := openuem_runtime.RunAsUser(username, brewPath, args, false); err != nil {
-		log.Printf("[ERROR]: found and error with brew install command, reason %v", err)
+	if out, err := openuem_runtime.RunAsUserWithOutput(username, brewPath, args, false); err != nil {
+		log.Printf("[ERROR]: found and error with brew install command, reason %s", string(out))
 		return err
 	}
 
