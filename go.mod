@@ -20,7 +20,7 @@ require (
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/nats-io/nats.go v1.47.0
-	github.com/open-uem/nats v0.0.0-20251128111945-82960968a3fa
+	github.com/open-uem/nats v0.0.0-20251201154255-676202462aa2
 	github.com/open-uem/openuem-ansible-config v0.0.0-20250710075757-9ef6e3390073
 	github.com/open-uem/utils v0.0.0-20251014101747-824dc3574744
 	github.com/open-uem/wingetcfg v0.0.0-20251011111407-80e823d91ea5
@@ -50,7 +50,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/flatbuffers v25.9.23+incompatible // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
-	github.com/klauspost/compress v1.18.1 // indirect
+	github.com/klauspost/compress v1.18.2 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/lufia/plan9stats v0.0.0-20251013123823-9fd1530e3ec3 // indirect

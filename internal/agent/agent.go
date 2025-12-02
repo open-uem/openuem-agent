@@ -22,6 +22,7 @@ import (
 	openuem_nats "github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/agent/rustdesk"
 	"github.com/open-uem/openuem-agent/internal/commands/deploy"
+	"github.com/open-uem/openuem-agent/internal/commands/netbird"
 	"github.com/open-uem/openuem-agent/internal/commands/printers"
 	remotedesktop "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	"github.com/open-uem/openuem-agent/internal/commands/report"
@@ -798,6 +799,11 @@ func (a *Agent) SubscribeToNATSSubjects() {
 		log.Printf("[ERROR]: %v\n", err)
 	}
 
+	err = a.InstallNetBirdSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
 	log.Println("[INFO]: Subscribed to NATS subjects!")
 }
 
@@ -1057,6 +1063,36 @@ func (a *Agent) StopRustDeskSubscribe() error {
 
 	if err != nil {
 		return fmt.Errorf("[ERROR]: could not subscribe to rustdesk stop subject, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) InstallNetBirdSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.install."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+
+		if err := netbird.Install(); err != nil {
+			netbird.Respond(msg, err.Error())
+			return
+		}
+
+		//NetBird has been installed
+		log.Println("[INFO]: the NetBird agent binary has been installed")
+		netbird.Respond(msg, "")
+
+		// Send a report to update the installed apps and NetBird info
+		r := a.RunReport()
+		if r == nil {
+			return
+		}
+
+		if err := a.SendReport(r); err != nil {
+			log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
+		}
+
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to netbird install subject, reason: %v", err)
 	}
 	return nil
 }

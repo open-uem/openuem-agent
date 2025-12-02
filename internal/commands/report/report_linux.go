@@ -157,9 +157,8 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 	})
 
 	wg.Go(func() {
-		if err := report.getUpdateTaskInfo(debug); err != nil {
-			// Retry
-			report.getUpdateTaskInfo(debug)
+		if err := report.getUpdateTaskInfo(debug); err == nil {
+			log.Printf("[INFO]: update task information has been retrieved")
 		}
 	})
 
@@ -168,6 +167,14 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 			log.Printf("[ERROR]: could not get physical disks information: %v", err)
 		} else {
 			log.Printf("[INFO]: physical disks information has been retrieved")
+		}
+	})
+
+	wg.Go(func() {
+		if err := report.getNetbirdInfo(); err != nil {
+			log.Printf("[ERROR]: could not get Netbird information: %v", err)
+		} else {
+			log.Printf("[INFO]: Netbird information has been retrieved")
 		}
 	})
 
