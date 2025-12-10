@@ -159,9 +159,7 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 	})
 
 	wg.Go(func() {
-		if err := report.getNetbirdInfo(); err != nil {
-			log.Printf("[ERROR]: could not get Netbird information: %v", err)
-		} else {
+		if err := report.getNetbirdInfo(); err == nil {
 			log.Printf("[INFO]: Netbird information has been retrieved")
 		}
 	})

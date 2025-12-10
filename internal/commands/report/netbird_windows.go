@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/open-uem/nats"
 )
 
 func (r *Report) getNetbirdInfo() error {
@@ -21,4 +23,8 @@ func (r *Report) getNetbirdInfo() error {
 	}
 
 	return nil
+}
+
+func RetrieveNetbirdInfo() (*nats.Netbird, error) {
+	return nil, nil
 }
