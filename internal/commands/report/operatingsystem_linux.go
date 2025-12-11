@@ -113,6 +113,16 @@ func (r *Report) getOSInstallationDate() error {
 
 	installationDate := strings.TrimSpace(string(out))
 
+	// try to get /etc/machine-id date
+	if installationDate == "1970-01-01" {
+		cmd := "ls -alct --full-time /etc/machine-id |tail -1|awk '{print $6}'"
+		out, err = exec.Command("bash", "-c", cmd).Output()
+		if err != nil {
+			return err
+		}
+		installationDate = strings.TrimSpace(string(out))
+	}
+
 	t, err := time.Parse("2006-01-02", installationDate)
 	if err != nil {
 		return err
