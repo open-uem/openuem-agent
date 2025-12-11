@@ -3,12 +3,14 @@
 package netbird
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/open-uem/nats"
 	openuem_nats "github.com/open-uem/nats"
@@ -21,6 +23,11 @@ func Install() (*openuem_nats.Netbird, error) {
 
 	c1 := exec.Command("curl", "-fsSL", "https://pkgs.netbird.io/install.sh")
 	c2 := exec.Command("sh")
+	desktop, err := runtime.GetUserEnv("XDG_CURRENT_DESKTOP")
+	if err == nil {
+		c2.Env = os.Environ()
+		c2.Env = append(c2.Env, fmt.Sprintf("XDG_CURRENT_DESKTOP=%s", desktop))
+	}
 	c2.Stdin, err = c1.StdoutPipe()
 	if err != nil {
 		log.Printf("[ERROR]: could not create the pipe for the curl install NetBird command, reason: %v", err)
@@ -76,24 +83,31 @@ func SwitchProfile(data []byte) (*nats.Netbird, error) {
 		return nil, err
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	command := fmt.Sprintf(`netbird profile select %s && netbird up`, request.Profile)
 
 	username, err := runtime.GetLoggedInUser()
 	if err != nil || username == "" {
-		out, err := exec.Command("bash", "-c", command).CombinedOutput()
+		out, err := exec.CommandContext(ctx, "bash", "-c", command).CombinedOutput()
 		if err != nil {
 			log.Printf("[ERROR]: could not switch NetBird profile, reason: %s", string(out))
 			return nil, err
 		}
 	} else {
 		args := []string{"-c", command}
-		out, err := runtime.RunAsUserWithOutput(username, "bash", args, true)
+		out, err := runtime.RunAsUserWithOutputAndTimeout(username, "bash", args, true, 30*time.Second)
 		if err != nil {
 			log.Printf("[ERROR]: could not switch NetBird profile, reason: %s", string(out))
 			return nil, err
 		}
 	}
 
+	return report.RetrieveNetbirdInfo()
+}
+
+func RefreshInfo(data []byte) (*nats.Netbird, error) {
 	return report.RetrieveNetbirdInfo()
 }
 

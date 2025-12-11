@@ -19,6 +19,10 @@ func SwitchProfile(data []byte) (*openuem_nats.Netbird, error) {
 	return nil, nil
 }
 
+func RefreshInfo(data []byte) (*openuem_nats.Netbird, error) {
+	return nil, nil
+}
+
 func getNetbirdBin() string {
 	return "C:\\Program Files\\NetBird"
 }

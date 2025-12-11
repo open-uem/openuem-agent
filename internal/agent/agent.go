@@ -719,6 +719,11 @@ func (a *Agent) SubscribeToNATSSubjects() {
 		log.Printf("[ERROR]: %v\n", err)
 	}
 
+	err = a.RefreshNetBirdSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
 	log.Println("[INFO]: Subscribed to NATS subjects!")
 }
 
@@ -1057,6 +1062,26 @@ func (a *Agent) SwitchProfileNetBirdSubscribe() error {
 
 	if err != nil {
 		return fmt.Errorf("[ERROR]: could not subscribe to netbird switch profile subject, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) RefreshNetBirdSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.refresh."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+
+		data, err := netbird.RefreshInfo(msg.Data)
+		if err != nil {
+			netbird.Respond(msg, &openuem_nats.Netbird{Error: err.Error()})
+			return
+		}
+
+		//NetBird profile has been switched
+		log.Println("[INFO]: the NetBird info has been refreshed")
+		netbird.Respond(msg, data)
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to netbird refresh subject, reason: %v", err)
 	}
 	return nil
 }
