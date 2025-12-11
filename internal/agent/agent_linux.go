@@ -67,7 +67,6 @@ func (a *Agent) Start() {
 	if a.Config.SFTPPort != "" && !a.Config.SFTPDisabled {
 		cwd := "/etc/openuem-agent"
 		badgerPath := filepath.Join(cwd, "badgerdb")
-		log.Println(badgerPath)
 		if err := os.RemoveAll(badgerPath); err != nil {
 			log.Printf("[ERROR]: could not remove badgerdb directory, reason: %v", err.Error())
 			return
