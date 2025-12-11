@@ -76,7 +76,7 @@ func SwitchProfile(data []byte) (*nats.Netbird, error) {
 		return nil, err
 	}
 
-	command := fmt.Sprintf(`netbird profile select %s`, request.Profile)
+	command := fmt.Sprintf(`netbird profile select %s && netbird up`, request.Profile)
 
 	username, err := runtime.GetLoggedInUser()
 	if err != nil || username == "" {
