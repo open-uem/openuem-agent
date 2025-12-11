@@ -24,11 +24,20 @@ func (r *Report) getSystemUpdateInfo() error {
 			log.Println("[INFO]: get pending security updates info has been retrieved")
 		}
 	case "fedora", "almalinux", "redhat", "rocky":
-		if err := r.getDnfInformation(); err != nil {
-			log.Printf("[ERROR]: could not get pending security updates, reason: %v", err)
+		if strings.Contains(r.OperatingSystem.Description, "Silverblue") || strings.Contains(r.OperatingSystem.Description, "Kinoite") {
+			if err := r.getSilverblueInformation(); err != nil {
+				log.Printf("[ERROR]: could not get pending security updates, reason: %v", err)
+			} else {
+				log.Println("[INFO]: get pending security updates info has been retrieved")
+			}
 		} else {
-			log.Println("[INFO]: get pending security updates info has been retrieved")
+			if err := r.getDnfInformation(); err != nil {
+				log.Printf("[ERROR]: could not get pending security updates, reason: %v", err)
+			} else {
+				log.Println("[INFO]: get pending security updates info has been retrieved")
+			}
 		}
+
 	default:
 		r.SystemUpdate.Status = nats.UNKNOWN
 	}
@@ -80,6 +89,27 @@ func (r *Report) getDnfInformation() error {
 
 	// Check last time packages were installed
 	r.SystemUpdate.LastInstall = checkDnfLastTimePackagesInstalled()
+
+	return nil
+}
+
+func (r *Report) getSilverblueInformation() error {
+
+	// Check if we've security updates that can be upgraded
+	r.SystemUpdate.PendingUpdates = checkSilverblueSecurityUpdatesAvailable()
+
+	// Check if gnome software updares is set
+	if IsGnomeDesktop() && IsGnomeSoftwareUpdatesEnabled() {
+		r.SystemUpdate.Status = nats.NOTIFY_SCHEDULED_INSTALLATION
+	}
+
+	// Check if KDE software updates is set
+	if IsKDEDesktop() && IsKDESoftwareUpdatesEnabled() {
+		r.SystemUpdate.Status = nats.NOTIFY_SCHEDULED_INSTALLATION
+	}
+
+	// Check last time packages were installed
+	r.SystemUpdate.LastInstall = checkSilverblueLastTimePackagesInstalled()
 
 	return nil
 }
@@ -233,6 +263,51 @@ func checkDnfUpdatesStatus() string {
 	return nats.NOT_CONFIGURED
 }
 
+func checkSilverblueSecurityUpdatesAvailable() bool {
+	secUpdatesAvailable := `sudo rpm-ostree upgrade --check | grep SecAdvisories | wc -l`
+	out, err := exec.Command("bash", "-c", secUpdatesAvailable).Output()
+	if err != nil {
+		log.Printf("[ERROR]: could not check if updates are available, reason: %v", err)
+		return false
+	}
+
+	nUpdates, err := strconv.Atoi(strings.TrimSpace(string(out)))
+	if err != nil {
+		log.Printf("[ERROR]: could not get the number of updates available, reason: %v", err)
+		return false
+	}
+
+	return nUpdates > 0
+}
+
+func checkSilverblueLastTimePackagesInstalled() time.Time {
+	var t time.Time
+
+	lastInstall := `sudo rpm-ostree status | grep -m1 Version | awk '{print $3}'`
+	out, err := exec.Command("bash", "-c", lastInstall).Output()
+	if err != nil {
+		log.Printf("[ERROR]: could not read DNF history log, reason: %v", err)
+		return time.Time{}
+	}
+
+	history := strings.TrimSpace(string(out))
+	if history == "" {
+		log.Println("[INFO]: no info available from dnf history list")
+		return time.Time{}
+	}
+
+	loc, err := time.LoadLocation("Local")
+	if err != nil {
+		return time.Time{}
+	}
+
+	if t, err = time.ParseInLocation("(2006-01-02T15:04:05Z)", history, loc); err == nil {
+		return t
+	}
+
+	return time.Time{}
+}
+
 // func checkZypperLastTimePackagesInstalled() time.Time {
 // 	lastInstall := `grep "'update'" /var/log/zypp/history | cut -f 1 -d '|'`
 // 	out, err := exec.Command("bash", "-c", lastInstall).Output()
@@ -286,7 +361,8 @@ func IsGnomeSoftwareUpdatesEnabled() bool {
 		}
 		return enabled
 	}
-	return false
+
+	return true
 }
 
 func IsKDESoftwareUpdatesEnabled() bool {
