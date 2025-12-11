@@ -5,11 +5,8 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"math"
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -622,103 +619,6 @@ func (a *Agent) SendDeployResult(r *openuem_nats.DeployAction) error {
 	responseData := string(response.Data)
 	if len(responseData) > 0 {
 		return fmt.Errorf("%s", responseData)
-	}
-
-	return nil
-}
-
-func ReadDeploymentNotACK() ([]openuem_nats.DeployAction, error) {
-	cwd, err := Getwd()
-	if err != nil {
-		return nil, err
-	}
-
-	filename := filepath.Join(cwd, "pending_acks.json")
-	jsonFile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		return nil, err
-	}
-	defer jsonFile.Close()
-
-	byteValue, err := io.ReadAll(jsonFile)
-	if err != nil {
-		return nil, err
-	}
-
-	jActions := JSONActions{}
-	if len(byteValue) > 0 {
-		err = json.Unmarshal(byteValue, &jActions)
-		if err != nil {
-			return nil, err
-		}
-		return jActions.Actions, nil
-	}
-
-	return []openuem_nats.DeployAction{}, nil
-}
-
-func SaveDeploymentsNotACK(actions []openuem_nats.DeployAction) error {
-	cwd, err := Getwd()
-	if err != nil {
-		return err
-	}
-
-	filename := filepath.Join(cwd, "pending_acks.json")
-	jsonFile, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer jsonFile.Close()
-
-	jActions := JSONActions{}
-	jActions.Actions = actions
-
-	byteValue, err := json.MarshalIndent(jActions, "", " ")
-	if err != nil {
-		return err
-	}
-
-	_, err = jsonFile.Write(byteValue)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func SaveDeploymentNotACK(action openuem_nats.DeployAction) error {
-	var actions []openuem_nats.DeployAction
-	cwd, err := Getwd()
-	if err != nil {
-		return err
-	}
-
-	filename := filepath.Join(cwd, "pending_acks.json")
-	jsonFile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		return err
-	}
-	defer jsonFile.Close()
-
-	byteValue, err := io.ReadAll(jsonFile)
-	if err != nil {
-		return err
-	}
-
-	jActions := JSONActions{}
-
-	if len(byteValue) > 0 {
-		err = json.Unmarshal(byteValue, &jActions)
-		if err != nil {
-			return err
-		}
-		actions = jActions.Actions
-	}
-
-	actions = append(actions, action)
-
-	if err := SaveDeploymentsNotACK(actions); err != nil {
-		return err
 	}
 
 	return nil

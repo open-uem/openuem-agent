@@ -65,15 +65,11 @@ func (a *Agent) Start() {
 
 	// Start BadgerDB KV and SFTP server only if port is set
 	if a.Config.SFTPPort != "" && !a.Config.SFTPDisabled {
-		cwd, err := Getwd()
-		if err != nil {
-			log.Println("[ERROR]: could not get working directory")
-			return
-		}
-
+		cwd := "/etc/openuem-agent"
 		badgerPath := filepath.Join(cwd, "badgerdb")
+		log.Println(badgerPath)
 		if err := os.RemoveAll(badgerPath); err != nil {
-			log.Println("[ERROR]: could not remove badgerdb directory")
+			log.Printf("[ERROR]: could not remove badgerdb directory, reason: %v", err.Error())
 			return
 		}
 
@@ -655,12 +651,7 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte) error {
 }
 
 func CreatePlaybooksFolder() (string, error) {
-	cwd, err := Getwd()
-	if err != nil {
-		log.Println("[ERROR]: could not get working directory")
-		return "", errors.New("could not get working directory")
-	}
-
+	cwd := "/etc/openuem-agent"
 	folder := filepath.Join(cwd, "ansible")
 	return folder, os.MkdirAll(folder, 0660)
 }
@@ -708,4 +699,92 @@ func installCommunityGeneralCollection() error {
 	)
 
 	return workflow.NewWorkflowExecute(galaxyInstallCollectionExec).WithTrace().Execute(context.TODO())
+}
+
+func ReadDeploymentNotACK() ([]openuem_nats.DeployAction, error) {
+	cwd := "/etc/openuem-agent"
+
+	filename := filepath.Join(cwd, "pending_acks.json")
+	jsonFile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		return nil, err
+	}
+	defer jsonFile.Close()
+
+	byteValue, err := io.ReadAll(jsonFile)
+	if err != nil {
+		return nil, err
+	}
+
+	jActions := JSONActions{}
+	if len(byteValue) > 0 {
+		err = json.Unmarshal(byteValue, &jActions)
+		if err != nil {
+			return nil, err
+		}
+		return jActions.Actions, nil
+	}
+
+	return []openuem_nats.DeployAction{}, nil
+}
+
+func SaveDeploymentsNotACK(actions []openuem_nats.DeployAction) error {
+	cwd := "/etc/openuem-agent"
+
+	filename := filepath.Join(cwd, "pending_acks.json")
+	jsonFile, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer jsonFile.Close()
+
+	jActions := JSONActions{}
+	jActions.Actions = actions
+
+	byteValue, err := json.MarshalIndent(jActions, "", " ")
+	if err != nil {
+		return err
+	}
+
+	_, err = jsonFile.Write(byteValue)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func SaveDeploymentNotACK(action openuem_nats.DeployAction) error {
+	var actions []openuem_nats.DeployAction
+	cwd := "/etc/openuem-agent"
+
+	filename := filepath.Join(cwd, "pending_acks.json")
+	jsonFile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+	defer jsonFile.Close()
+
+	byteValue, err := io.ReadAll(jsonFile)
+	if err != nil {
+		return err
+	}
+
+	jActions := JSONActions{}
+
+	if len(byteValue) > 0 {
+		err = json.Unmarshal(byteValue, &jActions)
+		if err != nil {
+			return err
+		}
+		actions = jActions.Actions
+	}
+
+	actions = append(actions, action)
+
+	if err := SaveDeploymentsNotACK(actions); err != nil {
+		return err
+	}
+
+	return nil
 }
