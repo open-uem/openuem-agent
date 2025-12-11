@@ -24,7 +24,7 @@ func (r *Report) getSystemUpdateInfo() error {
 			log.Println("[INFO]: get pending security updates info has been retrieved")
 		}
 	case "fedora", "almalinux", "redhat", "rocky":
-		if strings.Contains(r.OperatingSystem.Description, "Silverblue") {
+		if strings.Contains(r.OperatingSystem.Description, "Silverblue") || strings.Contains(r.OperatingSystem.Description, "Kinoite") {
 			if err := r.getSilverblueInformation(); err != nil {
 				log.Printf("[ERROR]: could not get pending security updates, reason: %v", err)
 			} else {
