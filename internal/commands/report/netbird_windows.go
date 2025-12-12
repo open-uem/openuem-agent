@@ -13,25 +13,10 @@ import (
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 )
 
-func (r *Report) getNetbirdInfo() error {
-	netbirdBin := "C:\\Program Files\\NetBird"
-
-	_, err := os.Stat(netbirdBin)
-	if err == nil {
-		r.Netbird.Installed = true
-		out, err := exec.Command(netbirdBin, "version").CombinedOutput()
-		if err == nil {
-			r.Netbird.Version = strings.TrimSpace(string(out))
-		}
-	}
-
-	return nil
-}
-
 func RetrieveNetbirdInfo() (*nats.Netbird, error) {
 	data := nats.Netbird{}
 
-	netbirdBin := "C:\\Program Files\\NetBird"
+	netbirdBin := "C:\\Program Files\\NetBird\\netbird.exe"
 	s := NetBirdOverview{}
 
 	_, err := os.Stat(netbirdBin)
@@ -94,14 +79,24 @@ func RetrieveNetbirdInfo() (*nats.Netbird, error) {
 		}
 
 		// Check applied profiles
-		// args := []string{ netbird profile list | awk 'NR>1 {print $2}'`}
 		args := []string{"profile", "list"}
 		out, err = runtime.RunAsUserWithOutput(netbirdBin, args)
 		if err != nil {
 			log.Printf("[ERROR]: could not get NetBird profiles, reason: %s", string(out))
 			return nil, err
 		}
-		data.Profiles = strings.Split(strings.TrimSpace(string(out)), "\n")
+
+		profiles := []string{}
+		for i, p := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			if i == 0 {
+				continue
+			}
+			items := strings.Split(p, " ")
+			if len(items) > 1 {
+				profiles = append(profiles, items[1])
+			}
+		}
+		data.Profiles = profiles
 	}
 
 	return &data, nil

@@ -105,3 +105,12 @@ type NetBirdOverview struct {
 	ProfileName             string                     `json:"profileName" yaml:"profileName"`
 	SSHServerState          SSHServerStateOutput       `json:"sshServer" yaml:"sshServer"`
 }
+
+func (r *Report) getNetbirdInfo() error {
+	data, err := RetrieveNetbirdInfo()
+	if err == nil {
+		r.Netbird = *data
+	}
+
+	return err
+}

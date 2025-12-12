@@ -45,3 +45,7 @@ func Register(data []byte) (*openuem_nats.Netbird, error) {
 
 	return report.RetrieveNetbirdInfo()
 }
+
+func RefreshInfo(data []byte) (*openuem_nats.Netbird, error) {
+	return report.RetrieveNetbirdInfo()
+}

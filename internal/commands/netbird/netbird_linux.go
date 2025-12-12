@@ -80,7 +80,7 @@ func SwitchProfile(data []byte) (*nats.Netbird, error) {
 		}
 	} else {
 		args := []string{"-c", command}
-		out, err := runtime.RunAsUserWithOutputAndTimeout(username, "bash", args, true, 30*time.Second)
+		out, err := runtime.RunAsUserWithOutputAndTimeout(username, "bash", args, true, 60*time.Second)
 		if err != nil {
 			log.Printf("[ERROR]: could not switch NetBird profile, reason: %s", string(out))
 			return nil, err
@@ -90,7 +90,53 @@ func SwitchProfile(data []byte) (*nats.Netbird, error) {
 	return report.RetrieveNetbirdInfo()
 }
 
-func RefreshInfo(data []byte) (*nats.Netbird, error) {
+func NetbirdUp(data []byte) (*nats.Netbird, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	command := `netbird up`
+
+	username, err := runtime.GetLoggedInUser()
+	if err != nil || username == "" {
+		out, err := exec.CommandContext(ctx, "bash", "-c", command).CombinedOutput()
+		if err != nil {
+			log.Printf("[ERROR]: could not execute netbird up, reason: %s", string(out))
+			return nil, err
+		}
+	} else {
+		args := []string{"-c", command}
+		out, err := runtime.RunAsUserWithOutputAndTimeout(username, "bash", args, true, 60*time.Second)
+		if err != nil {
+			log.Printf("[ERROR]: could not execute netbird up, reason: %s", string(out))
+			return nil, err
+		}
+	}
+
+	return report.RetrieveNetbirdInfo()
+}
+
+func NetbirdDown(data []byte) (*nats.Netbird, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	command := `netbird down`
+
+	username, err := runtime.GetLoggedInUser()
+	if err != nil || username == "" {
+		out, err := exec.CommandContext(ctx, "bash", "-c", command).CombinedOutput()
+		if err != nil {
+			log.Printf("[ERROR]: could not execute netbird down, reason: %s", string(out))
+			return nil, err
+		}
+	} else {
+		args := []string{"-c", command}
+		out, err := runtime.RunAsUserWithOutputAndTimeout(username, "bash", args, true, 60*time.Second)
+		if err != nil {
+			log.Printf("[ERROR]: could not execute netbird down, reason: %s", string(out))
+			return nil, err
+		}
+	}
+
 	return report.RetrieveNetbirdInfo()
 }
 

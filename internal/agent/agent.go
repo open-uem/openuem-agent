@@ -710,6 +710,16 @@ func (a *Agent) SubscribeToNATSSubjects() {
 		log.Printf("[ERROR]: %v\n", err)
 	}
 
+	err = a.NetBirdUpSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
+	err = a.NetBirdDownSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
 	err = a.RefreshNetBirdSubscribe()
 	if err != nil {
 		log.Printf("[ERROR]: %v\n", err)
@@ -1053,6 +1063,44 @@ func (a *Agent) SwitchProfileNetBirdSubscribe() error {
 
 	if err != nil {
 		return fmt.Errorf("[ERROR]: could not subscribe to netbird switch profile subject, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) NetBirdUpSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.up."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+
+		data, err := netbird.NetbirdUp(msg.Data)
+		if err != nil {
+			netbird.Respond(msg, &openuem_nats.Netbird{Error: err.Error()})
+			return
+		}
+
+		log.Println("[INFO]: the NetBird up has been executed")
+		netbird.Respond(msg, data)
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to netbird up subject, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) NetBirdDownSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.down."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+
+		data, err := netbird.NetbirdDown(msg.Data)
+		if err != nil {
+			netbird.Respond(msg, &openuem_nats.Netbird{Error: err.Error()})
+			return
+		}
+
+		log.Println("[INFO]: the NetBird down has been executed")
+		netbird.Respond(msg, data)
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to netbird up subject, reason: %v", err)
 	}
 	return nil
 }

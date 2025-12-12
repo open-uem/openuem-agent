@@ -67,7 +67,11 @@ func SwitchProfile(data []byte) (*openuem_nats.Netbird, error) {
 	return nil, nil
 }
 
-func RefreshInfo(data []byte) (*openuem_nats.Netbird, error) {
+func NetbirdUp(data []byte) (*openuem_nats.Netbird, error) {
+	return nil, nil
+}
+
+func NetbirdDown(data []byte) (*openuem_nats.Netbird, error) {
 	return nil, nil
 }
 

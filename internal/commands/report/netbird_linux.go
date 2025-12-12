@@ -13,15 +13,6 @@ import (
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 )
 
-func (r *Report) getNetbirdInfo() error {
-	data, err := RetrieveNetbirdInfo()
-	if err == nil {
-		r.Netbird = *data
-	}
-
-	return err
-}
-
 func RetrieveNetbirdInfo() (*nats.Netbird, error) {
 	data := nats.Netbird{}
 
