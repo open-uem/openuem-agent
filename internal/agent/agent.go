@@ -17,6 +17,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	openuem_nats "github.com/open-uem/nats"
+	"github.com/open-uem/openuem-agent/internal/agent/dsc"
 	"github.com/open-uem/openuem-agent/internal/agent/rustdesk"
 	"github.com/open-uem/openuem-agent/internal/commands/deploy"
 	"github.com/open-uem/openuem-agent/internal/commands/netbird"
@@ -24,9 +25,7 @@ import (
 	remotedesktop "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	"github.com/open-uem/openuem-agent/internal/commands/report"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
-	ansiblecfg "github.com/open-uem/openuem-ansible-config/ansible"
 	openuem_utils "github.com/open-uem/utils"
-	"github.com/open-uem/wingetcfg/wingetcfg"
 	"gopkg.in/ini.v1"
 )
 
@@ -49,14 +48,6 @@ type Agent struct {
 
 type JSONActions struct {
 	Actions []openuem_nats.DeployAction `json:"actions"`
-}
-
-type ProfileConfig struct {
-	ProfileID     int                          `yaml:"profileID"`
-	Exclusions    []string                     `yaml:"exclusions"`
-	Deployments   []string                     `yaml:"deployments"`
-	WinGetConfig  *wingetcfg.WinGetCfg         `yaml:"config"`
-	AnsibleConfig []ansiblecfg.AnsiblePlaybook `yaml:"ansible"`
 }
 
 func New() Agent {
@@ -896,7 +887,7 @@ func (a *Agent) RemovePrinter() error {
 	return nil
 }
 
-func (a *Agent) SendWinGetCfgProfileApplicationReport(profileID int, agentID string, success bool, errData string) error {
+func (a *Agent) SendProfileApplicationReport(profileID int, agentID string, success bool, errData string) error {
 	// Notify worker if application was succesful or not
 	deployment := openuem_nats.WingetCfgReport{
 		ProfileID: profileID,
@@ -1083,5 +1074,65 @@ func (a *Agent) RefreshNetBirdSubscribe() error {
 	if err != nil {
 		return fmt.Errorf("[ERROR]: could not subscribe to netbird refresh subject, reason: %v", err)
 	}
+	return nil
+}
+
+func (a *Agent) ApplyNetBirdConfiguration(p openuem_nats.ProfileConfig, taskControl *dsc.TaskControl, taskControlPath string) error {
+
+	success := false
+
+	for _, t := range p.NetBirdConfig {
+		switch {
+
+		case t.Install:
+			taskAlreadySuccessful := slices.Contains(taskControl.Success, t.ID)
+			if !taskAlreadySuccessful {
+				_, err := netbird.Install()
+				if err != nil {
+					return err
+				}
+				log.Println("[INFO]: the NetBird agent binary has been installed")
+				if err := dsc.SetTaskAsSuccessfull(t.ID, taskControlPath, taskControl); err != nil {
+					log.Printf("[ERROR]: could not save the task as successfull, reason: %v", err)
+				}
+				success = true
+			}
+		case t.Uninstall:
+			taskAlreadySuccessful := slices.Contains(taskControl.Success, t.ID)
+			if !taskAlreadySuccessful {
+				if err := netbird.Uninstall(); err != nil {
+					return err
+				}
+				log.Println("[INFO]: the NetBird agent binary has been uninstalled")
+				if err := dsc.SetTaskAsSuccessfull(t.ID, taskControlPath, taskControl); err != nil {
+					log.Printf("[ERROR]: could not save the task as successfull, reason: %v", err)
+				}
+				success = true
+			}
+		case t.Register:
+			taskAlreadySuccessful := slices.Contains(taskControl.Success, t.ID)
+			if !taskAlreadySuccessful {
+				data, err := json.Marshal(t.RegisterInfo)
+				if err != nil {
+					return err
+				}
+
+				if _, err := netbird.Register(data); err != nil {
+					return err
+				}
+				log.Println("[INFO]: the NetBird agent has been registered")
+				if err := dsc.SetTaskAsSuccessfull(t.ID, taskControlPath, taskControl); err != nil {
+					log.Printf("[ERROR]: could not save the task as successfull, reason: %v", err)
+				}
+				success = true
+			}
+		}
+	}
+
+	if success {
+		// Send a report to update NetBird info
+		a.RunReport()
+	}
+
 	return nil
 }
