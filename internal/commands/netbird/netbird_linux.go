@@ -100,7 +100,6 @@ func Register(data []byte) (*openuem_nats.Netbird, error) {
 	}
 
 	command := fmt.Sprintf("%s up --setup-key %s --management-url %s", bin, request.OneOffKey, request.ManagementURL)
-
 	username, err := runtime.GetLoggedInUser()
 	if err != nil || username == "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

@@ -186,32 +186,13 @@ func RunAsUserWithMachineCtl(username, myCmd string) error {
 func GetLoggedInUser() (string, error) {
 	username := ""
 
-	cmd := "loginctl list-sessions --no-legend | grep seat0 | awk '{ print $2,$3 }'"
+	cmd := "who | grep -m1 seat0 | awk '{print $1}'"
 	out, err := exec.Command("bash", "-c", cmd).Output()
 	if err != nil {
 		return "", err
 	}
 
-	loginCtlOut := string(out)
-	if loginCtlOut == "" {
-		return "", nil
-	}
-
-	for u := range strings.SplitSeq(loginCtlOut, "\n") {
-		userInfo := strings.Split(u, " ")
-		if len(userInfo) == 2 {
-			uid, err := strconv.Atoi(userInfo[0])
-			if err != nil {
-				log.Printf("[ERROR]: could not get uid from loginctl, %s", u)
-				continue
-			}
-			if uid < 1000 {
-				log.Printf("[INFO]: uid is lower than 1000, %s it's not a regular user", userInfo[1])
-				continue
-			}
-			username = userInfo[1]
-		}
-	}
+	username = strings.TrimSpace(string(out))
 
 	return username, nil
 }
