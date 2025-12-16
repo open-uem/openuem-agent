@@ -50,10 +50,21 @@ func RetrieveNetbirdInfo() (*nats.Netbird, error) {
 
 		if serviceRunning {
 			// Check NetBird status
-			out, err = exec.Command(netbirdBin, "status", "--json").CombinedOutput()
-			if err != nil {
-				log.Printf("[ERROR]: could not execute NetBird service status, reason: %s", string(out))
-				return nil, err
+			username, err := GetLoggedOnUsername()
+			args := []string{"status", "--json"}
+
+			if err != nil || username == "" {
+				out, err = exec.Command(netbirdBin, args...).CombinedOutput()
+				if err != nil {
+					log.Printf("[ERROR]: could not execute NetBird service status, reason: %s", string(out))
+					return nil, err
+				}
+			} else {
+				out, err = runtime.RunAsUserWithOutput(netbirdBin, args)
+				if err != nil {
+					log.Printf("[ERROR]: could not execute NetBird service status, reason: %s", string(out))
+					return nil, err
+				}
 			}
 
 			if err := json.Unmarshal(out, &s); err == nil {
