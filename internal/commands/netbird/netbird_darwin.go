@@ -81,7 +81,7 @@ func SwitchProfile(request openuem_nats.NetbirdSwitchProfile) (*openuem_nats.Net
 			username = "root"
 		}
 		args := []string{"-c", command}
-		out, err := runtime.RunAsUserWithOutputAndTimeout(username, "bash", args, true, 60*time.Second)
+		out, err := runtime.RunAsUserWithOutputAndTimeout(username, "bash", args, true, 2*time.Minute)
 		if err != nil {
 			log.Printf("[ERROR]: could not switch NetBird profile, reason: %s", string(out))
 			return nil, err

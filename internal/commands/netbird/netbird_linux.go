@@ -24,10 +24,10 @@ func Install() (*openuem_nats.Netbird, error) {
 
 	command := "curl -fsSL https://pkgs.netbird.io/install.sh | sh"
 	c1 := exec.Command("bash", "-c", command)
-	desktop, err := runtime.GetUserEnv("XDG_CURRENT_DESKTOP")
-	if err == nil {
+
+	if hasGraphicalDesktop() {
 		c1.Env = os.Environ()
-		c1.Env = append(c1.Env, fmt.Sprintf("XDG_CURRENT_DESKTOP=%s", desktop))
+		c1.Env = append(c1.Env, "XDG_CURRENT_DESKTOP=OpenUEM")
 	}
 
 	out, err := c1.CombinedOutput()
@@ -60,7 +60,7 @@ func Uninstall() error {
 }
 
 func SwitchProfile(request openuem_nats.NetbirdSwitchProfile) (*nats.Netbird, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	command := fmt.Sprintf(`netbird profile select %s && netbird up`, request.Profile)
@@ -74,7 +74,7 @@ func SwitchProfile(request openuem_nats.NetbirdSwitchProfile) (*nats.Netbird, er
 		}
 	} else {
 		args := []string{"-c", command}
-		out, err := runtime.RunAsUserWithOutputAndTimeout(username, "bash", args, true, 60*time.Second)
+		out, err := runtime.RunAsUserWithOutputAndTimeout(username, "bash", args, true, 2*time.Minute)
 		if err != nil {
 			log.Printf("[ERROR]: could not switch NetBird profile, reason: %s", string(out))
 			return nil, err
@@ -181,4 +181,19 @@ func getNetbirdBin() string {
 	}
 
 	return netbirdBin
+}
+
+func hasGraphicalDesktop() bool {
+	hasXOrg := false
+	hasXWayland := false
+
+	if err := exec.Command("bash", "-c", "type Xorg").Run(); err == nil {
+		hasXOrg = true
+	}
+
+	if err := exec.Command("bash", "-c", "type Xwayland").Run(); err == nil {
+		hasXWayland = true
+	}
+
+	return hasXOrg || hasXWayland
 }
