@@ -1050,7 +1050,13 @@ func (a *Agent) UninstallNetBirdSubscribe() error {
 func (a *Agent) SwitchProfileNetBirdSubscribe() error {
 	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.switchprofile."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
 
-		data, err := netbird.SwitchProfile(msg.Data)
+		request := openuem_nats.NetbirdSwitchProfile{}
+		if err := json.Unmarshal(msg.Data, &request); err != nil {
+			log.Printf("[ERROR]: could not unmarshal the NetBird switch profile request, reason: %v", err)
+			return
+		}
+
+		data, err := netbird.SwitchProfile(request)
 		if err != nil {
 			netbird.Respond(msg, &openuem_nats.Netbird{Error: err.Error()})
 			return

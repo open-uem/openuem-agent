@@ -59,13 +59,7 @@ func Uninstall() error {
 	return nil
 }
 
-func SwitchProfile(data []byte) (*nats.Netbird, error) {
-	request := openuem_nats.NetbirdSwitchProfile{}
-	if err := json.Unmarshal(data, &request); err != nil {
-		log.Printf("[ERROR]: could not unmarshal the NetBird switch profile request, reason: %v", err)
-		return nil, err
-	}
-
+func SwitchProfile(request openuem_nats.NetbirdSwitchProfile) (*nats.Netbird, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -83,6 +77,45 @@ func SwitchProfile(data []byte) (*nats.Netbird, error) {
 		out, err := runtime.RunAsUserWithOutputAndTimeout(username, "bash", args, true, 60*time.Second)
 		if err != nil {
 			log.Printf("[ERROR]: could not switch NetBird profile, reason: %s", string(out))
+			return nil, err
+		}
+	}
+
+	return report.RetrieveNetbirdInfo()
+}
+
+func Register(data []byte) (*openuem_nats.Netbird, error) {
+	request := openuem_nats.NetbirdRegister{}
+	if err := json.Unmarshal(data, &request); err != nil {
+		log.Printf("[ERROR]: could not unmarshal the NetBird register request, reason: %v", err)
+		return nil, err
+	}
+
+	bin := getNetbirdBin()
+
+	// First, we must set the connection down
+	if err := exec.Command(bin, "down").Run(); err != nil {
+		log.Println("[ERROR]: could not execute netbird down")
+		return nil, err
+	}
+
+	command := fmt.Sprintf("%s up --setup-key %s --management-url %s", bin, request.OneOffKey, request.ManagementURL)
+
+	username, err := runtime.GetLoggedInUser()
+	if err != nil || username == "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		out, err := exec.CommandContext(ctx, "bash", "-c", command).CombinedOutput()
+		if err != nil {
+			log.Printf("[ERROR]: could not execute netbird up, reason: %s", string(out))
+			return nil, err
+		}
+	} else {
+		args := []string{"-c", command}
+		out, err := runtime.RunAsUserWithOutputAndTimeout(username, "bash", args, true, 30*time.Second)
+		if err != nil {
+			log.Printf("[ERROR]: could not execute netbird up to register the client, reason: %s", string(out))
 			return nil, err
 		}
 	}

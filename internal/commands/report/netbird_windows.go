@@ -36,7 +36,6 @@ func RetrieveNetbirdInfo() (*nats.Netbird, error) {
 		out, err = exec.Command(netbirdBin, "service", "status").CombinedOutput()
 		if err != nil {
 			log.Printf("[ERROR]: could not check NetBird service status, reason: %s", string(out))
-			data.Error = err.Error()
 			return nil, err
 		}
 

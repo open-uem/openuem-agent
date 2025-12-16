@@ -36,8 +36,7 @@ func RetrieveNetbirdInfo() (*nats.Netbird, error) {
 		command := `export LC_ALL=C && netbird service status`
 		out, err = exec.Command("bash", "-c", command).CombinedOutput()
 		if err != nil {
-			log.Printf("[ERROR]: could not check NetBird service status, reason: %s", string(out))
-			data.Error = err.Error()
+			log.Printf("[INFO]: could not check NetBird service status, reason: %s", string(out))
 			return nil, err
 		}
 
