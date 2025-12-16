@@ -4,6 +4,7 @@ package report
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -51,10 +52,21 @@ func RetrieveNetbirdInfo() (*nats.Netbird, error) {
 
 		if serviceRunning {
 			// Check NetBird status
-			out, err = exec.Command(netbirdBin, "status", "--json").CombinedOutput()
-			if err != nil {
-				log.Printf("[ERROR]: could not execute NetBird service status, reason: %s", string(out))
-				return nil, err
+			username, err := runtime.GetLoggedInUser()
+			if err != nil || username == "" {
+				out, err = exec.Command(netbirdBin, "status", "--json").CombinedOutput()
+				if err != nil {
+					log.Printf("[ERROR]: could not execute NetBird service status, reason: %s", string(out))
+					return nil, err
+				}
+			} else {
+				command := fmt.Sprintf("%s status --json", netbirdBin)
+				args := []string{"-c", command}
+				out, err = runtime.RunAsUserWithOutput(username, "bash", args, true)
+				if err != nil {
+					log.Printf("[ERROR]: could not execute NetBird service status, reason: %s", string(out))
+					return nil, err
+				}
 			}
 
 			if err := json.Unmarshal(out, &s); err == nil {
