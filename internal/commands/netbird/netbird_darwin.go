@@ -135,7 +135,7 @@ func NetbirdUp(data []byte) (*openuem_nats.Netbird, error) {
 
 	username, err := runtime.GetLoggedInUser()
 	if err != nil || username == "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
 		out, err := exec.CommandContext(ctx, "bash", "-c", command).CombinedOutput()

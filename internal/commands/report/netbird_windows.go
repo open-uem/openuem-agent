@@ -78,15 +78,28 @@ func RetrieveNetbirdInfo() (*nats.Netbird, error) {
 		}
 
 		// Check applied profiles
+		profiles := []string{}
+		rawProfiles := []string{}
+		username, err := GetLoggedOnUsername()
 		args := []string{"profile", "list"}
-		out, err = runtime.RunAsUserWithOutput(netbirdBin, args)
-		if err != nil {
-			log.Printf("[ERROR]: could not get NetBird profiles, reason: %s", string(out))
-			return nil, err
+
+		if err != nil || username == "" {
+			out, err = exec.Command(netbirdBin, args...).CombinedOutput()
+			if err != nil {
+				log.Printf("[ERROR]: could not get NetBird profiles, reason: %s", string(out))
+				return nil, err
+			}
+			rawProfiles = strings.Split(strings.TrimSpace(string(out)), "\n")
+		} else {
+			out, err = runtime.RunAsUserWithOutput(netbirdBin, args)
+			if err != nil {
+				log.Printf("[ERROR]: could not get NetBird profiles, reason: %s", string(out))
+				return nil, err
+			}
+			rawProfiles = strings.Split(strings.TrimSpace(string(out)), "\n")
 		}
 
-		profiles := []string{}
-		for i, p := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		for i, p := range rawProfiles {
 			if i == 0 {
 				continue
 			}

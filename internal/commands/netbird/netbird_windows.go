@@ -3,6 +3,7 @@
 package netbird
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"os/exec"
@@ -30,18 +31,41 @@ func Uninstall() error {
 func SwitchProfile(request openuem_nats.NetbirdSwitchProfile) (*openuem_nats.Netbird, error) {
 	netBirdBin := getNetbirdBin()
 
-	args := []string{"profile", "select", request.Profile}
-	out, err := runtime.RunAsUserWithOutput(netBirdBin, args)
-	if err != nil {
-		log.Printf("[ERROR]: could not switch NetBird profile, reason: %s", string(out))
-		return nil, err
-	}
+	username, err := report.GetLoggedOnUsername()
+	if err != nil || username == "" {
+		args := []string{"profile", "select", request.Profile}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
-	args = []string{"up"}
-	out, err = runtime.RunAsUserWithOutputAndTimeout(netBirdBin, args, 60*time.Second)
-	if err != nil {
-		log.Printf("[ERROR]: could not switch NetBird profile, reason: %s", string(out))
-		return nil, err
+		out, err := exec.CommandContext(ctx, netBirdBin, args...).CombinedOutput()
+		if err != nil {
+			log.Printf("[ERROR]: could not switch NetBird profile, reason: %s", string(out))
+			return nil, err
+		}
+
+		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		args = []string{"up"}
+		out, err = exec.CommandContext(ctx, netBirdBin, args...).CombinedOutput()
+		if err != nil {
+			log.Printf("[ERROR]: could not switch NetBird profile, reason: %s", string(out))
+			return nil, err
+		}
+	} else {
+		args := []string{"profile", "select", request.Profile}
+		out, err := runtime.RunAsUserWithOutput(netBirdBin, args)
+		if err != nil {
+			log.Printf("[ERROR]: could not switch NetBird profile, reason: %s", string(out))
+			return nil, err
+		}
+
+		args = []string{"up"}
+		out, err = runtime.RunAsUserWithOutputAndTimeout(netBirdBin, args, 60*time.Second)
+		if err != nil {
+			log.Printf("[ERROR]: could not switch NetBird profile, reason: %s", string(out))
+			return nil, err
+		}
 	}
 
 	return report.RetrieveNetbirdInfo()
@@ -63,7 +87,9 @@ func Register(data []byte) (*openuem_nats.Netbird, error) {
 	}
 
 	// Now, use the key and URL to register the agent
-	if err := exec.Command(bin, "up", "--setup-key", request.OneOffKey, "--management-url", request.ManagementURL).Run(); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	if err := exec.CommandContext(ctx, bin, "up", "--setup-key", request.OneOffKey, "--management-url", request.ManagementURL).Run(); err != nil {
 		log.Println("[ERROR]: could not execute netbird up")
 		return nil, err
 	}
@@ -73,12 +99,25 @@ func Register(data []byte) (*openuem_nats.Netbird, error) {
 
 func NetbirdUp(data []byte) (*openuem_nats.Netbird, error) {
 	netBirdBin := getNetbirdBin()
-
 	args := []string{"up"}
-	out, err := runtime.RunAsUserWithOutputAndTimeout(netBirdBin, args, 60*time.Second)
-	if err != nil {
-		log.Printf("[ERROR]: could not execute netbird up, reason: %s", string(out))
-		return nil, err
+
+	username, err := report.GetLoggedOnUsername()
+	if err != nil || username == "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		out, err := exec.CommandContext(ctx, netBirdBin, args...).CombinedOutput()
+		if err != nil {
+			log.Printf("[ERROR]: could not execute netbird up, reason: %s", string(out))
+			return nil, err
+		}
+	} else {
+
+		out, err := runtime.RunAsUserWithOutputAndTimeout(netBirdBin, args, 60*time.Second)
+		if err != nil {
+			log.Printf("[ERROR]: could not execute netbird up, reason: %s", string(out))
+			return nil, err
+		}
 	}
 
 	return report.RetrieveNetbirdInfo()
@@ -86,12 +125,24 @@ func NetbirdUp(data []byte) (*openuem_nats.Netbird, error) {
 
 func NetbirdDown(data []byte) (*openuem_nats.Netbird, error) {
 	netBirdBin := getNetbirdBin()
-
 	args := []string{"down"}
-	out, err := runtime.RunAsUserWithOutputAndTimeout(netBirdBin, args, 60*time.Second)
-	if err != nil {
-		log.Printf("[ERROR]: could not execute netbird down, reason: %s", string(out))
-		return nil, err
+
+	username, err := report.GetLoggedOnUsername()
+	if err != nil || username == "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		out, err := exec.CommandContext(ctx, netBirdBin, args...).CombinedOutput()
+		if err != nil {
+			log.Printf("[ERROR]: could not execute netbird down, reason: %s", string(out))
+			return nil, err
+		}
+	} else {
+		out, err := runtime.RunAsUserWithOutputAndTimeout(netBirdBin, args, 60*time.Second)
+		if err != nil {
+			log.Printf("[ERROR]: could not execute netbird down, reason: %s", string(out))
+			return nil, err
+		}
 	}
 
 	return report.RetrieveNetbirdInfo()
