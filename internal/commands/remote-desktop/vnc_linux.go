@@ -306,6 +306,10 @@ func IsWaylandDisplayServer() bool {
 		return false
 	}
 
+	if username == "" {
+		return false
+	}
+
 	_, uid, gid, err := runtime.GetUserInfo(username)
 	if err != nil {
 		log.Printf("[ERROR]: could not get user info, reason: %v\n", err)

@@ -4,10 +4,12 @@ package runtime
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"log"
 	"os/exec"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/windows"
 )
@@ -109,6 +111,53 @@ func RunAsUserWithOutput(cmdPath string, args []string) ([]byte, error) {
 	defer token.Close()
 
 	cmd := exec.Command(cmdPath, args...)
+
+	// this is the important bit!
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Token:         token,
+		CreationFlags: 0x08000000, // Reference: https://stackoverflow.com/questions/42500570/how-to-hide-command-prompt-window-when-using-exec-in-golang
+	}
+
+	if cmd.Stdout != nil {
+		return nil, errors.New("exec: Stdout already set")
+	}
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+
+	err = cmd.Start()
+	if err != nil {
+		return nil, err
+	}
+
+	err = SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
+	if err != nil {
+		log.Println("[ERROR]: could not change process priority")
+	}
+
+	err = cmd.Wait()
+	if err != nil {
+		return nil, err
+	}
+
+	return stdout.Bytes(), err
+}
+
+func RunAsUserWithOutputAndTimeout(cmdPath string, args []string, timeout time.Duration) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, cmdPath, args...)
+
+	pid, err := findProcessByName("explorer.exe")
+	if err != nil {
+		return nil, err
+	}
+
+	token, err := getUserToken(int(pid))
+	if err != nil {
+		return nil, err
+	}
+	defer token.Close()
 
 	// this is the important bit!
 	cmd.SysProcAttr = &syscall.SysProcAttr{

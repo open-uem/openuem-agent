@@ -5,7 +5,6 @@ package report
 import (
 	"log"
 	"os/exec"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -71,34 +70,13 @@ func (r *Report) getOperatingSystemInfo(debug bool) error {
 }
 
 func (r *Report) getUsername() error {
-	// We use loginctl to check users that has a desktop session
-	cmd := "loginctl list-sessions --no-legend | grep seat0 | awk '{ print $2,$3 }'"
+	cmd := "who | grep -m1 seat0 | awk '{print $1}'"
 	out, err := exec.Command("bash", "-c", cmd).Output()
 	if err != nil {
 		return err
 	}
 
-	loginCtlOut := string(out)
-
-	if loginCtlOut == "" {
-		r.OperatingSystem.Username = ""
-	}
-
-	for _, u := range strings.Split(loginCtlOut, "\n") {
-		userInfo := strings.Split(u, " ")
-		if len(userInfo) == 2 {
-			uid, err := strconv.Atoi(userInfo[0])
-			if err != nil {
-				log.Printf("[ERROR]: could not get uid from loginctl, %s", u)
-				continue
-			}
-			if uid < 1000 {
-				log.Printf("[INFO]: uid is lower than 1000, %s it's not a regular user", userInfo[1])
-				continue
-			}
-			r.OperatingSystem.Username = userInfo[1]
-		}
-	}
+	r.OperatingSystem.Username = strings.TrimSpace(string(out))
 
 	return nil
 }

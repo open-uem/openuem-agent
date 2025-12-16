@@ -79,7 +79,7 @@ func (r *Report) getOSInfo() error {
 }
 
 func (r *Report) getUsername() error {
-	cmd := "stat -f '%Su' /dev/console"
+	cmd := "who | grep -m1 console | awk '{print $1}'"
 	out, err := exec.Command("bash", "-c", cmd).Output()
 	if err != nil {
 		return err

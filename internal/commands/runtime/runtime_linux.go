@@ -3,6 +3,7 @@
 package runtime
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 func RunAsUser(username, cmdPath string, args []string, env bool) error {
@@ -117,6 +119,61 @@ func RunAsUserWithOutput(username, cmdPath string, args []string, env bool) ([]b
 	return out, nil
 }
 
+func RunAsUserWithOutputAndTimeout(username, cmdPath string, args []string, env bool, timeout time.Duration) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, cmdPath, args...)
+
+	u, err := user.Lookup(username)
+	if err != nil {
+		return nil, err
+	}
+
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return nil, err
+	}
+
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)},
+	}
+
+	// Run command adding env variables
+	if env {
+		cmd.Env = append(os.Environ(), "USER="+u.Username, "HOME="+u.HomeDir)
+
+		// Chrome, Firefox in Linux need env variables like USER, DISPLAY, XAUTHORITY...
+
+		// Get DISPLAY environment variable
+		display, err := GetDisplay(uint32(uid), uint32(gid))
+		if err == nil {
+			cmd.Env = append(cmd.Env, strings.TrimSpace(display))
+		}
+
+		// Get XAUTHORITY environment variable
+		xauthority, err := GetXAuthority(uint32(uid), uint32(gid))
+		if err == nil {
+			cmd.Env = append(cmd.Env, strings.TrimSpace(xauthority))
+		}
+
+		cmd.Env = append(os.Environ(), "USER="+u.Username, "HOME="+u.HomeDir, strings.TrimSpace(display), strings.TrimSpace(xauthority))
+	}
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("[ERROR]: run as user %s found an err with this combined output: %s", username, string(out))
+		return nil, err
+	}
+
+	return out, nil
+}
+
 func RunAsUserWithMachineCtl(username, myCmd string) error {
 	command := fmt.Sprintf("machinectl shell %s@ %s", username, myCmd)
 	cmd := exec.Command("bash", "-c", command)
@@ -129,32 +186,13 @@ func RunAsUserWithMachineCtl(username, myCmd string) error {
 func GetLoggedInUser() (string, error) {
 	username := ""
 
-	cmd := "loginctl list-sessions --no-legend | grep seat0 | awk '{ print $2,$3 }'"
+	cmd := "who | grep -m1 seat0 | awk '{print $1}'"
 	out, err := exec.Command("bash", "-c", cmd).Output()
 	if err != nil {
 		return "", err
 	}
 
-	loginCtlOut := string(out)
-	if loginCtlOut == "" {
-		return "", nil
-	}
-
-	for u := range strings.SplitSeq(loginCtlOut, "\n") {
-		userInfo := strings.Split(u, " ")
-		if len(userInfo) == 2 {
-			uid, err := strconv.Atoi(userInfo[0])
-			if err != nil {
-				log.Printf("[ERROR]: could not get uid from loginctl, %s", u)
-				continue
-			}
-			if uid < 1000 {
-				log.Printf("[INFO]: uid is lower than 1000, %s it's not a regular user", userInfo[1])
-				continue
-			}
-			username = userInfo[1]
-		}
-	}
+	username = strings.TrimSpace(string(out))
 
 	return username, nil
 }

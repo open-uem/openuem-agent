@@ -17,15 +17,15 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	openuem_nats "github.com/open-uem/nats"
+	"github.com/open-uem/openuem-agent/internal/agent/dsc"
 	"github.com/open-uem/openuem-agent/internal/agent/rustdesk"
 	"github.com/open-uem/openuem-agent/internal/commands/deploy"
+	"github.com/open-uem/openuem-agent/internal/commands/netbird"
 	"github.com/open-uem/openuem-agent/internal/commands/printers"
 	remotedesktop "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
 	"github.com/open-uem/openuem-agent/internal/commands/report"
 	"github.com/open-uem/openuem-agent/internal/commands/sftp"
-	ansiblecfg "github.com/open-uem/openuem-ansible-config/ansible"
 	openuem_utils "github.com/open-uem/utils"
-	"github.com/open-uem/wingetcfg/wingetcfg"
 	"gopkg.in/ini.v1"
 )
 
@@ -48,14 +48,6 @@ type Agent struct {
 
 type JSONActions struct {
 	Actions []openuem_nats.DeployAction `json:"actions"`
-}
-
-type ProfileConfig struct {
-	ProfileID     int                          `yaml:"profileID"`
-	Exclusions    []string                     `yaml:"exclusions"`
-	Deployments   []string                     `yaml:"deployments"`
-	WinGetConfig  *wingetcfg.WinGetCfg         `yaml:"config"`
-	AnsibleConfig []ansiblecfg.AnsiblePlaybook `yaml:"ansible"`
 }
 
 func New() Agent {
@@ -698,6 +690,41 @@ func (a *Agent) SubscribeToNATSSubjects() {
 		log.Printf("[ERROR]: %v\n", err)
 	}
 
+	err = a.InstallNetBirdSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
+	err = a.RegisterNetBirdSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
+	err = a.UninstallNetBirdSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
+	err = a.SwitchProfileNetBirdSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
+	err = a.NetBirdUpSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
+	err = a.NetBirdDownSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
+	err = a.RefreshNetBirdSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
 	log.Println("[INFO]: Subscribed to NATS subjects!")
 }
 
@@ -870,7 +897,7 @@ func (a *Agent) RemovePrinter() error {
 	return nil
 }
 
-func (a *Agent) SendWinGetCfgProfileApplicationReport(profileID int, agentID string, success bool, errData string) error {
+func (a *Agent) SendProfileApplicationReport(profileID int, agentID string, success bool, errData string) error {
 	// Notify worker if application was succesful or not
 	deployment := openuem_nats.WingetCfgReport{
 		ProfileID: profileID,
@@ -958,5 +985,208 @@ func (a *Agent) StopRustDeskSubscribe() error {
 	if err != nil {
 		return fmt.Errorf("[ERROR]: could not subscribe to rustdesk stop subject, reason: %v", err)
 	}
+	return nil
+}
+
+func (a *Agent) InstallNetBirdSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.install."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+
+		data, err := netbird.Install()
+		if err != nil {
+			netbird.Respond(msg, &openuem_nats.Netbird{Error: err.Error()})
+			return
+		}
+
+		//NetBird has been installed
+		log.Println("[INFO]: the NetBird agent binary has been installed")
+		netbird.Respond(msg, data)
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to netbird install subject, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) RegisterNetBirdSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.register."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+
+		data, err := netbird.Register(msg.Data)
+		if err != nil {
+			netbird.Respond(msg, &openuem_nats.Netbird{Error: err.Error()})
+			return
+		}
+
+		//NetBird has been registered
+		log.Println("[INFO]: the NetBird agent binary has been registered")
+		netbird.Respond(msg, data)
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to netbird install subject, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) UninstallNetBirdSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.uninstall."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+
+		if err := netbird.Uninstall(); err != nil {
+			netbird.Respond(msg, &openuem_nats.Netbird{Error: err.Error()})
+			return
+		}
+
+		//NetBird has been uninstalled
+		log.Println("[INFO]: the NetBird agent binary has been uninstalled")
+		netbird.Respond(msg, &openuem_nats.Netbird{})
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to netbird uninstall subject, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) SwitchProfileNetBirdSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.switchprofile."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+
+		request := openuem_nats.NetbirdSwitchProfile{}
+		if err := json.Unmarshal(msg.Data, &request); err != nil {
+			log.Printf("[ERROR]: could not unmarshal the NetBird switch profile request, reason: %v", err)
+			return
+		}
+
+		data, err := netbird.SwitchProfile(request)
+		if err != nil {
+			netbird.Respond(msg, &openuem_nats.Netbird{Error: err.Error()})
+			return
+		}
+
+		//NetBird profile has been switched
+		log.Println("[INFO]: the NetBird profile has been switched")
+		netbird.Respond(msg, data)
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to netbird switch profile subject, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) NetBirdUpSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.up."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+
+		data, err := netbird.NetbirdUp(msg.Data)
+		if err != nil {
+			netbird.Respond(msg, &openuem_nats.Netbird{Error: err.Error()})
+			return
+		}
+
+		log.Println("[INFO]: the NetBird up has been executed")
+		netbird.Respond(msg, data)
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to netbird up subject, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) NetBirdDownSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.down."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+
+		data, err := netbird.NetbirdDown(msg.Data)
+		if err != nil {
+			netbird.Respond(msg, &openuem_nats.Netbird{Error: err.Error()})
+			return
+		}
+
+		log.Println("[INFO]: the NetBird down has been executed")
+		netbird.Respond(msg, data)
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to netbird up subject, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) RefreshNetBirdSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.netbird.refresh."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+
+		data, err := netbird.RefreshInfo(msg.Data)
+		if err != nil {
+			netbird.Respond(msg, &openuem_nats.Netbird{Error: err.Error()})
+			return
+		}
+
+		//NetBird profile has been switched
+		log.Println("[INFO]: the NetBird info has been refreshed")
+		netbird.Respond(msg, data)
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to netbird refresh subject, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) ApplyNetBirdConfiguration(p openuem_nats.ProfileConfig, taskControl *dsc.TaskControl, taskControlPath string) error {
+
+	success := false
+
+	for _, t := range p.NetBirdConfig {
+		switch {
+
+		case t.Install:
+			taskAlreadySuccessful := slices.Contains(taskControl.Success, t.ID)
+			if !taskAlreadySuccessful {
+				_, err := netbird.Install()
+				if err != nil {
+					return err
+				}
+				log.Println("[INFO]: the NetBird agent binary has been installed")
+				if err := dsc.SetTaskAsSuccessfull(t.ID, taskControlPath, taskControl); err != nil {
+					log.Printf("[ERROR]: could not save the task as successfull, reason: %v", err)
+				}
+				success = true
+			}
+		case t.Uninstall:
+			taskAlreadySuccessful := slices.Contains(taskControl.Success, t.ID)
+			if !taskAlreadySuccessful {
+				if err := netbird.Uninstall(); err != nil {
+					return err
+				}
+				log.Println("[INFO]: the NetBird agent binary has been uninstalled")
+				if err := dsc.SetTaskAsSuccessfull(t.ID, taskControlPath, taskControl); err != nil {
+					log.Printf("[ERROR]: could not save the task as successfull, reason: %v", err)
+				}
+				success = true
+			}
+		case t.Register:
+			taskAlreadySuccessful := slices.Contains(taskControl.Success, t.ID)
+			if !taskAlreadySuccessful {
+				data, err := json.Marshal(t.RegisterInfo)
+				if err != nil {
+					return err
+				}
+
+				if _, err := netbird.Register(data); err != nil {
+					return err
+				}
+				log.Println("[INFO]: the NetBird agent has been registered")
+				if err := dsc.SetTaskAsSuccessfull(t.ID, taskControlPath, taskControl); err != nil {
+					log.Printf("[ERROR]: could not save the task as successfull, reason: %v", err)
+				}
+				success = true
+			}
+		}
+	}
+
+	if success {
+		// Send a report to update NetBird info
+		a.RunReport()
+	}
+
 	return nil
 }

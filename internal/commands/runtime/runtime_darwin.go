@@ -3,6 +3,8 @@
 package runtime
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -11,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 func RunAsUser(username, cmdPath string, args []string, env bool) error {
@@ -73,12 +76,59 @@ func RunAsUserWithOutput(username, cmdPath string, args []string, env bool) ([]b
 		Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)},
 	}
 
+	// Run command adding env variables
+	if env {
+		cmd.Env = append(os.Environ(), "USER="+u.Username, "HOME="+u.HomeDir)
+	}
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, err
 	}
 
 	return output, err
+}
+
+func RunAsUserWithOutputAndTimeout(username, cmdPath string, args []string, env bool, timeout time.Duration) ([]byte, error) {
+	sudoArgs := []string{"-u", username}
+	sudoArgs = append(sudoArgs, cmdPath)
+	sudoArgs = append(sudoArgs, args...)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "sudo", sudoArgs...)
+
+	u, err := user.Lookup(username)
+	if err != nil {
+		return nil, err
+	}
+
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return nil, err
+	}
+
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)},
+	}
+
+	// Run command adding env variables
+	if env {
+		cmd.Env = append(os.Environ(), "USER="+u.Username, "HOME="+u.HomeDir)
+	}
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, errors.New(string(output))
+	}
+
+	return output, nil
 }
 
 func RunAsUserWithMachineCtl(username, myCmd string) error {
@@ -91,7 +141,7 @@ func RunAsUserWithMachineCtl(username, myCmd string) error {
 }
 
 func GetLoggedInUser() (string, error) {
-	cmd := "stat -f '%Su' /dev/console"
+	cmd := "who | grep -m1 console | awk '{print $1}'"
 	out, err := exec.Command("bash", "-c", cmd).Output()
 	if err != nil {
 		return "", err
@@ -150,4 +200,47 @@ func RunAsUserInBackground(username, cmdPath string, args []string, env bool) er
 	}
 
 	return nil
+}
+
+func GetUserEnv(variable string) (string, error) {
+	// Get logged in username
+	username, err := GetLoggedInUser()
+	if err != nil {
+		return "", err
+	}
+
+	_, uid, gid, err := GetUserInfo(username)
+	if err != nil {
+		return "", err
+	}
+
+	envCmd := exec.Command("bash", "-c", fmt.Sprintf(`ps -u $(id -u) -o pid= | xargs -I{} cat /proc/{}/environ 2>/dev/null | tr '\0' '\n' | grep -m1 '^%s'`, variable))
+	envCmd.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)},
+	}
+	envOut, err := envCmd.Output()
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimPrefix(strings.TrimSpace(string(envOut)), variable+"="), nil
+}
+
+func GetUserInfo(username string) (homedir string, uid int, gid int, err error) {
+	u, err := user.Lookup(username)
+	if err != nil {
+		return "", -1, -1, err
+	}
+
+	uid, err = strconv.Atoi(u.Uid)
+	if err != nil {
+		return "", -1, -1, err
+	}
+
+	gid, err = strconv.Atoi(u.Gid)
+	if err != nil {
+		return "", -1, -1, err
+	}
+
+	return u.HomeDir, uid, gid, nil
 }

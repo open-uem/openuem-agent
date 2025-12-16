@@ -315,7 +315,7 @@ func (a *Agent) GetWingetConfigureProfiles() {
 		log.Println("[DEBUG]: running task WinGet profiles job")
 	}
 
-	profiles := []ProfileConfig{}
+	profiles := []openuem_nats.ProfileConfig{}
 
 	profileRequest := openuem_nats.CfgProfiles{
 		AgentID: a.Config.UUID,
@@ -373,33 +373,51 @@ func (a *Agent) GetWingetConfigureProfiles() {
 			log.Println("[DEBUG]: we're going to apply the configuration")
 		}
 
-		if err := a.ApplyConfiguration(p.ProfileID, cfg, p.Exclusions, p.Deployments); err != nil {
+		// Read task control file
+		cwd, err := openuem_utils.GetWd()
+		if err != nil {
+			log.Printf("[ERROR]: could not get working directory, reason %v", err)
+			return
+		}
+		taskControlPath := filepath.Join(cwd, "powershell", "tasks.json")
+		taskControl, err := dsc.ReadTaskControlFile(taskControlPath)
+
+		if err != nil {
+			log.Printf("[ERROR]: tasks control file is not available, reason %v", err)
+			return
+		}
+
+		ansibleErrData, err := a.ApplyConfiguration(p.ProfileID, cfg, p.Exclusions, p.Deployments, taskControl, taskControlPath)
+		if err != nil {
 			log.Printf("[ERROR]: could not apply YAML configuration file with winget, reason: %v", err)
 			continue
+		}
+
+		// Netbird tasks
+		errData := ""
+		nbErrData := a.ApplyNetBirdConfiguration(p, taskControl, taskControlPath)
+		if nbErrData != nil {
+			log.Println("[ERROR]: could not apply Netbird configuration file")
+			errData = strings.Join([]string{ansibleErrData, nbErrData.Error()}, ",")
+		}
+
+		// Report if application was successful or not
+		if err := a.SendProfileApplicationReport(p.ProfileID, a.Config.UUID, errData == "", errData); err != nil {
+			log.Println("[ERROR]: could not report if profile was applied succesfully or no")
+		}
+
+		if err := a.SendProfileApplicationReport(p.ProfileID, a.Config.UUID, errData == "", errData); err != nil {
+			log.Println("[ERROR]: could not report if profile was applied succesfully or not")
 		}
 	}
 }
 
-func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, deployments []string) error {
+func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, deployments []string, taskControl *dsc.TaskControl, taskControlPath string) (string, error) {
 	var cfg wingetcfg.WinGetCfg
 
 	// Unmarshall profile
 	if err := yaml.Unmarshal(config, &cfg); err != nil {
-		return err
-	}
-
-	// Read task control file
-	cwd, err := openuem_utils.GetWd()
-	if err != nil {
-		log.Printf("[ERROR]: could not get working directory, reason %v", err)
-		return err
-	}
-	taskControlPath := filepath.Join(cwd, "powershell", "tasks.json")
-	taskControl, err := dsc.ReadTaskControlFile(taskControlPath)
-
-	if err != nil {
-		log.Printf("[ERROR]: tasks control file is not available, reason %v", err)
-		return err
+		return "", err
 	}
 
 	ID := strconv.Itoa(profileID)
@@ -418,13 +436,13 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 				taskControl.ProfilesRunning[ID] = time.Now()
 			} else {
 				log.Printf("[INFO]: previous profile %s is marked as running, not relaunching, ", ID)
-				return nil
+				return "", nil
 			}
 		}
 	}
 	if err := dsc.SaveTaskControl(taskControlPath, taskControl); err != nil {
 		log.Printf("[ERROR]: could not save new profile %s running, reason: %v", ID, err)
-		return err
+		return "", err
 	}
 
 	defer func() {
@@ -442,11 +460,7 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 		errData = errProfile.Error()
 	}
 
-	if err := a.SendWinGetCfgProfileApplicationReport(profileID, a.Config.UUID, errProfile == nil, errData); err != nil {
-		log.Println("[ERROR]: could not report if profile was applied succesfully or not")
-	}
-
-	return nil
+	return errData, nil
 }
 
 func (a *Agent) CheckIfCfgPackagesInstalled(cfg wingetcfg.WinGetCfg, installed string) {

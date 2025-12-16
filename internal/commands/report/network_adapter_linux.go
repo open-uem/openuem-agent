@@ -69,13 +69,7 @@ func (r *Report) getNetworkAdaptersFromLinux() error {
 		myNetworkAdapter := openuem_nats.NetworkAdapter{}
 		myNetworkAdapter.Name = i.Name
 
-		state, err := ethHandle.LinkState(i.Name)
-		if err != nil {
-			log.Printf("[ERROR]: could not get interface link state, %v\n", err)
-			return err
-		}
-
-		if !slices.Contains(detectedNICs, i.Name) || state != 1 {
+		if !slices.Contains(detectedNICs, i.Name) {
 			continue
 		}
 
