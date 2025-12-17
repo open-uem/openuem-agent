@@ -191,8 +191,16 @@ func GetLoggedInUser() (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	username = strings.TrimSpace(string(out))
+
+	if username == "" {
+		cmd := "who | grep -m1 ':0' | awk '{print $1}'"
+		out, err = exec.Command("bash", "-c", cmd).Output()
+		if err != nil {
+			return "", err
+		}
+		username = strings.TrimSpace(string(out))
+	}
 
 	return username, nil
 }
