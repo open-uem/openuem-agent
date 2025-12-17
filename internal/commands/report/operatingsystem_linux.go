@@ -70,13 +70,29 @@ func (r *Report) getOperatingSystemInfo(debug bool) error {
 }
 
 func (r *Report) getUsername() error {
+	username := ""
 	cmd := "who | grep -m1 seat0 | awk '{print $1}'"
 	out, err := exec.Command("bash", "-c", cmd).Output()
 	if err != nil {
 		return err
 	}
+	username = strings.TrimSpace(string(out))
 
-	r.OperatingSystem.Username = strings.TrimSpace(string(out))
+	// Exception for KDE neon
+	if username == "" {
+		cmd := "who | grep -m1 ':0' | awk '{print $1}'"
+		out, err = exec.Command("bash", "-c", cmd).Output()
+		if err != nil {
+			return err
+		}
+		username = strings.TrimSpace(string(out))
+	} else {
+		if username == "gdm" || username == "sddm" {
+			username = ""
+		}
+	}
+
+	r.OperatingSystem.Username = username
 
 	return nil
 }
