@@ -78,6 +78,7 @@ func (r *Report) getUsername() error {
 	}
 	username = strings.TrimSpace(string(out))
 
+	// Exception for KDE neon
 	if username == "" {
 		cmd := "who | grep -m1 ':0' | awk '{print $1}'"
 		out, err = exec.Command("bash", "-c", cmd).Output()
@@ -85,6 +86,10 @@ func (r *Report) getUsername() error {
 			return err
 		}
 		username = strings.TrimSpace(string(out))
+	} else {
+		if username == "gdm" || username == "sddm" {
+			username = ""
+		}
 	}
 
 	r.OperatingSystem.Username = username
