@@ -28,7 +28,7 @@ func Uninstall() error {
 	return deploy.UninstallPackage("Netbird.Netbird")
 }
 
-func SwitchProfile(request openuem_nats.NetbirdSwitchProfile) (*openuem_nats.Netbird, error) {
+func SwitchProfile(request openuem_nats.NetbirdSettings) (*openuem_nats.Netbird, error) {
 	netBirdBin := getNetbirdBin()
 
 	username, err := report.GetLoggedOnUsername()
@@ -72,7 +72,7 @@ func SwitchProfile(request openuem_nats.NetbirdSwitchProfile) (*openuem_nats.Net
 }
 
 func Register(data []byte) (*openuem_nats.Netbird, error) {
-	request := openuem_nats.NetbirdRegister{}
+	request := openuem_nats.NetbirdSettings{}
 	if err := json.Unmarshal(data, &request); err != nil {
 		log.Printf("[ERROR]: could not unmarshal the NetBird register request, reason: %v", err)
 		return nil, err
@@ -81,7 +81,7 @@ func Register(data []byte) (*openuem_nats.Netbird, error) {
 	bin := getNetbirdBin()
 
 	// First, we must set the connection down
-	if err := exec.Command(bin, "down").Run(); err != nil {
+	if err := exec.Command(bin, "down", "--management-url", request.ManagementURL).Run(); err != nil {
 		log.Println("[ERROR]: could not execute netbird down")
 		return nil, err
 	}
@@ -98,8 +98,14 @@ func Register(data []byte) (*openuem_nats.Netbird, error) {
 }
 
 func NetbirdUp(data []byte) (*openuem_nats.Netbird, error) {
+	request := openuem_nats.NetbirdSettings{}
+	if err := json.Unmarshal(data, &request); err != nil {
+		log.Printf("[ERROR]: could not unmarshal the NetBird request, reason: %v", err)
+		return nil, err
+	}
+
 	netBirdBin := getNetbirdBin()
-	args := []string{"up"}
+	args := []string{"up", "--management-url", request.ManagementURL}
 
 	username, err := report.GetLoggedOnUsername()
 	if err != nil || username == "" {
@@ -124,8 +130,14 @@ func NetbirdUp(data []byte) (*openuem_nats.Netbird, error) {
 }
 
 func NetbirdDown(data []byte) (*openuem_nats.Netbird, error) {
+	request := openuem_nats.NetbirdSettings{}
+	if err := json.Unmarshal(data, &request); err != nil {
+		log.Printf("[ERROR]: could not unmarshal the NetBird request, reason: %v", err)
+		return nil, err
+	}
+
 	netBirdBin := getNetbirdBin()
-	args := []string{"down"}
+	args := []string{"down", "--management-url", request.ManagementURL}
 
 	username, err := report.GetLoggedOnUsername()
 	if err != nil || username == "" {
