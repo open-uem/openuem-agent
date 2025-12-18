@@ -59,11 +59,11 @@ func Uninstall() error {
 	return nil
 }
 
-func SwitchProfile(request openuem_nats.NetbirdSwitchProfile) (*nats.Netbird, error) {
+func SwitchProfile(request openuem_nats.NetbirdSettings) (*nats.Netbird, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	command := fmt.Sprintf(`netbird profile select %s && netbird up`, request.Profile)
+	command := fmt.Sprintf(`netbird profile select %s --management-url %s && netbird up --management-url %s`, request.Profile, request.ManagementURL, request.ManagementURL)
 
 	username, err := runtime.GetLoggedInUser()
 	if err != nil || username == "" {
@@ -85,7 +85,7 @@ func SwitchProfile(request openuem_nats.NetbirdSwitchProfile) (*nats.Netbird, er
 }
 
 func Register(data []byte) (*openuem_nats.Netbird, error) {
-	request := openuem_nats.NetbirdRegister{}
+	request := openuem_nats.NetbirdSettings{}
 	if err := json.Unmarshal(data, &request); err != nil {
 		log.Printf("[ERROR]: could not unmarshal the NetBird register request, reason: %v", err)
 		return nil, err
@@ -94,7 +94,7 @@ func Register(data []byte) (*openuem_nats.Netbird, error) {
 	bin := getNetbirdBin()
 
 	// First, we must set the connection down
-	if err := exec.Command(bin, "down").Run(); err != nil {
+	if err := exec.Command(bin, "down", "--management-url", request.ManagementURL).Run(); err != nil {
 		log.Println("[ERROR]: could not execute netbird down")
 		return nil, err
 	}
@@ -123,10 +123,16 @@ func Register(data []byte) (*openuem_nats.Netbird, error) {
 }
 
 func NetbirdUp(data []byte) (*nats.Netbird, error) {
+	request := openuem_nats.NetbirdSettings{}
+	if err := json.Unmarshal(data, &request); err != nil {
+		log.Printf("[ERROR]: could not unmarshal the NetBird request, reason: %v", err)
+		return nil, err
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	command := `netbird up`
+	command := fmt.Sprintf(`netbird up --management-url %s`, request.ManagementURL)
 
 	username, err := runtime.GetLoggedInUser()
 	if err != nil || username == "" {
@@ -148,10 +154,16 @@ func NetbirdUp(data []byte) (*nats.Netbird, error) {
 }
 
 func NetbirdDown(data []byte) (*nats.Netbird, error) {
+	request := openuem_nats.NetbirdSettings{}
+	if err := json.Unmarshal(data, &request); err != nil {
+		log.Printf("[ERROR]: could not unmarshal the NetBird request, reason: %v", err)
+		return nil, err
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	command := `netbird down`
+	command := fmt.Sprintf(`netbird down --management-url %s`, request.ManagementURL)
 
 	username, err := runtime.GetLoggedInUser()
 	if err != nil || username == "" {
