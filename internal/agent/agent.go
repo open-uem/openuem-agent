@@ -725,6 +725,11 @@ func (a *Agent) SubscribeToNATSSubjects() {
 		log.Printf("[ERROR]: %v\n", err)
 	}
 
+	err = a.PingSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
 	log.Println("[INFO]: Subscribed to NATS subjects!")
 }
 
@@ -1188,5 +1193,18 @@ func (a *Agent) ApplyNetBirdConfiguration(p openuem_nats.ProfileConfig, taskCont
 		a.RunReport()
 	}
 
+	return nil
+}
+
+func (a *Agent) PingSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.ping."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+		if err := msg.Respond(nil); err != nil {
+			log.Printf("[ERROR]: could not respond to ping message, reason: %v", err)
+		}
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to agent ping subject, reason: %v", err)
+	}
 	return nil
 }
