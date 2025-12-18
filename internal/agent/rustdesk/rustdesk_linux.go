@@ -89,10 +89,12 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 	// Create TOML file
 	cfgTOML := RustDeskOptions{
 		Optional: RustDeskOptionsEntries{
-			CustomRendezVousServer: rdConfig.CustomRendezVousServer,
-			RelayServer:            rdConfig.RelayServer,
-			Key:                    rdConfig.Key,
-			ApiServer:              rdConfig.APIServer,
+			CustomRendezVousServer:  rdConfig.CustomRendezVousServer,
+			RelayServer:             rdConfig.RelayServer,
+			Key:                     rdConfig.Key,
+			ApiServer:               rdConfig.APIServer,
+			TemporaryPasswordLength: strconv.Itoa(rdConfig.TemporaryPasswordLength),
+			VerificationMethod:      rdConfig.VerificationMethod,
 		},
 	}
 

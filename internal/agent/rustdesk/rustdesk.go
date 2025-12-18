@@ -31,12 +31,14 @@ type RustDeskConfig struct {
 }
 
 type RustDeskOptionsEntries struct {
-	CustomRendezVousServer string `toml:"custom-rendezvous-server"`
-	RelayServer            string `toml:"relay-server"`
-	Key                    string `toml:"key"`
-	ApiServer              string `toml:"api-server"`
-	UseDirectIPAccess      string `toml:"direct-server,omitempty"`
-	Whitelist              string `toml:"whitelist,omitempty"`
+	CustomRendezVousServer  string `toml:"custom-rendezvous-server"`
+	RelayServer             string `toml:"relay-server"`
+	Key                     string `toml:"key"`
+	ApiServer               string `toml:"api-server"`
+	UseDirectIPAccess       string `toml:"direct-server,omitempty"`
+	Whitelist               string `toml:"whitelist,omitempty"`
+	VerificationMethod      string `toml:"verification-method,omitempty"`
+	TemporaryPasswordLength string `toml:"temporary-password-length,omitempty"`
 }
 
 type RustDeskOptions struct {
