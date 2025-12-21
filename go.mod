@@ -22,7 +22,7 @@ require (
 	github.com/nats-io/nats.go v1.47.0
 	github.com/open-uem/nats v0.0.0-20251220104614-efae26e98557
 	github.com/open-uem/openuem-ansible-config v0.0.0-20250710075757-9ef6e3390073
-	github.com/open-uem/utils v0.0.0-20251220104704-89477718ebb2
+	github.com/open-uem/utils v0.0.0-20251221104611-c55d64529212
 	github.com/open-uem/wingetcfg v0.0.0-20251011111407-80e823d91ea5
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/pkg/sftp v1.13.9

@@ -86,6 +86,8 @@ github.com/open-uem/openuem-ansible-config v0.0.0-20250710075757-9ef6e3390073 h1
 github.com/open-uem/openuem-ansible-config v0.0.0-20250710075757-9ef6e3390073/go.mod h1:mCdYkT1RTq4V3Ai6TjIfy7QoX68lhpLoF63+YXpPXFI=
 github.com/open-uem/utils v0.0.0-20251220104704-89477718ebb2 h1:y1Cxw0RDgBXrX+xefBZrXGjMKYrduSOqlLxoTonJiT8=
 github.com/open-uem/utils v0.0.0-20251220104704-89477718ebb2/go.mod h1:ecBMjP3ok7LPOGxETGc3Md4tyb4dPqmPhXlz4MTeUjQ=
+github.com/open-uem/utils v0.0.0-20251221104611-c55d64529212 h1:d7iSAxoUy9LmFuLO52laMZN7OvR8sRTy/nXbqDPUtsU=
+github.com/open-uem/utils v0.0.0-20251221104611-c55d64529212/go.mod h1:ecBMjP3ok7LPOGxETGc3Md4tyb4dPqmPhXlz4MTeUjQ=
 github.com/open-uem/wingetcfg v0.0.0-20251011111407-80e823d91ea5 h1:LQ6pwsgumUBcuw7cPy66jmLE/ZaIvbCZRGxcOFFkF24=
 github.com/open-uem/wingetcfg v0.0.0-20251011111407-80e823d91ea5/go.mod h1:b2rmcb7kD/AODHdvHGZ8TpzhX4qrkdDPrEGM5FmOBxQ=
 github.com/pelletier/go-toml/v2 v2.2.4 h1:mye9XuhQ6gvn5h28+VilKrrPoQVanw5PMw/TB0t5Ec4=
