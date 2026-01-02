@@ -48,7 +48,7 @@ func (r *Report) getLogicalDisksFromWMI(debug bool) error {
 			myDisk.Usage = int8(100 - (v.FreeSpace * 100 / v.Size))
 			myDisk.Filesystem = strings.TrimSpace(v.FileSystem)
 			myDisk.VolumeName = strings.TrimSpace(v.VolumeName)
-
+			myDisk.DriveType = getDriveTypeDescription(v.DriveType)
 			myDisk.SizeInUnits = convertBytesToUnits(v.Size)
 			myDisk.RemainingSpaceInUnits = convertBytesToUnits(v.FreeSpace)
 
@@ -127,4 +127,25 @@ func convertBytesToUnits(size uint64) string {
 		units = fmt.Sprintf("%d PB", size/1_000_000_000_000)
 	}
 	return units
+}
+
+func getDriveTypeDescription(desc uint32) string {
+	switch desc {
+	case openuem_nats.DRIVE_TYPE_UNKNOWN:
+		return "inventory.logical_disk.drive_type_unknown"
+	case openuem_nats.DRIVE_TYPE_NO_ROOT_DIRECTORY:
+		return "inventory.logical_disk.drive_type_no_root_directory"
+	case openuem_nats.DRIVE_TYPE_REMOVABLE_DISK:
+		return "inventory.logical_disk.drive_type_removable_disk"
+	case openuem_nats.DRIVE_TYPE_LOCAL_DISK:
+		return "inventory.logical_disk.drive_type_local_disk"
+	case openuem_nats.DRIVE_TYPE_NETWORK_DRIVE:
+		return "inventory.logical_disk.drive_type_network_drive"
+	case openuem_nats.DRIVE_TYPE_COMPACT_DISC:
+		return "inventory.logical_disk.drive_type_compact_disc"
+	case openuem_nats.DRIVE_TYPE_RAM_DISK:
+		return "inventory.logical_disk.drive_type_ram_disk"
+	default:
+		return "inventory.logical_disk.drive_type_unknown"
+	}
 }
