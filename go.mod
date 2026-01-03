@@ -20,6 +20,7 @@ require (
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/nats-io/nats.go v1.47.0
+	github.com/open-uem/glazier v0.0.0-20260102233206-f12f9b62829d
 	github.com/open-uem/nats v0.11.1-0.20260102112820-12f0dfc641d0
 	github.com/open-uem/openuem-ansible-config v0.0.0-20250710075757-9ef6e3390073
 	github.com/open-uem/utils v0.0.0-20251221104611-c55d64529212
@@ -48,7 +49,11 @@ require (
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/google/cabbie v1.0.5 // indirect
+	github.com/google/deck v1.1.0 // indirect
 	github.com/google/flatbuffers v25.9.23+incompatible // indirect
+	github.com/google/glazier v0.0.0-20211029225403-9f766cca891d // indirect
+	github.com/iamacarpet/go-win64api v0.0.0-20240507095429-873e84e85847 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/klauspost/compress v1.18.2 // indirect
 	github.com/kr/fs v0.1.0 // indirect
@@ -58,10 +63,12 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/nats-io/nkeys v0.4.11 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
+	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
+	github.com/scjalliance/comshim v0.0.0-20250111221056-b2ef9d8d7e0f // indirect
 	github.com/shoenig/go-m1cpu v0.1.7 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
@@ -75,5 +82,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
+	gopkg.in/toast.v1 v1.0.0-20180812000517-0a84660828b2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
