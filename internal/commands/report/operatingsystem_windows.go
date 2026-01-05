@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -190,7 +191,26 @@ func GetLoggedOnUsername() (string, error) {
 	}
 
 	v := &computerDst[0]
-	return strings.TrimSpace(v.Username), nil
+
+	if v.Username != "" {
+		return strings.TrimSpace(v.Username), nil
+	}
+
+	// If username is empty, we'll check if there's a user that has logged in using other options like RDP
+	// Reference: https://stackoverflow.com/questions/32017531/finding-current-logged-on-users-while-running-as-system-no-environment-variab
+	out, err := exec.Command("PowerShell", "-command", "Get-Process -IncludeUserName -Name explorer | Select-Object UserName -Unique -Expand UserName").Output()
+	if err != nil {
+		log.Printf("[INFO]: could not get the owner of the explorer.exe process to get the username")
+		return "", nil
+	}
+	username := strings.TrimSpace(string(out))
+
+	// if no user is logged in we may get the string \, in this case we'll return an empty string
+	if username == "\\" {
+		return "", nil
+	}
+	return username, nil
+
 }
 
 func isWindowsServer(caption string) bool {
