@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log"
 	"os/exec"
+	"strings"
 
 	openuem_nats "github.com/open-uem/nats"
 )
@@ -39,7 +40,8 @@ func (r *Report) getPhysicalDisksInfo(debug bool) error {
 	}
 
 	for _, pd := range blockDevices.Devices {
-		if pd.Size > 0 {
+		// ignore disks with empty size or loop devices (for example Ubuntu snap loop devices)
+		if pd.Size > 0 && !strings.HasPrefix(pd.Name, "loop") {
 			disk := openuem_nats.PhysicalDisk{
 				DeviceID:     pd.Name,
 				Model:        pd.Model,
