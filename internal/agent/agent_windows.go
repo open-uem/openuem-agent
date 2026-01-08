@@ -387,18 +387,21 @@ func (a *Agent) GetWingetConfigureProfiles() {
 			return
 		}
 
-		ansibleErrData, err := a.ApplyConfiguration(p.ProfileID, cfg, p.Exclusions, p.Deployments, taskControl, taskControlPath)
+		errData, err := a.ApplyConfiguration(p.ProfileID, cfg, p.Exclusions, p.Deployments, taskControl, taskControlPath)
 		if err != nil {
 			log.Printf("[ERROR]: could not apply YAML configuration file with winget, reason: %v", err)
 			continue
 		}
 
 		// Netbird tasks
-		errData := ""
 		nbErrData := a.ApplyNetBirdConfiguration(p, taskControl, taskControlPath)
 		if nbErrData != nil {
 			log.Println("[ERROR]: could not apply Netbird configuration file")
-			errData = strings.Join([]string{ansibleErrData, nbErrData.Error()}, ",")
+			if errData != "" {
+				errData = strings.Join([]string{errData, nbErrData.Error()}, ",")
+			} else {
+				errData = nbErrData.Error()
+			}
 		}
 
 		// Report if application was successful or not
@@ -683,7 +686,7 @@ func (a *Agent) ExecutePowerShellScript(script string) error {
 		} else {
 			defer func() {
 				if err := file.Close(); err != nil {
-					log.Printf("[ERROR]: could not close the file, maybe it was closed earlier, reason: %v", err)
+					// file may have been closed earlier
 				}
 			}()
 			if _, err := file.Write([]byte(script)); err != nil {
@@ -1218,8 +1221,7 @@ func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath stri
 			scriptsRun := strings.Split(a.Config.ScriptsRun, ",")
 			if !slices.Contains(scriptsRun, task.ID) {
 				if err := a.ExecutePowerShellScript(task.Script); err != nil {
-					log.Printf("[ERROR]: errors were found running PowerShell, reason: %v", err)
-					return fmt.Errorf("errors were found running PowerShell, reason: %v", err)
+					return err
 				}
 			}
 			log.Printf("[INFO]: powershell script %s run successfully", task.Name)
@@ -1227,8 +1229,7 @@ func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath stri
 		}
 	} else {
 		if err := a.ExecutePowerShellScript(task.Script); err != nil {
-			log.Printf("[ERROR]: errors were found running PowerShell, reason: %v", err)
-			return fmt.Errorf("errors were found running PowerShell, reason: %v", err)
+			return err
 		}
 	}
 
