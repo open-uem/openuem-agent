@@ -527,18 +527,21 @@ func (a *Agent) GetUnixConfigureProfiles() {
 			log.Println("[DEBUG]: we're going to apply the configuration")
 		}
 
-		ansibleErrData, err := a.ApplyConfiguration(p.ProfileID, cfg, taskControl, taskControlPath)
+		errData, err := a.ApplyConfiguration(p.ProfileID, cfg, taskControl, taskControlPath)
 		if err != nil {
 			log.Println("[ERROR]: could not apply YAML configuration file with Ansible")
 			continue
 		}
 
 		// Netbird tasks
-		errData := ""
 		nbErrData := a.ApplyNetBirdConfiguration(p, taskControl, taskControlPath)
 		if nbErrData != nil {
 			log.Println("[ERROR]: could not apply Netbird configuration file")
-			errData = strings.Join([]string{ansibleErrData, nbErrData.Error()}, ",")
+			if errData != "" {
+				errData = strings.Join([]string{errData, nbErrData.Error()}, ",")
+			} else {
+				errData = nbErrData.Error()
+			}
 		}
 
 		// Report if application was successful or not
