@@ -678,55 +678,55 @@ func (a *Agent) ExecutePowerShellScript(script string) error {
 	if script != "" {
 		file, err := os.CreateTemp(os.TempDir(), "*.ps1")
 		if err != nil {
-			fmt.Printf("[ERROR]: could not create temp ps1 file, reason: %v", err)
-			return errors.New("could not create temp ps1 file")
+			log.Printf("[ERROR]: could not create temp ps1 file, reason: %v", err)
+			return fmt.Errorf("could not create temp ps1 file, reason: %v", err)
 		} else {
 			defer func() {
 				if err := file.Close(); err != nil {
-					fmt.Printf("[ERROR]: could not close the file, maybe it was closed earlier, reason: %v", err)
+					log.Printf("[ERROR]: could not close the file, maybe it was closed earlier, reason: %v", err)
 				}
 			}()
 			if _, err := file.Write([]byte(script)); err != nil {
-				fmt.Printf("[ERROR]: could not execute write on temp ps1 file, reason: %v", err)
-				return errors.New("could not execute write on temp ps1 file")
+				log.Printf("[ERROR]: could not execute write on temp ps1 file, reason: %v", err)
+				return fmt.Errorf("could not execute write on temp ps1 file, reason: %v", err)
 			}
 			if err := file.Close(); err != nil {
-				fmt.Printf("[ERROR]: could not close temp ps1 file, reason: %v", err)
-				return errors.New("could not close temp ps1 file")
+				log.Printf("[ERROR]: could not close temp ps1 file, reason: %v", err)
+				return fmt.Errorf("could not close temp ps1 file, reason: %v", err)
 			}
 
 			// Get current Execution-Policy
 			out, err := exec.Command("PowerShell", "-command", "Get-ExecutionPolicy -Scope CurrentUser").CombinedOutput()
 			if err != nil {
-				fmt.Printf("[ERROR]: could not get current Powershell execution policy, reason: %v, %s", err, string(out))
-				return errors.New("could not get current Powershell execution policy")
+				log.Printf("[ERROR]: could not get current Powershell execution policy, reason: %v, %s", err, string(out))
+				return fmt.Errorf("could not get current Powershell execution policy, reason: %v, %s", err, string(out))
 			}
 			currentExecutionPolicy := strings.TrimSpace(string(out))
 
 			// Set ExecutionPolicy temporarily to RemoteSigned
 			out, err = exec.Command("PowerShell", "-command", "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser").CombinedOutput()
 			if err != nil {
-				fmt.Printf("[ERROR]: could not set Powershell execution policy to RemoteSigned temporarily, reason: %v, %s", err, string(out))
-				return errors.New("could not set Powershell execution policy to RemoteSigned temporarily")
+				log.Printf("[ERROR]: could not set Powershell execution policy to RemoteSigned temporarily, reason: %v, %s", err, string(out))
+				return fmt.Errorf("could not set Powershell execution policy to RemoteSigned temporarily, reason: %v, %s", err, string(out))
 			}
 			defer func() {
 				// Revert back to previous ExecutionPolicy
 				out, err = exec.Command("PowerShell", "-command", fmt.Sprintf("Set-ExecutionPolicy %s -Scope CurrentUser", currentExecutionPolicy)).CombinedOutput()
 				if err != nil {
-					fmt.Printf("[ERROR]: could not revert the Powershell execution policy to RemoteSigned temporarily, reason: %v, %s", err, string(out))
+					log.Printf("[ERROR]: could not revert the Powershell execution policy to RemoteSigned temporarily, reason: %v, %s", err, string(out))
 				}
 			}()
 
 			if out, err := exec.Command("PowerShell", "-File", file.Name()).CombinedOutput(); err != nil {
-				fmt.Printf("[ERROR]: could not execute powershell script, reason: %v, %s", err, string(out))
-				return errors.New("could not execute powershell script")
+				log.Printf("[ERROR]: could not execute powershell script, reason: %v, %s", err, string(out))
+				return fmt.Errorf("could not execute powershell script, reason: %v, %s", err, string(out))
 			}
 			if a.Config.Debug {
 				log.Printf("[DEBUG]: a script should have run: PowerShell -File %s", file.Name())
 			}
 
 			if err := os.Remove(file.Name()); err != nil {
-				fmt.Printf("[ERROR]: could not remove temp ps1 file, reason: %v", err)
+				log.Printf("[ERROR]: could not remove temp ps1 file, reason: %v", err)
 			}
 		}
 	}
