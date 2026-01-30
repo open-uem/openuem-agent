@@ -1401,3 +1401,7 @@ func SaveDeploymentNotACK(action openuem_nats.DeployAction) error {
 
 	return nil
 }
+
+func (a *Agent) AgentRunTaskSubscribe() error {
+	return nil
+}

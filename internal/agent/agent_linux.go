@@ -194,7 +194,7 @@ func (a *Agent) StartRemoteDesktopSubscribe() error {
 		// Unmarshal data
 		var rdConn openuem_nats.VNCConnection
 		if err := json.Unmarshal(msg.Data, &rdConn); err != nil {
-			log.Println("[ERROR]: could not unmarshall Remote Desktop connection")
+			log.Println("[ERROR]: could not unmarshal Remote Desktop connection")
 			return
 		}
 
@@ -480,7 +480,7 @@ func (a *Agent) GetUnixConfigureProfiles() {
 	}
 
 	if a.Config.Debug {
-		log.Println("[DEBUG]: ansiblecfg.profile response unmarshalled")
+		log.Println("[DEBUG]: ansiblecfg.profile response unmarshaled")
 	}
 
 	if len(profiles) > 0 {
@@ -507,11 +507,13 @@ func (a *Agent) GetUnixConfigureProfiles() {
 
 	for _, p := range profiles {
 		profileReport := openuem_nats.ProfileReport{
-			AgentID: a.Config.UUID,
+			AgentID:   a.Config.UUID,
+			ProfileID: p.ProfileID,
+			Success:   true,
 		}
 		// Ansible tasks
 		if a.Config.Debug {
-			log.Println("[DEBUG]: ansiblecfg.profile to be unmarshalled")
+			log.Println("[DEBUG]: ansiblecfg.profile to be unmarshaled")
 		}
 
 		errData := ""
@@ -530,11 +532,16 @@ func (a *Agent) GetUnixConfigureProfiles() {
 			tasks, err := a.ApplyConfiguration(p.ProfileID, cfg, taskControl, taskControlPath)
 			if err != nil {
 				log.Println("[ERROR]: could not apply YAML configuration file with Ansible")
-				continue
+				profileReport.Error = err.Error()
 			}
 
-			profileReport.Error = err.Error()
-			profileReport.Success = err == nil
+			for _, t := range tasks {
+				if t.Failed {
+					profileReport.Success = false
+					break
+				}
+			}
+
 			profileReport.Tasks = tasks
 		}
 
@@ -566,7 +573,7 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *ds
 	tasks := []openuem_nats.TaskReport{}
 
 	if err := yaml.Unmarshal(config, &cfg); err != nil {
-		log.Printf("[ERROR]: could not unmarshall Ansible playbook folder %v", err)
+		log.Printf("[ERROR]: could not unmarshal Ansible configuration %v", err)
 		return nil, err
 	}
 
@@ -642,7 +649,6 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *ds
 
 	log.Println("[INFO]: received a request to apply a configuration profile")
 
-	errData := ""
 	buff := new(bytes.Buffer)
 
 	ansiblePlaybookOptions := &playbook.AnsiblePlaybookOptions{
@@ -665,41 +671,44 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *ds
 		),
 	)
 
-	err = exec.Execute(context.TODO())
-	if err != nil {
-		generalError := err
-		res, err := results.ParseJSONResultsStream(io.Reader(buff))
-		if err == nil {
-			errData = res.String()
+	executeErr := exec.Execute(context.TODO())
 
-			for _, p := range res.Plays {
-				for _, t := range p.Tasks {
-					// skip the gathering facts task
-					if t.Task.Name == "Gathering Facts" {
-						continue
+	// Generate the report
+	res, err := results.ParseJSONResultsStream(io.Reader(buff))
+	if err == nil {
+		for _, p := range res.Plays {
+			for _, t := range p.Tasks {
+				// skip the gathering facts task
+				if t.Task.Name == "Gathering Facts" {
+					continue
+				}
+
+				h, ok := t.Hosts["127.0.0.1"]
+				if ok {
+					taskReport := openuem_nats.TaskReport{
+						Name:    t.Task.Name,
+						Failed:  h.Failed,
+						EndTime: t.Task.Duration.End,
+					}
+					if h.Stdout != nil {
+						taskReport.StdOut = h.Stdout.(string)
 					}
 
-					h, ok := t.Hosts["127.0.0.1"]
-					if ok {
-						taskReport := openuem_nats.TaskReport{
-							Name:    t.Task.Name,
-							StdOut:  h.Stdout.(string),
-							StdErr:  h.Stderr.(string),
-							Failed:  h.Failed,
-							EndTime: t.Task.Duration.End,
-						}
-						tasks = append(tasks, taskReport)
+					if h.Stderr != nil {
+						taskReport.StdErr = h.Stderr.(string)
 					}
+					tasks = append(tasks, taskReport)
 				}
 			}
-
-		}
-		if errData == "" {
-			errData = generalError.Error()
 		}
 	} else {
-		log.Println("[INFO]: ansible configuration has finished successfully")
+		if executeErr != nil {
+			log.Printf("[INFO]: an error was found executing the Ansible playbook, reason: %v", err)
+			return nil, err
+		}
 	}
+
+	log.Printf("[INFO]: an Ansible playbook was run for profile %d", profileID)
 
 	return tasks, nil
 }
@@ -840,5 +849,126 @@ func SaveDeploymentNotACK(action openuem_nats.DeployAction) error {
 		return err
 	}
 
+	return nil
+}
+
+func (a *Agent) AgentRunTaskSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.ansible."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+		var profileConfig openuem_nats.ProfileConfig
+
+		// Unmarshal data
+		profileReport := openuem_nats.ProfileReport{
+			AgentID: a.Config.UUID,
+		}
+
+		if err := yaml.Unmarshal(msg.Data, &profileConfig); err != nil {
+			log.Println("[ERROR]: could not unmarshall playbook")
+			profileReport.Error = fmt.Sprintf("could not unmarshall playbook %v", err)
+
+			response, err := yaml.Marshal(profileReport)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshal response to agent.ansible request, reason: %v", err)
+				return
+			}
+
+			if err := msg.Respond(response); err != nil {
+				log.Printf("[ERROR]: could not send response to agent.ansible request, reason: %v", err)
+				return
+			}
+			return
+		}
+
+		// Run playbook
+		ansibleFolder, err := CreatePlaybooksFolder()
+		if err != nil {
+			log.Printf("[ERROR]: could not create playbooks folder %v", err)
+			profileReport.Error = fmt.Sprintf("could not create playbooks folder %v", err)
+
+			response, err := json.Marshal(profileReport)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshal response to agent.ansible request, reason: %v", err)
+				return
+			}
+
+			if err := msg.Respond(response); err != nil {
+				log.Printf("[ERROR]: could not send response to agent.ansible request, reason: %v", err)
+				return
+			}
+			return
+		}
+
+		taskControlPath := filepath.Join(ansibleFolder, "tasks.json")
+		taskControl, err := dsc.ReadTaskControlFile(taskControlPath)
+		profileReport.ProfileID = profileConfig.ProfileID
+
+		if len(profileConfig.AnsibleConfig) == 0 {
+			log.Println("[ERROR]: no ansible playbook was found in the request")
+			profileReport.Error = "no ansible playbook was found in the request"
+
+			response, err := json.Marshal(profileReport)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshal response to agent.ansible request, reason: %v", err)
+				return
+			}
+
+			if err := msg.Respond(response); err != nil {
+				log.Printf("[ERROR]: could not send response to agent.ansible request, reason: %v", err)
+				return
+			}
+			return
+		}
+
+		cfg, err := yaml.Marshal(profileConfig.AnsibleConfig)
+		if err != nil {
+			log.Printf("[ERROR]: could not marshal YAML file with Ansible configuration, reason: %v", err)
+
+			response, err := json.Marshal(profileReport)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshal response to agent.ansible request, reason: %v", err)
+				return
+			}
+
+			if err := msg.Respond(response); err != nil {
+				log.Printf("[ERROR]: could not send response to agent.ansible request, reason: %v", err)
+				return
+			}
+			return
+		}
+
+		// All is fine, we can execute the task and we'll report later
+		if err := msg.Respond(nil); err != nil {
+			log.Printf("[ERROR]: could not send the response to agent.ansible message")
+		}
+
+		tasks, err := a.ApplyConfiguration(profileConfig.ProfileID, cfg, taskControl, taskControlPath)
+		if err != nil {
+			log.Println("[ERROR]: could not apply YAML configuration file with Ansible")
+			profileReport.Error = err.Error()
+
+			// Report if application was successful or not
+			if err := a.SendProfileReport(&profileReport); err != nil {
+				log.Println("[ERROR]: could not report if profile was applied succesfully or no")
+			}
+			return
+		}
+
+		profileReport.Tasks = tasks
+		profileReport.Success = true
+		for _, t := range tasks {
+			if t.Failed {
+				profileReport.Success = false
+			}
+		}
+
+		// Report as the task has finished
+		if err := a.SendProfileReport(&profileReport); err != nil {
+			log.Println("[ERROR]: could not report if profile was applied succesfully or no")
+		}
+
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to agent ansible task execution, reason: %v", err)
+	}
 	return nil
 }
