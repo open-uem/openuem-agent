@@ -149,8 +149,7 @@ func getRustDeskUserInfo() (*RustDeskUser, error) {
 
 	// Get current user logged in, uid, gid and home user
 	username, err := runtime.GetLoggedInUser()
-	if err != nil {
-		log.Println("[ERROR]: could not get logged in user")
+	if err != nil || username == "" {
 		return nil, err
 	}
 	rdUser.Username = username
