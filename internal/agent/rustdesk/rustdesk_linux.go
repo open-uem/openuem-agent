@@ -22,14 +22,12 @@ import (
 
 func (cfg *RustDeskConfig) GetInstallationInfo() error {
 	rdUser, err := getRustDeskUserInfo()
-	if err != nil {
-		return err
+	if err == nil {
+		cfg.User = rdUser
 	}
-	cfg.User = rdUser
 
 	binPath := "/usr/bin/rustdesk"
 	flatpakGlobalPath := "/var/lib/flatpak/exports/bin/com.rustdesk.RustDesk"
-	flatpakUserPath := filepath.Join(rdUser.Home, "exports", "bin", "com.rustdesk.RustDesk")
 
 	cfg.IsFlatpak = false
 	if _, err := os.Stat(binPath); err == nil {
@@ -42,12 +40,16 @@ func (cfg *RustDeskConfig) GetInstallationInfo() error {
 			cfg.LaunchArgs = []string{"run", "com.rustdesk.RustDesk"}
 			cfg.GetIDArgs = []string{"run", "com.rustdesk.RustDesk", "--get-id"}
 		} else {
-			if _, err := os.Stat(flatpakUserPath); err == nil {
-				cfg.IsFlatpak = true
-				cfg.LaunchArgs = []string{"run", "com.rustdesk.RustDesk"}
-				cfg.GetIDArgs = []string{"run", "com.rustdesk.RustDesk", "--get-id"}
-			} else {
-				return errors.New("RustDesk not found")
+			if rdUser != nil {
+				flatpakUserPath := filepath.Join(rdUser.Home, "exports", "bin", "com.rustdesk.RustDesk")
+
+				if _, err := os.Stat(flatpakUserPath); err == nil {
+					cfg.IsFlatpak = true
+					cfg.LaunchArgs = []string{"run", "com.rustdesk.RustDesk"}
+					cfg.GetIDArgs = []string{"run", "com.rustdesk.RustDesk", "--get-id"}
+				} else {
+					return errors.New("RustDesk not found")
+				}
 			}
 		}
 	}
@@ -77,6 +79,10 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 	rootConfigPath := ""
 	configPath := ""
 	if cfg.IsFlatpak {
+		if cfg.User == nil || cfg.User.Home == "" {
+			log.Println("[ERROR]: Rustdesk was installed with Flatpak, but the agent haven't found which user is logged in, which is required to use this integration")
+			return errors.New("Rustdesk was installed with Flatpak, but the agent haven't found which user is logged in, which is required to use this integration")
+		}
 		rootConfigPath = filepath.Join(cfg.User.Home, ".var")
 		configPath = filepath.Join(rootConfigPath, "app", "com.rustdesk.RustDesk", "config", "rustdesk")
 		configFile = filepath.Join(configPath, "RustDesk2.toml")
@@ -160,16 +166,23 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 	return nil
 }
 
-func (cfg *RustDeskConfig) LaunchRustDesk() error {
-	return runtime.RunAsUserInBackground(cfg.User.Username, cfg.Binary, cfg.LaunchArgs, true)
-}
-
 func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
+	var out []byte
+	var err error
+
 	// Get RustDesk ID
-	out, err := runtime.RunAsUserWithOutput(cfg.User.Username, cfg.Binary, cfg.GetIDArgs, true)
-	if err != nil {
-		log.Printf("[ERROR]: could not get RustDesk ID, reason: %v", err)
-		return "", err
+	if cfg.User == nil || cfg.User.Username == "" {
+		out, err = exec.Command(cfg.Binary, cfg.GetIDArgs...).CombinedOutput()
+		if err != nil {
+			log.Printf("[ERROR]: could not get RustDesk ID, reason: %v", err)
+			return "", err
+		}
+	} else {
+		out, err = runtime.RunAsUserWithOutput(cfg.User.Username, cfg.Binary, cfg.GetIDArgs, true)
+		if err != nil {
+			log.Printf("[ERROR]: could not get RustDesk ID, reason: %v", err)
+			return "", err
+		}
 	}
 
 	id := strings.TrimSpace(string(out))
@@ -195,7 +208,6 @@ func getRustDeskUserInfo() (*RustDeskUser, error) {
 
 	u, err := user.Lookup(username)
 	if err != nil {
-		log.Println("[ERROR]: could not find user information")
 		return nil, err
 	}
 	rdUser.Home = u.HomeDir
@@ -341,6 +353,7 @@ func (cfg *RustDeskConfig) SetRustDeskPassword(config []byte) error {
 			return err
 		}
 	} else {
+
 		rootConfigPath := filepath.Join(cfg.User.Home, ".var")
 		configPath := filepath.Join(rootConfigPath, "app", "com.rustdesk.RustDesk", "config", "rustdesk")
 		configFile := filepath.Join(configPath, "RustDesk.toml")

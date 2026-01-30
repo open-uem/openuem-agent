@@ -132,10 +132,6 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 	return nil
 }
 
-func (cfg *RustDeskConfig) LaunchRustDesk() error {
-	return runtime.RunAsUserInBackground(cfg.Binary, cfg.LaunchArgs)
-}
-
 func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
 	// Get RustDesk ID
 	out, err := runtime.RunAsUserWithOutput(cfg.Binary, cfg.GetIDArgs)
