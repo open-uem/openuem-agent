@@ -139,7 +139,7 @@ func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
 
 	// Get RustDesk ID
 	username, err := report.GetLoggedOnUsername()
-	if err == nil || username == "" {
+	if err != nil || username == "" {
 		out, err = exec.Command(cfg.Binary, cfg.GetIDArgs...).CombinedOutput()
 		if err != nil {
 			log.Printf("[ERROR]: could not get RustDesk ID, reason: %v", err)
@@ -170,7 +170,7 @@ func (cfg *RustDeskConfig) KillRustDeskProcess() error {
 
 	// Get RustDesk ID
 	username, err := report.GetLoggedOnUsername()
-	if err == nil || username == "" {
+	if err != nil || username == "" {
 		out, err := exec.Command(cfg.Binary, cfg.GetIDArgs...).CombinedOutput()
 		if err != nil {
 			if !strings.Contains(err.Error(), "128") && !strings.Contains(err.Error(), "255") {
