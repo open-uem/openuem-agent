@@ -902,16 +902,9 @@ func (a *Agent) RemovePrinter() error {
 	return nil
 }
 
-func (a *Agent) SendProfileApplicationReport(profileID int, agentID string, success bool, errData string) error {
-	// Notify worker if application was succesful or not
-	deployment := openuem_nats.WingetCfgReport{
-		ProfileID: profileID,
-		AgentID:   agentID,
-		Success:   success,
-		Error:     errData,
-	}
-
-	data, err := json.Marshal(deployment)
+func (a *Agent) SendProfileReport(report *openuem_nats.ProfileReport) error {
+	// Send report for profile
+	data, err := json.Marshal(report)
 	if err != nil {
 		return err
 	}

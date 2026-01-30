@@ -545,7 +545,16 @@ func (a *Agent) GetUnixConfigureProfiles() {
 		}
 
 		// Report if application was successful or not
-		if err := a.SendProfileApplicationReport(p.ProfileID, a.Config.UUID, errData == "", errData); err != nil {
+
+		profileReport := openuem_nats.ProfileReport{
+			ProfileID: p.ProfileID,
+			AgentID:   a.Config.UUID,
+			Success:   errData == "",
+			Error:     errData,
+			Tasks:     []openuem_nats.TaskReport{},
+		}
+
+		if err := a.SendProfileReport(&profileReport); err != nil {
 			log.Println("[ERROR]: could not report if profile was applied succesfully or no")
 		}
 	}

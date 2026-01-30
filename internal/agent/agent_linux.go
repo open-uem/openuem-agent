@@ -506,7 +506,9 @@ func (a *Agent) GetUnixConfigureProfiles() {
 	}
 
 	for _, p := range profiles {
-
+		profileReport := openuem_nats.ProfileReport{
+			AgentID: a.Config.UUID,
+		}
 		// Ansible tasks
 		if a.Config.Debug {
 			log.Println("[DEBUG]: ansiblecfg.profile to be unmarshalled")
@@ -525,13 +527,15 @@ func (a *Agent) GetUnixConfigureProfiles() {
 				log.Println("[DEBUG]: we're going to apply the configuration")
 			}
 
-			ansibleErrData, err := a.ApplyConfiguration(p.ProfileID, cfg, taskControl, taskControlPath)
+			tasks, err := a.ApplyConfiguration(p.ProfileID, cfg, taskControl, taskControlPath)
 			if err != nil {
 				log.Println("[ERROR]: could not apply YAML configuration file with Ansible")
 				continue
 			}
 
-			errData = ansibleErrData
+			profileReport.Error = err.Error()
+			profileReport.Success = err == nil
+			profileReport.Tasks = tasks
 		}
 
 		// Netbird tasks
@@ -545,28 +549,31 @@ func (a *Agent) GetUnixConfigureProfiles() {
 					errData = nbErrData.Error()
 				}
 			}
+			profileReport.Error = errData
 		}
 
 		// Report if application was successful or not
-		if err := a.SendProfileApplicationReport(p.ProfileID, a.Config.UUID, errData == "", errData); err != nil {
+		if err := a.SendProfileReport(&profileReport); err != nil {
 			log.Println("[ERROR]: could not report if profile was applied succesfully or no")
 		}
 
 	}
 }
 
-func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *dsc.TaskControl, taskControlPath string) (string, error) {
+func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *dsc.TaskControl, taskControlPath string) ([]openuem_nats.TaskReport, error) {
 	var cfg []ansiblecfg.AnsiblePlaybook
+
+	tasks := []openuem_nats.TaskReport{}
 
 	if err := yaml.Unmarshal(config, &cfg); err != nil {
 		log.Printf("[ERROR]: could not unmarshall Ansible playbook folder %v", err)
-		return "", err
+		return nil, err
 	}
 
 	ansibleFolder, err := CreatePlaybooksFolder()
 	if err != nil {
 		log.Printf("[ERROR]: could not create playbooks folder %v", err)
-		return "", err
+		return nil, err
 	}
 
 	ID := strconv.Itoa(profileID)
@@ -585,13 +592,13 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *ds
 				taskControl.ProfilesRunning[ID] = time.Now()
 			} else {
 				log.Printf("[INFO]: previous profile %s is marked as running, not relaunching, ", ID)
-				return "", nil
+				return nil, nil
 			}
 		}
 	}
 	if err := dsc.SaveTaskControl(taskControlPath, taskControl); err != nil {
 		log.Printf("[ERROR]: could not save new profile %s running, reason: %v", ID, err)
-		return "", err
+		return nil, err
 	}
 
 	defer func() {
@@ -605,24 +612,24 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *ds
 	pbFile, err := os.CreateTemp(ansibleFolder, "*.yml")
 	if err != nil {
 		log.Printf("[ERROR]: could not create playbook file %v", err)
-		return "", err
+		return nil, err
 	}
 
 	_, err = pbFile.WriteString("---\n\n")
 	if err != nil {
 		log.Printf("[ERROR]: could not write start of playbook to file %v", err)
-		return "", err
+		return nil, err
 	}
 
 	_, err = pbFile.Write(config)
 	if err != nil {
 		log.Printf("[ERROR]: could not write playbook file %v", err)
-		return "", err
+		return nil, err
 	}
 
 	if err := pbFile.Close(); err != nil {
 		log.Printf("[ERROR]: could not close playbook file %v", err)
-		return "", err
+		return nil, err
 	}
 
 	if !a.Config.Debug {
@@ -664,6 +671,28 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *ds
 		res, err := results.ParseJSONResultsStream(io.Reader(buff))
 		if err == nil {
 			errData = res.String()
+
+			for _, p := range res.Plays {
+				for _, t := range p.Tasks {
+					// skip the gathering facts task
+					if t.Task.Name == "Gathering Facts" {
+						continue
+					}
+
+					h, ok := t.Hosts["127.0.0.1"]
+					if ok {
+						taskReport := openuem_nats.TaskReport{
+							Name:    t.Task.Name,
+							StdOut:  h.Stdout.(string),
+							StdErr:  h.Stderr.(string),
+							Failed:  h.Failed,
+							EndTime: t.Task.Duration.End,
+						}
+						tasks = append(tasks, taskReport)
+					}
+				}
+			}
+
 		}
 		if errData == "" {
 			errData = generalError.Error()
@@ -672,7 +701,7 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *ds
 		log.Println("[INFO]: ansible configuration has finished successfully")
 	}
 
-	return errData, nil
+	return tasks, nil
 }
 
 func CreatePlaybooksFolder() (string, error) {
