@@ -267,6 +267,10 @@ func (cfg *RustDeskConfig) ConfigRollBack() error {
 
 	configFile := ""
 	if cfg.IsFlatpak {
+		if rdUser == nil || cfg.User.Home == "" {
+			log.Println("[ERROR]: Rustdesk was installed with Flatpak, but the agent haven't found which user is logged in, which is required to use this integration")
+			return errors.New("Rustdesk was installed with Flatpak, but the agent haven't found which user is logged in, which is required to use this integration")
+		}
 		configPath := filepath.Join(rdUser.Home, ".var", "app", "com.rustdesk.RustDesk", "config", "rustdesk")
 		configFile = filepath.Join(configPath, "RustDesk.toml")
 	} else {
