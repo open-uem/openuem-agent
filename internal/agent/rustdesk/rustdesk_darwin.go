@@ -86,7 +86,12 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 	}
 
 	// Restart RustDeskService
-	if err := RestartRustDeskService(cfg.User.Username); err != nil {
+	username := ""
+	if cfg.User != nil && cfg.User.Username != "" {
+		username = cfg.User.Username
+	}
+
+	if err := RestartRustDeskService(username); err != nil {
 		log.Printf("[ERROR]: could not start RustDesk service, reason: %v", err)
 		return err
 	}
@@ -96,10 +101,9 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 
 func (cfg *RustDeskConfig) GetInstallationInfo() error {
 	rdUser, err := getRustDeskUserInfo()
-	if err != nil {
-		return err
+	if err == nil {
+		cfg.User = rdUser
 	}
-	cfg.User = rdUser
 
 	binPath := "/Applications/RustDesk.app/Contents/MacOS/RustDesk"
 
@@ -111,16 +115,23 @@ func (cfg *RustDeskConfig) GetInstallationInfo() error {
 	return nil
 }
 
-func (cfg *RustDeskConfig) LaunchRustDesk() error {
-	return runtime.RunAsUserInBackground(cfg.User.Username, cfg.Binary, cfg.LaunchArgs, true)
-}
-
 func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
+	var out []byte
+	var err error
+
 	// Get RustDesk ID
-	out, err := runtime.RunAsUserWithOutput(cfg.User.Username, cfg.Binary, cfg.GetIDArgs, true)
-	if err != nil {
-		log.Printf("[ERROR]: could not get RustDesk ID, reason: %v", err)
-		return "", err
+	if cfg.User == nil || cfg.User.Username == "" {
+		out, err = exec.Command(cfg.Binary, cfg.GetIDArgs...).CombinedOutput()
+		if err != nil {
+			log.Printf("[ERROR]: could not get RustDesk ID, reason: %v", err)
+			return "", err
+		}
+	} else {
+		out, err = runtime.RunAsUserWithOutput(cfg.User.Username, cfg.Binary, cfg.GetIDArgs, true)
+		if err != nil {
+			log.Printf("[ERROR]: could not get RustDesk ID, reason: %v", err)
+			return "", err
+		}
 	}
 
 	id := strings.TrimSpace(string(out))
@@ -138,8 +149,7 @@ func getRustDeskUserInfo() (*RustDeskUser, error) {
 
 	// Get current user logged in, uid, gid and home user
 	username, err := runtime.GetLoggedInUser()
-	if err != nil {
-		log.Println("[ERROR]: could not get logged in user")
+	if err != nil || username == "" {
 		return nil, err
 	}
 	rdUser.Username = username
@@ -186,7 +196,12 @@ func (cfg *RustDeskConfig) KillRustDeskProcess() error {
 	}
 
 	// Restart RustDeskService
-	if err := RestartRustDeskService(cfg.User.Username); err != nil {
+	username := ""
+	if cfg.User != nil && cfg.User.Username != "" {
+		username = cfg.User.Username
+	}
+
+	if err := RestartRustDeskService(username); err != nil {
 		log.Printf("[ERROR]: could not start RustDesk service, reason: %v", err)
 		return err
 	}
@@ -217,7 +232,12 @@ func (cfg *RustDeskConfig) ConfigRollBack() error {
 	}
 
 	// Restart RustDeskService
-	if err := RestartRustDeskService(cfg.User.Username); err != nil {
+	username := ""
+	if cfg.User != nil && cfg.User.Username != "" {
+		username = cfg.User.Username
+	}
+
+	if err := RestartRustDeskService(username); err != nil {
 		log.Printf("[ERROR]: could not start RustDesk service, reason: %v", err)
 		return err
 	}
@@ -234,12 +254,14 @@ func RestartRustDeskService(username string) error {
 		return err
 	}
 
-	if err := StopRustDeskService(username); err != nil {
-		return err
-	}
+	if username != "" {
+		if err := StopRustDeskService(username); err != nil {
+			return err
+		}
 
-	if err := StartRustDeskService(username); err != nil {
-		return err
+		if err := StartRustDeskService(username); err != nil {
+			return err
+		}
 	}
 
 	return nil
