@@ -142,6 +142,8 @@ func getMacOSName(version string) string {
 	}
 
 	switch versionNumbers[0] {
+	case "26":
+		return "Tahoe"
 	case "15":
 		return "Sequoia"
 	case "14":
