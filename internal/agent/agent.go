@@ -787,9 +787,10 @@ func (a *Agent) GetRemoteConfig() error {
 	}
 
 	remoteConfigMsg := openuem_nats.RemoteConfigRequest{
-		AgentID:  a.Config.UUID,
-		TenantID: a.Config.TenantID,
-		SiteID:   a.Config.SiteID,
+		AgentID:         a.Config.UUID,
+		TenantID:        a.Config.TenantID,
+		SiteID:          a.Config.SiteID,
+		EnrollmentToken: a.Config.EnrollmentToken,
 	}
 
 	data, err := json.Marshal(remoteConfigMsg)

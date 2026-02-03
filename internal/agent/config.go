@@ -33,6 +33,7 @@ type Config struct {
 	RemoteAssistanceDisabled bool
 	SiteID                   string
 	TenantID                 string
+	EnrollmentToken          string
 	ScriptsRun               string
 }
 
@@ -247,6 +248,11 @@ func (a *Agent) ReadConfig() error {
 	key, err = cfg.Section("Agent").GetKey("SiteID")
 	if err == nil {
 		a.Config.SiteID = key.String()
+	}
+
+	key, err = cfg.Section("Agent").GetKey("EnrollmentToken")
+	if err == nil {
+		a.Config.EnrollmentToken = key.String()
 	}
 
 	key, err = cfg.Section("Agent").GetKey("ScriptsRun")
