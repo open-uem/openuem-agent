@@ -103,7 +103,7 @@ func (a *Agent) Start() {
 	}
 
 	// Try to connect to NATS server and start a reconnect job if failed
-	a.NATSConnection, err = openuem_nats.ConnectWithNATS(a.Config.NATSServers, a.Config.AgentCert, a.Config.AgentKey, a.Config.CACert)
+	a.NATSConnection, err = openuem_nats.ConnectWithNATS(a.Config.NATSServers, a.Config.AgentCert, a.Config.AgentKey, a.Config.CACert, a.Config.WebSocketPort)
 	if err != nil {
 		log.Printf("[ERROR]: %v", err)
 		a.startNATSConnectJob()
@@ -159,7 +159,7 @@ func (a *Agent) startNATSConnectJob() error {
 		),
 		gocron.NewTask(
 			func() {
-				a.NATSConnection, err = openuem_nats.ConnectWithNATS(a.Config.NATSServers, a.Config.AgentCert, a.Config.AgentKey, a.Config.CACert)
+				a.NATSConnection, err = openuem_nats.ConnectWithNATS(a.Config.NATSServers, a.Config.AgentCert, a.Config.AgentKey, a.Config.CACert, a.Config.WebSocketPort)
 				if err != nil {
 					return
 				}
