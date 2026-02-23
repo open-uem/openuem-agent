@@ -15,6 +15,7 @@ import (
 
 	"github.com/open-uem/nats"
 	openuem_nats "github.com/open-uem/nats"
+	"github.com/open-uem/openuem-agent/internal/commands/report"
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 	openuem_utils "github.com/open-uem/utils"
 	"github.com/pelletier/go-toml/v2"
@@ -132,16 +133,24 @@ func (cfg *RustDeskConfig) Configure(config []byte) error {
 	return nil
 }
 
-func (cfg *RustDeskConfig) LaunchRustDesk() error {
-	return runtime.RunAsUserInBackground(cfg.Binary, cfg.LaunchArgs)
-}
-
 func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
+	var out []byte
+	var err error
+
 	// Get RustDesk ID
-	out, err := runtime.RunAsUserWithOutput(cfg.Binary, cfg.GetIDArgs)
-	if err != nil {
-		log.Printf("[ERROR]: could not get RustDesk ID, reason: %v", err)
-		return "", err
+	username, err := report.GetLoggedOnUsername()
+	if err != nil || username == "" {
+		out, err = exec.Command(cfg.Binary, cfg.GetIDArgs...).CombinedOutput()
+		if err != nil {
+			log.Printf("[ERROR]: could not get RustDesk ID, reason: %v", err)
+			return "", err
+		}
+	} else {
+		out, err = runtime.RunAsUserWithOutput(cfg.Binary, cfg.GetIDArgs)
+		if err != nil {
+			log.Printf("[ERROR]: could not get RustDesk ID, reason: %v", err)
+			return "", err
+		}
 	}
 
 	id := strings.TrimSpace(string(out))
@@ -155,11 +164,26 @@ func (cfg *RustDeskConfig) GetRustDeskID() (string, error) {
 }
 
 func (cfg *RustDeskConfig) KillRustDeskProcess() error {
+	var err error
+
 	args := []string{"/F", "/T", "/IM", "rustdesk.exe"}
-	if err := runtime.RunAsUser("taskkill", args); err != nil {
-		if !strings.Contains(err.Error(), "128") && !strings.Contains(err.Error(), "255") {
-			log.Printf("[WARN]: could not kill RustDesk app, reason: %v", err)
-			return fmt.Errorf("[WARN]: could not kill RustDesk app, reason: %v", err)
+
+	// Get RustDesk ID
+	username, err := report.GetLoggedOnUsername()
+	if err != nil || username == "" {
+		out, err := exec.Command(cfg.Binary, cfg.GetIDArgs...).CombinedOutput()
+		if err != nil {
+			if !strings.Contains(err.Error(), "128") && !strings.Contains(err.Error(), "255") {
+				log.Printf("[WARN]: could not kill RustDesk app, reason: %s, %v", string(out), err)
+				return fmt.Errorf("[WARN]: could not kill RustDesk app, reason: %s, %v", string(out), err)
+			}
+		}
+	} else {
+		if err := runtime.RunAsUser("taskkill", args); err != nil {
+			if !strings.Contains(err.Error(), "128") && !strings.Contains(err.Error(), "255") {
+				log.Printf("[WARN]: could not kill RustDesk app, reason: %v", err)
+				return fmt.Errorf("[WARN]: could not kill RustDesk app, reason: %v", err)
+			}
 		}
 	}
 	return nil
