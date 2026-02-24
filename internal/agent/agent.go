@@ -735,6 +735,11 @@ func (a *Agent) SubscribeToNATSSubjects() {
 		log.Printf("[ERROR]: %v\n", err)
 	}
 
+	err = a.RunProfileSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
 	log.Println("[INFO]: Subscribed to NATS subjects!")
 }
 

@@ -4,37 +4,38 @@ package dsc
 
 import (
 	"bytes"
-	"errors"
 	"log"
 	"os/exec"
-	"strings"
 
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 	"golang.org/x/sys/windows"
 )
 
-func RunTaskWithLowPriority(command string) error {
-	var out bytes.Buffer
+func RunTaskWithLowPriority(command string) (string, string, error) {
+	var stdOut bytes.Buffer
+	var stdErr bytes.Buffer
 
 	cmd := exec.Command("PowerShell", "-command", command)
-	cmd.Stderr = &out
+	cmd.Stderr = &stdErr
+	cmd.Stdout = &stdOut
 
 	err := cmd.Start()
 	if err != nil {
-		return err
+		return "", "", err
 	}
 
 	err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
 	if err != nil {
 		log.Println("[ERROR]: could not change process priority")
-		return err
+		return "", "", err
 	}
 
 	err = cmd.Wait()
 	if err != nil {
-		errMessages := strings.Split(out.String(), ".")
-		return errors.New(errMessages[0])
+		if _, ok := err.(*exec.ExitError); !ok {
+			return "", "", err
+		}
 	}
 
-	return nil
+	return stdOut.String(), stdErr.String(), nil
 }

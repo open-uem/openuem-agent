@@ -447,8 +447,6 @@ func (a *Agent) GetUnixConfigureProfiles() {
 		log.Println("[DEBUG]: running task Ansible profiles job")
 	}
 
-	profiles := []openuem_nats.ProfileConfig{}
-
 	profileRequest := openuem_nats.CfgProfiles{
 		AgentID: a.Config.UUID,
 	}
@@ -474,6 +472,12 @@ func (a *Agent) GetUnixConfigureProfiles() {
 			return
 		}
 	}
+
+	a.ProcessProfileResponse(msg, false)
+}
+
+func (a *Agent) ProcessProfileResponse(msg *nats.Msg, force bool) {
+	profiles := []openuem_nats.ProfileConfig{}
 
 	if a.Config.Debug {
 		log.Println("[DEBUG]: ansiblecfg.profile request sent")
@@ -869,6 +873,26 @@ func SaveDeploymentNotACK(action openuem_nats.DeployAction) error {
 		return err
 	}
 
+	return nil
+}
+
+func (a *Agent) RunProfileSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.runprofile."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+		msg, err := a.NATSConnection.Request("ansiblecfg.profiles", msg.Data, 5*time.Minute)
+		if err != nil {
+			log.Printf("[ERROR]: could not send request to agent worker, reason: %v", err)
+			if err := a.Config.SetRestartRequiredFlag(); err != nil {
+				log.Printf("[ERROR]: could not set restart required flag, reason: %v\n", err)
+				return
+			}
+		}
+
+		a.ProcessProfileResponse(msg, true)
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to agent run profile subject, reason: %v", err)
+	}
 	return nil
 }
 

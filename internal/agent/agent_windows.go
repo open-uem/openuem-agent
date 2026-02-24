@@ -3,6 +3,7 @@
 package agent
 
 import (
+	"bytes"
 	"crypto/x509"
 	"encoding/json"
 	"errors"
@@ -315,8 +316,6 @@ func (a *Agent) GetWingetConfigureProfiles() {
 		log.Println("[DEBUG]: running task WinGet profiles job")
 	}
 
-	profiles := []openuem_nats.ProfileConfig{}
-
 	profileRequest := openuem_nats.CfgProfiles{
 		AgentID: a.Config.UUID,
 	}
@@ -343,6 +342,12 @@ func (a *Agent) GetWingetConfigureProfiles() {
 		}
 	}
 
+	a.ProcessProfileResponse(msg, false)
+}
+
+func (a *Agent) ProcessProfileResponse(msg *nats.Msg, force bool) {
+	profiles := []openuem_nats.ProfileConfig{}
+
 	if a.Config.Debug {
 		log.Println("[DEBUG]: wingetcfg.profile request sent")
 		if msg.Data != nil {
@@ -359,6 +364,12 @@ func (a *Agent) GetWingetConfigureProfiles() {
 	}
 
 	for _, p := range profiles {
+		profileReport := openuem_nats.ProfileReport{
+			AgentID:   a.Config.UUID,
+			ProfileID: p.ProfileID,
+			Success:   true,
+		}
+
 		if a.Config.Debug {
 			log.Println("[DEBUG]: wingetcfg.profile to be unmarshalled")
 		}
@@ -387,43 +398,50 @@ func (a *Agent) GetWingetConfigureProfiles() {
 			return
 		}
 
-		errData, err := a.ApplyConfiguration(p.ProfileID, cfg, p.Exclusions, p.Deployments, taskControl, taskControlPath)
+		errData := ""
+
+		taskReports, err := a.ApplyConfiguration(p.ProfileID, cfg, p.Exclusions, p.Deployments, taskControl, taskControlPath, force)
 		if err != nil {
-			log.Printf("[ERROR]: could not apply YAML configuration file with winget, reason: %v", err)
-			continue
+			log.Println("[ERROR]: could not apply profile")
+			profileReport.Error = err.Error()
 		}
 
-		// Netbird tasks
-		nbErrData := a.ApplyNetBirdConfiguration(p, taskControl, taskControlPath)
-		if nbErrData != nil {
-			log.Println("[ERROR]: could not apply Netbird configuration file")
-			if errData != "" {
-				errData = strings.Join([]string{errData, nbErrData.Error()}, ",")
-			} else {
-				errData = nbErrData.Error()
+		profileReport.Tasks = taskReports
+		for _, t := range taskReports {
+			if t.Failed {
+				profileReport.Success = false
+				break
 			}
 		}
 
-		profileReport := openuem_nats.ProfileReport{
-			ProfileID: p.ProfileID,
-			AgentID:   a.Config.UUID,
-			Success:   errData == "",
-			Error:     errData,
-			Tasks:     []openuem_nats.TaskReport{},
+		// Netbird tasks
+		if len(p.NetBirdConfig) > 0 {
+			nbErrData := a.ApplyNetBirdConfiguration(p, taskControl, taskControlPath)
+			if nbErrData != nil {
+				log.Println("[ERROR]: could not apply Netbird configuration file")
+				if errData != "" {
+					errData = strings.Join([]string{errData, nbErrData.Error()}, ",")
+				} else {
+					errData = nbErrData.Error()
+				}
+			}
+			profileReport.Error = errData
 		}
+
 		// Report if application was successful or not
 		if err := a.SendProfileReport(&profileReport); err != nil {
 			log.Println("[ERROR]: could not report if profile was applied succesfully or no")
 		}
 	}
+
 }
 
-func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, deployments []string, taskControl *dsc.TaskControl, taskControlPath string) (string, error) {
+func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, deployments []string, taskControl *dsc.TaskControl, taskControlPath string, force bool) ([]openuem_nats.TaskReport, error) {
 	var cfg wingetcfg.WinGetCfg
 
 	// Unmarshall profile
 	if err := yaml.Unmarshal(config, &cfg); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	ID := strconv.Itoa(profileID)
@@ -442,13 +460,13 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 				taskControl.ProfilesRunning[ID] = time.Now()
 			} else {
 				log.Printf("[INFO]: previous profile %s is marked as running, not relaunching, ", ID)
-				return "", nil
+				return nil, nil
 			}
 		}
 	}
 	if err := dsc.SaveTaskControl(taskControlPath, taskControl); err != nil {
 		log.Printf("[ERROR]: could not save new profile %s running, reason: %v", ID, err)
-		return "", err
+		return nil, err
 	}
 
 	defer func() {
@@ -460,13 +478,7 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, exclusions, dep
 	}()
 
 	// Run tasks defined in the profile and report if profile was applied successfully
-	errProfile := a.RunTasks(cfg, profileID, taskControlPath, taskControl)
-	errData := ""
-	if errProfile != nil {
-		errData = errProfile.Error()
-	}
-
-	return errData, nil
+	return a.RunTasks(cfg, profileID, taskControlPath, taskControl, force)
 }
 
 func (a *Agent) CheckIfCfgPackagesInstalled(cfg wingetcfg.WinGetCfg, installed string) {
@@ -680,12 +692,15 @@ func (a *Agent) GetServerCertificate() {
 	}
 }
 
-func (a *Agent) ExecutePowerShellScript(script string) error {
+func (a *Agent) ExecutePowerShellScript(script string) (string, string, error) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
 	if script != "" {
 		file, err := os.CreateTemp(os.TempDir(), "*.ps1")
 		if err != nil {
 			log.Printf("[ERROR]: could not create temp ps1 file, reason: %v", err)
-			return fmt.Errorf("could not create temp ps1 file, reason: %v", err)
+			return "", "", fmt.Errorf("could not create temp ps1 file, reason: %v", err)
 		} else {
 			defer func() {
 				if err := file.Close(); err != nil {
@@ -694,18 +709,18 @@ func (a *Agent) ExecutePowerShellScript(script string) error {
 			}()
 			if _, err := file.Write([]byte(script)); err != nil {
 				log.Printf("[ERROR]: could not execute write on temp ps1 file, reason: %v", err)
-				return fmt.Errorf("could not execute write on temp ps1 file, reason: %v", err)
+				return "", "", fmt.Errorf("could not execute write on temp ps1 file, reason: %v", err)
 			}
 			if err := file.Close(); err != nil {
 				log.Printf("[ERROR]: could not close temp ps1 file, reason: %v", err)
-				return fmt.Errorf("could not close temp ps1 file, reason: %v", err)
+				return "", "", fmt.Errorf("could not close temp ps1 file, reason: %v", err)
 			}
 
 			// Get current Execution-Policy
 			out, err := exec.Command("PowerShell", "-command", "Get-ExecutionPolicy -Scope CurrentUser").CombinedOutput()
 			if err != nil {
 				log.Printf("[ERROR]: could not get current Powershell execution policy, reason: %v, %s", err, string(out))
-				return fmt.Errorf("could not get current Powershell execution policy, reason: %v, %s", err, string(out))
+				return "", "", fmt.Errorf("could not get current Powershell execution policy, reason: %v, %s", err, string(out))
 			}
 			currentExecutionPolicy := strings.TrimSpace(string(out))
 
@@ -713,7 +728,7 @@ func (a *Agent) ExecutePowerShellScript(script string) error {
 			out, err = exec.Command("PowerShell", "-command", "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser").CombinedOutput()
 			if err != nil {
 				log.Printf("[ERROR]: could not set Powershell execution policy to RemoteSigned temporarily, reason: %v, %s", err, string(out))
-				return fmt.Errorf("could not set Powershell execution policy to RemoteSigned temporarily, reason: %v, %s", err, string(out))
+				return "", "", fmt.Errorf("could not set Powershell execution policy to RemoteSigned temporarily, reason: %v, %s", err, string(out))
 			}
 			defer func() {
 				// Revert back to previous ExecutionPolicy
@@ -723,10 +738,15 @@ func (a *Agent) ExecutePowerShellScript(script string) error {
 				}
 			}()
 
-			if out, err := exec.Command("PowerShell", "-File", file.Name()).CombinedOutput(); err != nil {
+			// Execute script
+			cmd := exec.Command("PowerShell", "-File", file.Name())
+			cmd.Stderr = &stderr
+			cmd.Stdout = &stdout
+			if err := cmd.Run(); err != nil {
 				log.Printf("[ERROR]: could not execute powershell script, reason: %v, %s", err, string(out))
-				return fmt.Errorf("could not execute powershell script, reason: %v, %s", err, string(out))
+				return "", "", fmt.Errorf("could not execute powershell script, reason: %v, %s", err, string(out))
 			}
+
 			if a.Config.Debug {
 				log.Printf("[DEBUG]: a script should have run: PowerShell -File %s", file.Name())
 			}
@@ -734,60 +754,89 @@ func (a *Agent) ExecutePowerShellScript(script string) error {
 			if err := os.Remove(file.Name()); err != nil {
 				log.Printf("[ERROR]: could not remove temp ps1 file, reason: %v", err)
 			}
+
+			return stdout.String(), stderr.String(), nil
 		}
 	}
 
-	return nil
+	return "", "", nil
 }
 
-func (a *Agent) RunTasks(cfg wingetcfg.WinGetCfg, profileID int, taskControlPath string, taskControl *dsc.TaskControl) error {
-	errData := ""
+func (a *Agent) RunTasks(cfg wingetcfg.WinGetCfg, profileID int, taskControlPath string, taskControl *dsc.TaskControl, force bool) ([]openuem_nats.TaskReport, error) {
+	taskReports := []openuem_nats.TaskReport{}
+
 	for _, resource := range cfg.Properties.Resources {
-		var err error
 		switch resource.Resource {
 		case wingetcfg.OpenUEMPowershell:
-			err = a.PowershellTask(resource, taskControlPath, taskControl)
-		case wingetcfg.WinGetLocalGroupResource:
-			err = a.LocalGroupTask(resource, taskControlPath, taskControl)
-		case wingetcfg.WinGetLocalUserResource:
-			err = a.LocalUserTask(resource, taskControlPath, taskControl)
-		case wingetcfg.WinGetMSIPackageResource:
-			err = a.MSIPackageTask(resource, taskControlPath, taskControl)
-		case wingetcfg.WinGetPackageResource:
-			err = a.PackageManagementTask(resource, taskControlPath, taskControl)
-		case wingetcfg.WinGetRegistryResource:
-			err = a.RegistryTask(resource, taskControlPath, taskControl)
-		}
+			taskReport, err := a.PowershellTask(resource, taskControlPath, taskControl, force)
+			if err != nil {
+				return nil, err
+			}
 
-		if err != nil {
-			when := time.Now().Local().Format(time.RFC822)
-			if errData != "" {
-				errData += fmt.Sprintf(", [%s] %s", when, err.Error())
-			} else {
-				errData = fmt.Sprintf("[%s] %s", when, err.Error())
+			if taskReport != nil {
+				taskReports = append(taskReports, *taskReport)
+			}
+		case wingetcfg.WinGetLocalGroupResource:
+			taskReport, err := a.LocalGroupTask(resource, taskControlPath, taskControl, force)
+			if err != nil {
+				return nil, err
+			}
+			if taskReport != nil {
+				taskReports = append(taskReports, *taskReport)
+			}
+		case wingetcfg.WinGetLocalUserResource:
+			taskReport, err := a.LocalUserTask(resource, taskControlPath, taskControl, force)
+			if err != nil {
+				return nil, err
+			}
+
+			if taskReport != nil {
+				taskReports = append(taskReports, *taskReport)
+			}
+		case wingetcfg.WinGetMSIPackageResource:
+			taskReport, err := a.MSIPackageTask(resource, taskControlPath, taskControl, force)
+			if err != nil {
+				return nil, err
+			}
+
+			if taskReport != nil {
+				taskReports = append(taskReports, *taskReport)
+			}
+		case wingetcfg.WinGetPackageResource:
+			taskReport, err := a.PackageManagementTask(resource, taskControlPath, taskControl, force)
+			if err != nil {
+				return nil, err
+			}
+
+			if taskReport != nil {
+				taskReports = append(taskReports, *taskReport)
+			}
+		case wingetcfg.WinGetRegistryResource:
+			taskReport, err := a.RegistryTask(resource, taskControlPath, taskControl, force)
+			if err != nil {
+				return nil, err
+			}
+
+			if taskReport != nil {
+				taskReports = append(taskReports, *taskReport)
 			}
 		}
 	}
 
-	if errData != "" {
-		return errors.New(errData)
-	}
-
-	return nil
+	return taskReports, nil
 }
 
-func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl) error {
-
+func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl, force bool) (*openuem_nats.TaskReport, error) {
 	packageName := r.Directives.Description
 
 	ensure, err := getEnsureKey(r)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	key, ok := r.Settings["id"]
 	if !ok {
-		return errors.New("could not find the id key for a package management task")
+		return nil, errors.New("could not find the id key for a package management task")
 	}
 	packageID := key.(string)
 
@@ -812,12 +861,12 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 			if ok {
 				hasPassed24h := time.Now().After(timeExecuted.Add(24 * time.Hour))
 				if !hasPassed24h {
-					return nil
+					return nil, nil
 				}
 			}
 		}
 
-		if !taskAlreadySuccessful {
+		if !taskAlreadySuccessful || force {
 			if err := deploy.InstallPackage(packageID, version, keepUpdated, a.Config.Debug); err != nil {
 				if keepUpdated && strings.Contains(err.Error(), "0x8a15002b") {
 					if t.Executed == nil {
@@ -827,18 +876,24 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 					} else {
 						t.Executed[r.ID] = time.Now()
 					}
-					return dsc.SaveTaskControl(taskControlPath, t)
+					if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+						log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+						return nil, err
+					}
 				}
-				return err
+				return nil, err
 			}
 			if err := a.SendWinGetCfgDeploymentReport(packageID, packageName, "install"); err != nil {
 				log.Printf("[ERROR]: could not send WinGetCfg deployment report, reason: %v", err)
-				return err
+				return nil, err
 			}
 
 			// if package must not be kept updated, mark the task as successful
 			if !keepUpdated {
-				return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+				if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+					log.Printf("[INFO]: could not set task to install %s as successful in JSON control file", packageName)
+					return nil, err
+				}
 			}
 		}
 	} else {
@@ -846,84 +901,110 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 
 		if !taskAlreadySuccessful {
 			if err := deploy.UninstallPackage(packageID); err != nil {
-				return err
+				return nil, err
 			}
 			if err := a.SendWinGetCfgDeploymentReport(packageID, packageName, "uninstall"); err != nil {
 				log.Printf("[ERROR]: could not send WinGetCfg deployment report, reason: %v", err)
-				return err
+				return nil, err
 			}
 
-			return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+			if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+				log.Printf("[INFO]: could not set task to uninstall %s as successful in JSON control file", packageName)
+				return nil, err
+			}
 		}
 	}
 
-	return nil
+	return nil, nil
 }
 
-func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl) error {
+func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl, force bool) (*openuem_nats.TaskReport, error) {
+	taskReport := openuem_nats.TaskReport{}
+
 	ensure, err := getEnsureKey(r)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	key, err := getStringKey(r, "Key", -1, true)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	force, err := getBoolKey(r, "Force", false)
+	forceRegistry, err := getBoolKey(r, "Force", false)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	valueName, err := getStringKey(r, "ValueName", -1, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	valueData, err := getStringKey(r, "ValueData", -1, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	propertyType, err := getStringKey(r, "ValueType", -1, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	hex, err := getBoolKey(r, "Hex", false)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
-	if !taskAlreadySuccessful {
+	if !taskAlreadySuccessful || force {
 		if ensure == "Present" {
 
 			if valueName == "" {
 				if valueData != "" {
-					if err := dsc.UpdateRegistryKeyDefaultValue(key, valueData); err != nil {
+					stdout, stderr, err := dsc.UpdateRegistryKeyDefaultValue(key, valueData)
+					if err != nil {
 						log.Printf("[ERROR]: could not update registry %s default value, reason: %v", key, err)
-						return fmt.Errorf("could not update registry %s default value, reason: %v", key, err)
+						return nil, fmt.Errorf("could not update registry %s default value, reason: %v", key, err)
 					}
 					log.Printf("[INFO]: registry key default value %s has been updated", key)
+
+					taskReport.Name = r.ID
+					taskReport.StdOut = stdout
+					taskReport.StdErr = stderr
+					taskReport.Failed = stderr != ""
+					taskReport.EndTime = time.Now().Local().String()
 				} else {
-					if err := dsc.AddRegistryKey(key, force); err != nil {
+					stdout, stderr, err := dsc.AddRegistryKey(key, forceRegistry)
+					if err != nil {
 						log.Printf("[ERROR]: could not add registry key %s, reason: %v", key, err)
-						return fmt.Errorf("could not add registry key %s, reason: %v", key, err)
+						return nil, fmt.Errorf("could not add registry key %s, reason: %v", key, err)
 					}
 					log.Printf("[INFO]: registry key %s has been added", key)
+
+					taskReport.Name = r.ID
+					taskReport.StdOut = stdout
+					taskReport.StdErr = stderr
+					taskReport.Failed = stderr != ""
+					taskReport.EndTime = time.Now().Local().String()
 				}
 
 			} else {
 				if !wingetcfg.IsValidRegistryValueType(propertyType) {
-					return fmt.Errorf("could not add registry value key %s, reason: property type %s is not valid", valueName, propertyType)
+					return nil, fmt.Errorf("could not add registry value key %s, reason: property type %s is not valid", valueName, propertyType)
 				}
 
-				if err := dsc.AddOrEditRegistryValue(key, valueName, propertyType, valueData, hex, force); err != nil {
+				stdout, stderr, err := dsc.AddOrEditRegistryValue(key, valueName, propertyType, valueData, hex, force)
+				if err != nil {
 					log.Printf("[ERROR]: could not add registry value key %s, reason: %v", valueName, err)
-					return fmt.Errorf("could not add registry value key %s, reason: %v", valueName, err)
+					return nil, fmt.Errorf("could not add registry value key %s, reason: %v", valueName, err)
 				}
+
+				taskReport.Name = r.ID
+				taskReport.StdOut = stdout
+				taskReport.StdErr = stderr
+				taskReport.Failed = stderr != ""
+				taskReport.EndTime = time.Now().Local().String()
 
 				log.Printf("[INFO]: registry key value %s has been added", valueName)
 			}
@@ -931,49 +1012,69 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 		} else {
 			force, err := getBoolKey(r, "Force", false)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			valueName, err := getStringKey(r, "ValueName", -1, false)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			if valueName == "" {
-				if err := dsc.RemoveRegistryKey(key, force); err != nil {
+				stdout, stderr, err := dsc.RemoveRegistryKey(key, force)
+				if err != nil {
 					log.Printf("[ERROR]: could not remove registry key %s, reason: %v", key, err)
-					return fmt.Errorf("could not remove registry key %s, reason: %v", key, err)
+					return nil, fmt.Errorf("could not remove registry key %s, reason: %v", key, err)
 				}
 				log.Printf("[INFO]: registry key %s has been removed", key)
+
+				taskReport.Name = r.ID
+				taskReport.StdOut = stdout
+				taskReport.StdErr = stderr
+				taskReport.Failed = stderr != ""
+				taskReport.EndTime = time.Now().Local().String()
 			} else {
-				if err := dsc.RemoveRegistryKeyValue(key, valueName); err != nil {
+				stdout, stderr, err := dsc.RemoveRegistryKeyValue(key, valueName)
+				if err != nil {
 					log.Printf("[ERROR]: could not remove registry key value %s, reason: %v", valueName, err)
-					return fmt.Errorf("could not remove registry key value %s, reason: %v", valueName, err)
+					return nil, fmt.Errorf("could not remove registry key value %s, reason: %v", valueName, err)
 				}
 				log.Printf("[INFO]: registry key value %s has been removed", valueName)
+
+				taskReport.Name = r.ID
+				taskReport.StdOut = stdout
+				taskReport.StdErr = stderr
+				taskReport.Failed = stderr != ""
+				taskReport.EndTime = time.Now().Local().String()
 			}
 		}
 
-		return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+		if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+			log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+		}
+
+		return &taskReport, nil
 	}
 
-	return nil
+	return nil, nil
 }
 
-func (a *Agent) LocalUserTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl) error {
+func (a *Agent) LocalUserTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl, force bool) (*openuem_nats.TaskReport, error) {
+	taskReport := openuem_nats.TaskReport{}
+
 	ensure, err := getEnsureKey(r)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	username, err := getStringKey(r, "UserName", 20, true)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
 
-	if !taskAlreadySuccessful {
+	if !taskAlreadySuccessful || force {
 
 		// Create user
 		if ensure == "Present" {
@@ -981,201 +1082,353 @@ func (a *Agent) LocalUserTask(r *wingetcfg.WinGetResource, taskControlPath strin
 			// Set password if exist
 			password, err := getStringKey(r, "Password", -1, false)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			// Options - Comment
 			comment, err := getStringKey(r, "Description", 48, false)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			// Options - FullName
 			fullName, err := getStringKey(r, "FullName", 48, false)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			// Options - Disabled
 			disabled, err := getBoolKey(r, "Disabled", false)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			// Options - Password Change Not Allowed
 			passwordChangeNotAllowed, err := getBoolKey(r, "PasswordChangeNotAllowed", false)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			// Options - Password never expires
 			passwordNeverExpires, err := getBoolKey(r, "PasswordNeverExpires", false)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			// Options - Force password change at logon
 			changePasswordAtLogon, err := getBoolKey(r, "PasswordChangeRequired", false)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
-			if err := dsc.CreateLocalUser(username, password, comment, fullName, disabled, passwordChangeNotAllowed, passwordNeverExpires, changePasswordAtLogon); err != nil {
+			stdout, stderr, err := dsc.CreateLocalUser(username, password, comment, fullName, disabled, passwordChangeNotAllowed, passwordNeverExpires, changePasswordAtLogon)
+			if err != nil {
 				log.Printf("[ERROR]: could not create the local user, reason: %v", err)
-				return fmt.Errorf("could not create the local user, reason: %v", err)
+				return nil, fmt.Errorf("could not create the local user, reason: %v", err)
 			}
+
+			taskReport.Name = r.ID
+			taskReport.StdOut = stdout
+			taskReport.StdErr = stderr
+			taskReport.Failed = stderr != ""
+			taskReport.EndTime = time.Now().Local().String()
+
 			log.Printf("[INFO]: the local user %s has been added", username)
 
 		} else {
-			if err := dsc.DeleteLocalUser(username); err != nil {
+			stdout, stderr, err := dsc.DeleteLocalUser(username)
+			if err != nil {
 				log.Printf("[ERROR]: could not remove the local user, reason: %v", err)
-				return fmt.Errorf("could not remove the local user, reason: %v", err)
+				return nil, fmt.Errorf("could not remove the local user, reason: %v", err)
 			}
+
+			taskReport.Name = r.ID
+			taskReport.StdOut = stdout
+			taskReport.StdErr = stderr
+			taskReport.Failed = stderr != ""
+			taskReport.EndTime = time.Now().Local().String()
+
 			log.Printf("[INFO]: the local user %s has been deleted", username)
 		}
 
-		return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+		if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+			log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+		}
+
+		return &taskReport, nil
 	}
 
-	return nil
+	return nil, nil
 }
 
-func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl) error {
+func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl, force bool) (*openuem_nats.TaskReport, error) {
+
 	ensure, err := getEnsureKey(r)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	groupName, err := getStringKey(r, "GroupName", 64, true)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	description, err := getStringKey(r, "Description", 256, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
 
-	if !taskAlreadySuccessful {
+	if !taskAlreadySuccessful || force {
 
 		if ensure == "Present" {
 			members, err := getCommaSeparatedStringKey(r, "Members", false)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			membersToInclude, err := getCommaSeparatedStringKey(r, "MembersToInclude", false)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			membersToExclude, err := getCommaSeparatedStringKey(r, "MembersToExclude", false)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			if members == "" && membersToInclude == "" && membersToExclude == "" {
-				if err := dsc.CreateLocalGroup(groupName, description); err != nil {
+				stdout, stderr, err := dsc.CreateLocalGroup(groupName, description)
+
+				if err != nil {
 					log.Printf("[ERROR]: could not create local group, reason: %v", err)
-					return fmt.Errorf("could not create local group, reason: %v", err)
+					return nil, fmt.Errorf("could not create local group, reason: %v", err)
 				}
+
+				taskReport := openuem_nats.TaskReport{
+					Name:    r.ID,
+					StdOut:  stdout,
+					StdErr:  stderr,
+					Failed:  stderr != "",
+					EndTime: time.Now().Local().String(),
+				}
+
 				log.Printf("[INFO]: the local group %s has been added", groupName)
-				return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+
+				if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+					log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+				}
+
+				return &taskReport, nil
 			}
 
 			if members != "" {
 				if !dsc.ExistsGroup(groupName) {
-					if err := dsc.CreateLocalGroup(groupName, description); err != nil {
+					stdout, stderr, err := dsc.CreateLocalGroup(groupName, description)
+					if err != nil {
 						log.Printf("[ERROR]: could not create local group, reason: %v", err)
-						return fmt.Errorf("could not create local group, reason: %v", err)
+						return nil, fmt.Errorf("could not create local group, reason: %v", err)
+					}
+
+					taskReport := openuem_nats.TaskReport{
+						Name:    r.ID,
+						StdOut:  stdout,
+						StdErr:  stderr,
+						Failed:  stderr != "",
+						EndTime: time.Now().Local().String(),
+					}
+
+					if stderr != "" {
+						return &taskReport, nil
 					}
 					log.Printf("[INFO]: the local group %s has been added", groupName)
 				}
 
-				if err := dsc.AddMembersToLocalGroup(groupName, members); err != nil {
+				stdout, stderr, err := dsc.AddMembersToLocalGroup(groupName, members)
+				if err != nil {
 					log.Printf("[ERROR]: could not add members to local group, reason: %v", err)
-					return fmt.Errorf("could not add members to local group, reason: %v", err)
+					return nil, fmt.Errorf("could not add members to local group, reason: %v", err)
 				}
 				log.Printf("[INFO]: members have been added to local group %s", groupName)
-				return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
 
+				taskReport := openuem_nats.TaskReport{
+					Name:    r.ID,
+					StdOut:  stdout,
+					StdErr:  stderr,
+					Failed:  stderr != "",
+					EndTime: time.Now().Local().String(),
+				}
+
+				if stderr != "" {
+					return &taskReport, nil
+				}
+
+				if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+					log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+				}
+
+				return &taskReport, nil
 			}
 
 			if membersToInclude != "" {
-				if err := dsc.AddMembersToLocalGroup(groupName, membersToInclude); err != nil {
+
+				stdout, stderr, err := dsc.AddMembersToLocalGroup(groupName, membersToInclude)
+				if err != nil {
+					log.Println("stad", stdout, stderr)
 					log.Printf("[ERROR]: could not add members to local group, reason: %v", err)
-					return fmt.Errorf("could not add members to local group, reason: %v", err)
+					return nil, fmt.Errorf("could not add members to local group, reason: %v", err)
 				}
+
+				taskReport := openuem_nats.TaskReport{
+					Name:    r.ID,
+					StdOut:  stdout,
+					StdErr:  stderr,
+					Failed:  stderr != "",
+					EndTime: time.Now().Local().String(),
+				}
+
+				if stderr != "" {
+					return &taskReport, nil
+				}
+
 				log.Printf("[INFO]: members have been added to local group %s", groupName)
-				return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+
+				if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+					log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+				}
+
+				return &taskReport, nil
 			}
 
 			if membersToExclude != "" {
-				if err := dsc.RemoveMembersFromLocalGroup(groupName, membersToExclude); err != nil {
+
+				stdout, stderr, err := dsc.RemoveMembersFromLocalGroup(groupName, membersToExclude)
+				if err != nil {
 					log.Printf("[ERROR]: could not exclude members from local group, reason: %v", err)
-					return fmt.Errorf("could not exclude members from local group, reason: %v", err)
+					return nil, fmt.Errorf("could not exclude members from local group, reason: %v", err)
 				}
 				log.Printf("[INFO]: members have been removed from local group %s", groupName)
-				return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+
+				taskReport := openuem_nats.TaskReport{
+					Name:    r.ID,
+					StdOut:  stdout,
+					StdErr:  stderr,
+					Failed:  stderr != "",
+					EndTime: time.Now().Local().String(),
+				}
+
+				if stderr != "" {
+					return &taskReport, nil
+				}
+
+				if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+					log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+				}
+
+				return &taskReport, nil
 			}
 
 		} else {
-			if err := dsc.RemoveLocalGroup(groupName); err != nil {
+			stdout, stderr, err := dsc.RemoveLocalGroup(groupName)
+			if err != nil {
 				log.Printf("[ERROR]: could not delete local group, reason: %v", err)
-				return fmt.Errorf("could not delete local group, reason: %v", err)
+				return nil, fmt.Errorf("could not delete local group, reason: %v", err)
 			}
+
+			taskReport := openuem_nats.TaskReport{
+				Name:    r.ID,
+				StdOut:  stdout,
+				StdErr:  stderr,
+				Failed:  stderr != "",
+				EndTime: time.Now().Local().String(),
+			}
+
 			log.Printf("[INFO]: the local group %s has been deleted", groupName)
-			return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+
+			if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+				log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+			}
+
+			return &taskReport, nil
 		}
 	}
 
-	return nil
+	return nil, nil
 }
 
-func (a *Agent) MSIPackageTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl) error {
+func (a *Agent) MSIPackageTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl, force bool) (*openuem_nats.TaskReport, error) {
+
 	ensure, err := getEnsureKey(r)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	path, err := getStringKey(r, "Path", -1, true)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	arguments, err := getStringKey(r, "Arguments", -1, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	logPath, err := getStringKey(r, "LogPath", -1, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
 
-	if !taskAlreadySuccessful {
+	if !taskAlreadySuccessful || force {
 		if ensure == "Present" {
-			if err := dsc.InstallMSIPackage(path, arguments, logPath); err != nil {
+			stdout, stderr, err := dsc.InstallMSIPackage(path, arguments, logPath)
+			if err != nil {
 				log.Printf("[ERROR]: could not install MSI package reason: %v", err)
-				return fmt.Errorf("could not install MSI package reason: %v", err)
+				return nil, fmt.Errorf("could not install MSI package reason: %v", err)
 			}
 			log.Printf("[INFO]: MSI package has been installed from %s", path)
-			return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+
+			taskReport := openuem_nats.TaskReport{
+				Name:    r.ID,
+				StdOut:  stdout,
+				StdErr:  stderr,
+				Failed:  stderr != "",
+				EndTime: time.Now().Local().String(),
+			}
+
+			if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+				log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+			}
+
+			return &taskReport, nil
+
 		} else {
-			if err := dsc.UninstallMSIPackage(path, arguments, logPath); err != nil {
+			stdout, stderr, err := dsc.UninstallMSIPackage(path, arguments, logPath)
+			if err != nil {
 				log.Printf("[ERROR]: could not uninstall MSI package reason: %v", err)
-				return fmt.Errorf("could not uninstall MSI package reason: %v", err)
+				return nil, fmt.Errorf("could not uninstall MSI package reason: %v", err)
 			}
 			log.Printf("[INFO]: MSI package %s has been uninstalled", path)
-			return dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t)
+
+			taskReport := openuem_nats.TaskReport{
+				Name:    r.ID,
+				StdOut:  stdout,
+				StdErr:  stderr,
+				Failed:  stderr != "",
+				EndTime: time.Now().Local().String(),
+			}
+
+			if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+				log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+			}
+
+			return &taskReport, nil
 		}
 	}
 
-	return nil
+	return nil, nil
 
 }
 
@@ -1186,7 +1439,7 @@ type PowerShellTask struct {
 	RunConfig string
 }
 
-func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl) error {
+func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl, force bool) (*openuem_nats.TaskReport, error) {
 	task := PowerShellTask{}
 
 	script, ok := r.Settings["Script"]
@@ -1207,36 +1460,65 @@ func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath stri
 				}
 			} else {
 				log.Println("[ERROR]: could not find ID key in task's settings")
-				return errors.New("could not find ID key in task's settings")
+				return nil, errors.New("could not find ID key in task's settings")
 			}
 		} else {
 			log.Println("[ERROR]: could not find Name key in task's settings")
-			return errors.New("could not find Name key in task's settings")
+			return nil, errors.New("could not find Name key in task's settings")
 		}
 	} else {
 		log.Println("[ERROR]: could not find Script key in task's settings")
-		return errors.New("could not find script key in task's settings")
+		return nil, errors.New("could not find script key in task's settings")
 	}
 
 	taskAlreadySuccessful := slices.Contains(t.Success, task.ID)
 	if task.RunConfig == "once" {
-		if !taskAlreadySuccessful {
+		if !taskAlreadySuccessful || force {
 			scriptsRun := strings.Split(a.Config.ScriptsRun, ",")
 			if !slices.Contains(scriptsRun, task.ID) {
-				if err := a.ExecutePowerShellScript(task.Script); err != nil {
-					return err
+				stdout, stderr, err := a.ExecutePowerShellScript(task.Script)
+				if err != nil {
+					return nil, err
 				}
+
+				log.Printf("[INFO]: powershell script %s run successfully", task.Name)
+
+				taskReport := openuem_nats.TaskReport{
+					Name:    task.ID,
+					StdOut:  stdout,
+					StdErr:  stderr,
+					Failed:  stderr != "",
+					EndTime: time.Now().Local().String(),
+				}
+
+				return &taskReport, nil
 			}
-			log.Printf("[INFO]: powershell script %s run successfully", task.Name)
-			return dsc.SetTaskAsSuccessfull(task.ID, taskControlPath, t)
+
+			if err := dsc.SetTaskAsSuccessfull(task.ID, taskControlPath, t); err != nil {
+				log.Printf("[INFO]: could not set task %s as successful in JSON control file", task.Name)
+			}
+
 		}
 	} else {
-		if err := a.ExecutePowerShellScript(task.Script); err != nil {
-			return err
+		stdout, stderr, err := a.ExecutePowerShellScript(task.Script)
+		if err != nil {
+			return nil, err
 		}
+
+		log.Printf("[INFO]: powershell script %s run successfully", task.ID)
+
+		taskReport := openuem_nats.TaskReport{
+			Name:    task.ID,
+			StdOut:  stdout,
+			StdErr:  stderr,
+			Failed:  stderr != "",
+			EndTime: time.Now().Local().String(),
+		}
+
+		return &taskReport, nil
 	}
 
-	return nil
+	return nil, nil
 }
 
 func getEnsureKey(r *wingetcfg.WinGetResource) (string, error) {
@@ -1403,5 +1685,121 @@ func SaveDeploymentNotACK(action openuem_nats.DeployAction) error {
 }
 
 func (a *Agent) AgentRunTaskSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.windowstask."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+		var profileConfig openuem_nats.ProfileConfig
+
+		// Unmarshal data
+		profileReport := openuem_nats.ProfileReport{
+			AgentID: a.Config.UUID,
+		}
+
+		if err := yaml.Unmarshal(msg.Data, &profileConfig); err != nil {
+			log.Println("[ERROR]: could not unmarshall profile config")
+			profileReport.Error = fmt.Sprintf("could not unmarshall profile config %v", err)
+
+			response, err := yaml.Marshal(profileReport)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshal response to agent.windowstask request, reason: %v", err)
+				return
+			}
+
+			if err := msg.Respond(response); err != nil {
+				log.Printf("[ERROR]: could not send response to agent.windowstask request, reason: %v", err)
+				return
+			}
+			return
+		}
+
+		// Read task control file
+		cwd, err := openuem_utils.GetWd()
+		if err != nil {
+			log.Printf("[ERROR]: could not get working directory, reason %v", err)
+			return
+		}
+		taskControlPath := filepath.Join(cwd, "powershell", "tasks.json")
+		taskControl, err := dsc.ReadTaskControlFile(taskControlPath)
+		profileReport.ProfileID = profileConfig.ProfileID
+
+		if err != nil {
+			log.Printf("[ERROR]: tasks control file is not available, reason %v", err)
+			return
+		}
+
+		cfg, err := yaml.Marshal(profileConfig.WinGetConfig)
+		if err != nil {
+			log.Printf("[ERROR]: could not marshal YAML file with Windows task configuration, reason: %v", err)
+
+			response, err := json.Marshal(profileReport)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshal response to agent.windowstask request, reason: %v", err)
+				return
+			}
+
+			if err := msg.Respond(response); err != nil {
+				log.Printf("[ERROR]: could not send response to agent.windowstask request, reason: %v", err)
+				return
+			}
+			return
+		}
+
+		// All is fine, we can execute the task and we'll report later
+		if err := msg.Respond(nil); err != nil {
+			log.Printf("[ERROR]: could not send the response to agent.windowstask message")
+		}
+
+		tasks, err := a.ApplyConfiguration(profileConfig.ProfileID, cfg, profileConfig.Exclusions, profileConfig.Exclusions, taskControl, taskControlPath, true)
+		if err != nil {
+			log.Println("[ERROR]: could not apply YAML Windows task file")
+			profileReport.Error = err.Error()
+
+			// Report if application was successful or not
+			if err := a.SendProfileReport(&profileReport); err != nil {
+				log.Println("[ERROR]: could not report if profile was applied succesfully or no")
+			}
+			return
+		}
+
+		profileReport.Tasks = tasks
+		profileReport.Success = true
+		for _, t := range tasks {
+			if t.Failed {
+				profileReport.Success = false
+			}
+		}
+
+		// Report as the task has finished
+		if err := a.SendProfileReport(&profileReport); err != nil {
+			log.Println("[ERROR]: could not report if profile was applied succesfully or no")
+		}
+
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to agent windows task execution, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) RunProfileSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.runprofile."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+		if err := msg.Respond(nil); err != nil {
+			log.Printf("[ERROR]: could not respond to console request to run a profile, reason: %v", err)
+		}
+
+		msg, err := a.NATSConnection.Request("wingetcfg.profiles", msg.Data, 5*time.Minute)
+		if err != nil {
+			log.Printf("[ERROR]: could not send request to agent worker, reason: %v", err)
+			if err := a.Config.SetRestartRequiredFlag(); err != nil {
+				log.Printf("[ERROR]: could not set restart required flag, reason: %v\n", err)
+				return
+			}
+		}
+
+		a.ProcessProfileResponse(msg, true)
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to agent run profile subject, reason: %v", err)
+	}
 	return nil
 }
