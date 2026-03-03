@@ -490,8 +490,6 @@ func (a *Agent) ProcessProfileResponse(msg *nats.Msg, force bool) {
 	if len(profiles) > 0 {
 		if err := installCommunityGeneralCollection(); err != nil {
 			log.Printf("[ERROR]: could not install ansible community general collection, reason: %v", err)
-		} else {
-			log.Println("[INFO]: ansible community general collection has been installed")
 		}
 	}
 
@@ -724,48 +722,62 @@ func CreatePlaybooksFolder() (string, error) {
 }
 
 func installCommunityGeneralCollection() error {
-	ansibleFolder, err := CreatePlaybooksFolder()
+	galaxyCommand := "ansible-galaxy"
+
+	// check if general collection exists
+	cmd := exec.Command(galaxyCommand, "collection", "list", "community.general")
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Printf("[ERROR]: could not create playbooks folder %v", err)
+		log.Printf("[ERROR]: could not check if community.general collection is available, reason: %v", err)
 		return err
 	}
 
-	pbFile, err := os.CreateTemp(ansibleFolder, "*.yml")
-	if err != nil {
-		log.Printf("[ERROR]: could not create playbook file %v", err)
-		return err
-	}
-
-	_, err = pbFile.WriteString("---\n\ncollections:\n- name: community.general")
-	if err != nil {
-		log.Printf("[ERROR]: could not write start of playbook to file %v", err)
-		return err
-	}
-
-	if err := pbFile.Close(); err != nil {
-		log.Printf("[ERROR]: could not close playbook file %v", err)
-		return err
-	}
-
-	defer func() {
-		if err := os.Remove(pbFile.Name()); err != nil {
-			log.Printf("[INFO]: could not remove playbook to install the general collection")
+	if string(out) == "" {
+		ansibleFolder, err := CreatePlaybooksFolder()
+		if err != nil {
+			log.Printf("[ERROR]: could not create playbooks folder %v", err)
+			return err
 		}
-	}()
 
-	galaxyInstallCollectionCmd := galaxy.NewAnsibleGalaxyCollectionInstallCmd(
-		galaxy.WithGalaxyCollectionInstallOptions(&galaxy.AnsibleGalaxyCollectionInstallOptions{
-			Force:            true,
-			Upgrade:          true,
-			RequirementsFile: pbFile.Name(),
-		}),
-	)
+		pbFile, err := os.CreateTemp(ansibleFolder, "*.yml")
+		if err != nil {
+			log.Printf("[ERROR]: could not create playbook file %v", err)
+			return err
+		}
 
-	galaxyInstallCollectionExec := execute.NewDefaultExecute(
-		execute.WithCmd(galaxyInstallCollectionCmd),
-	)
+		_, err = pbFile.WriteString("---\n\ncollections:\n- name: community.general")
+		if err != nil {
+			log.Printf("[ERROR]: could not write start of playbook to file %v", err)
+			return err
+		}
 
-	return workflow.NewWorkflowExecute(galaxyInstallCollectionExec).WithTrace().Execute(context.TODO())
+		if err := pbFile.Close(); err != nil {
+			log.Printf("[ERROR]: could not close playbook file %v", err)
+			return err
+		}
+
+		defer func() {
+			if err := os.Remove(pbFile.Name()); err != nil {
+				log.Printf("[INFO]: could not remove playbook to install the general collection")
+			}
+		}()
+
+		galaxyInstallCollectionCmd := galaxy.NewAnsibleGalaxyCollectionInstallCmd(
+			galaxy.WithGalaxyCollectionInstallOptions(&galaxy.AnsibleGalaxyCollectionInstallOptions{
+				Force:            true,
+				Upgrade:          true,
+				RequirementsFile: pbFile.Name(),
+			}),
+		)
+
+		galaxyInstallCollectionExec := execute.NewDefaultExecute(
+			execute.WithCmd(galaxyInstallCollectionCmd),
+		)
+
+		return workflow.NewWorkflowExecute(galaxyInstallCollectionExec).WithTrace().Execute(context.TODO())
+	}
+
+	return nil
 }
 
 func ReadDeploymentNotACK() ([]openuem_nats.DeployAction, error) {
