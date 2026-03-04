@@ -56,6 +56,7 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 	err = cmd.Wait()
 	if err != nil {
 		if _, ok := err.(*exec.ExitError); !ok {
+			log.Printf("[ERROR]: there was an error running winget.exe: %v", err)
 			return "", "", err
 		}
 		errCode := strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(err.Error(), "exit status "))), "0X", "0x")
@@ -80,18 +81,25 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 	return stdout.String(), stderr.String(), nil
 }
 
-func UpdatePackage(packageID string) error {
+func UpdatePackage(packageID string) (string, string, error) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
 	wgPath, err := locateWinGet()
 	if err != nil {
 		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
-		return err
+		return "", "", err
 	}
 
 	cmd := exec.Command(wgPath, "upgrade", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
 	err = cmd.Start()
 	if err != nil {
 		log.Printf("[ERROR]: could not start winget.exe command %v", err)
-		return err
+		return "", "", err
 	}
 
 	err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
@@ -102,6 +110,11 @@ func UpdatePackage(packageID string) error {
 	log.Printf("[INFO]: winget.exe is upgrading an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
 	err = cmd.Wait()
 	if err != nil {
+		if _, ok := err.(*exec.ExitError); !ok {
+			log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", err)
+			return "", "", err
+		}
+
 		errCode := strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(err.Error(), "exit status "))), "0X", "0x")
 		errMessage, ok := wingetcfg.ErrorCodes[errCode]
 		if !ok {
@@ -109,11 +122,11 @@ func UpdatePackage(packageID string) error {
 		}
 
 		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", errMessage)
-		return err
+		return stdout.String(), stderr.String(), nil
 	}
 	log.Println("[INFO]: winget.exe has upgraded an application", wgPath)
 
-	return nil
+	return stdout.String(), stderr.String(), nil
 }
 
 func UninstallPackage(packageID string) (string, string, error) {
@@ -146,6 +159,7 @@ func UninstallPackage(packageID string) (string, string, error) {
 	err = cmd.Wait()
 	if err != nil {
 		if _, ok := err.(*exec.ExitError); !ok {
+			log.Printf("[ERROR]: there was an error running winget.exe: %v", err)
 			return "", "", err
 		}
 		errCode := strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(err.Error(), "exit status "))), "0X", "0x")
