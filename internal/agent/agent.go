@@ -405,9 +405,10 @@ func (a *Agent) InstallPackageSubscribe() error {
 			return
 		}
 
-		if _, _, err := deploy.InstallPackage(action.PackageId, "", false, a.Config.Debug); err != nil {
+		if _, stderr, err := deploy.InstallPackage(action.PackageId, "", false, a.Config.Debug); err != nil {
 			log.Printf("[ERROR]: could not deploy package using package manager, reason: %v\n", err)
 			action.Failed = true
+			action.Info = stderr
 			if err := a.SendDeployResult(&action); err != nil {
 				log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
 				if err := SaveDeploymentNotACK(action); err != nil {
@@ -453,12 +454,13 @@ func (a *Agent) UpdatePackageSubscribe() error {
 			return
 		}
 
-		if err := deploy.UpdatePackage(action.PackageId); err != nil {
+		if _, stderr, err := deploy.UpdatePackage(action.PackageId); err != nil {
 			if strings.Contains(err.Error(), strings.ToLower("0x8A15002B")) {
 				log.Println("[INFO]: could not update package using package manager, no updates found", err)
 			} else {
 				log.Printf("[ERROR]: could not update package using package manager, reason: %v\n", err)
 				action.Failed = true
+				action.Info = stderr
 				if err := a.SendDeployResult(&action); err != nil {
 					log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
 				}
@@ -503,9 +505,10 @@ func (a *Agent) UninstallPackageSubscribe() error {
 			return
 		}
 
-		if _, _, err := deploy.UninstallPackage(action.PackageId); err != nil {
+		if _, stderr, err := deploy.UninstallPackage(action.PackageId); err != nil {
 			log.Printf("[ERROR]: could not uninstall package, reason: %v\n", err)
 			action.Failed = false
+			action.Info = stderr
 			if err := a.SendDeployResult(&action); err != nil {
 				log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
 			}

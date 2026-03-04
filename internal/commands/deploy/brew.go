@@ -34,9 +34,10 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 		return "", "", err
 	}
 
-	if err := openuem_runtime.RunAsUser(username, brewPath, args, false); err != nil {
-		log.Printf("[ERROR]: found and error with brew install command, reason %v", err)
-		return "", "", err
+	out, err := openuem_runtime.RunAsUserWithOutput(username, brewPath, args, false)
+	if err != nil {
+		log.Printf("[ERROR]: found and error with brew install command, reason %s", string(out))
+		return "", string(out), err
 	}
 
 	log.Printf("[INFO]: brew has installed an application: %s", packageID)
@@ -44,7 +45,7 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 	return "", "", nil
 }
 
-func UpdatePackage(packageID string) error {
+func UpdatePackage(packageID string) (string, string, error) {
 	var args []string
 
 	isCask := false
@@ -66,17 +67,18 @@ func UpdatePackage(packageID string) error {
 	username, err := openuem_runtime.GetLoggedInUser()
 	if err != nil {
 		log.Printf("[ERROR]: could not find the logged in user, reason %v", err)
-		return err
+		return "", "", err
 	}
 
-	if err := openuem_runtime.RunAsUser(username, brewPath, args, false); err != nil {
-		log.Printf("[ERROR]: found and error with brew upgrade command, reason %v", err)
-		return err
+	out, err := openuem_runtime.RunAsUserWithOutput(username, brewPath, args, false)
+	if err != nil {
+		log.Printf("[ERROR]: found and error with brew upgrade command, reason %s", string(out))
+		return "", string(out), err
 	}
 
 	log.Printf("[INFO]: brew has updated an application: %s", packageID)
 
-	return nil
+	return "", "", nil
 }
 
 func UninstallPackage(packageID string) (string, string, error) {
@@ -104,9 +106,10 @@ func UninstallPackage(packageID string) (string, string, error) {
 		return "", "", err
 	}
 
-	if err := openuem_runtime.RunAsUser(username, brewPath, args, false); err != nil {
-		log.Printf("[ERROR]: found and error with brew remove command, reason %v", err)
-		return "", "", err
+	out, err := openuem_runtime.RunAsUserWithOutput(username, brewPath, args, false)
+	if err != nil {
+		log.Printf("[ERROR]: found and error with brew remove command, reason %s", string(out))
+		return "", string(out), err
 	}
 
 	log.Printf("[INFO]: brew has removed an application: %s", packageID)
