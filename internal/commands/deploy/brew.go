@@ -10,7 +10,7 @@ import (
 	openuem_runtime "github.com/open-uem/openuem-agent/internal/commands/runtime"
 )
 
-func InstallPackage(packageID string, version string, keepUpdated bool, debug bool) error {
+func InstallPackage(packageID string, version string, keepUpdated bool, debug bool) (string, string, error) {
 	var args []string
 
 	isCask := false
@@ -31,17 +31,17 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 	username, err := openuem_runtime.GetLoggedInUser()
 	if err != nil {
 		log.Printf("[ERROR]: could not find the logged in user, reason %v", err)
-		return err
+		return "", "", err
 	}
 
 	if err := openuem_runtime.RunAsUser(username, brewPath, args, false); err != nil {
 		log.Printf("[ERROR]: found and error with brew install command, reason %v", err)
-		return err
+		return "", "", err
 	}
 
 	log.Printf("[INFO]: brew has installed an application: %s", packageID)
 
-	return nil
+	return "", "", nil
 }
 
 func UpdatePackage(packageID string) error {
@@ -79,7 +79,7 @@ func UpdatePackage(packageID string) error {
 	return nil
 }
 
-func UninstallPackage(packageID string) error {
+func UninstallPackage(packageID string) (string, string, error) {
 	var args []string
 
 	isCask := false
@@ -101,17 +101,17 @@ func UninstallPackage(packageID string) error {
 	username, err := openuem_runtime.GetLoggedInUser()
 	if err != nil {
 		log.Printf("[ERROR]: could not find the logged in user, reason %v", err)
-		return err
+		return "", "", err
 	}
 
 	if err := openuem_runtime.RunAsUser(username, brewPath, args, false); err != nil {
 		log.Printf("[ERROR]: found and error with brew remove command, reason %v", err)
-		return err
+		return "", "", err
 	}
 
 	log.Printf("[INFO]: brew has removed an application: %s", packageID)
 
-	return nil
+	return "", "", nil
 }
 
 func getBrewPath() string {

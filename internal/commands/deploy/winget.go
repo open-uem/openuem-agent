@@ -17,14 +17,15 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func InstallPackage(packageID string, version string, keepUpdated bool, debug bool) error {
+func InstallPackage(packageID string, version string, keepUpdated bool, debug bool) (string, string, error) {
 	var cmd *exec.Cmd
-	var out bytes.Buffer
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 
 	wgPath, err := locateWinGet()
 	if err != nil {
 		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
-		return err
+		return "", "", err
 	}
 
 	log.Printf("[INFO]: received a request to install package %s using winget", packageID)
@@ -35,12 +36,13 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 		cmd = exec.Command(wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
 	}
 
-	cmd.Stderr = &out
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
 	err = cmd.Start()
 	if err != nil {
 		log.Printf("[ERROR]: could not start winget.exe command %v", err)
-		return err
+		return "", "", err
 	}
 
 	err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
@@ -53,26 +55,29 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 	}
 	err = cmd.Wait()
 	if err != nil {
+		if _, ok := err.(*exec.ExitError); !ok {
+			return "", "", err
+		}
 		errCode := strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(err.Error(), "exit status "))), "0X", "0x")
 		errMessage, ok := wingetcfg.ErrorCodes[errCode]
 		if !ok {
-			errMessage = err.Error() + " " + out.String()
+			errMessage = err.Error() + " " + stderr.String()
 		}
 
 		// Package is already installed and no applicable update is found
 		if errCode == "0x8A15002B" {
 			log.Printf("[INFO]: %s cannot be updated. %s", packageID, errMessage)
 			if !keepUpdated {
-				return nil
+				return "", "", nil
 			}
 		}
 
 		log.Printf("[ERROR]: there was an error running winget.exe: %v", errMessage)
-		return err
+		return stdout.String(), stderr.String(), nil
 	}
 	log.Printf("[INFO]: winget.exe has installed an application: %s", packageID)
 
-	return nil
+	return stdout.String(), stderr.String(), nil
 }
 
 func UpdatePackage(packageID string) error {
@@ -111,20 +116,25 @@ func UpdatePackage(packageID string) error {
 	return nil
 }
 
-func UninstallPackage(packageID string) error {
+func UninstallPackage(packageID string) (string, string, error) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
 	log.Printf("[INFO]: received a request to remove package %s using brew", packageID)
 
 	wgPath, err := locateWinGet()
 	if err != nil {
 		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
-		return err
+		return "", "", err
 	}
 
 	cmd := exec.Command(wgPath, "remove", packageID)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 	err = cmd.Start()
 	if err != nil {
 		log.Printf("[ERROR]: could not start winget.exe command %v", err)
-		return err
+		return "", "", err
 	}
 
 	err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
@@ -135,6 +145,9 @@ func UninstallPackage(packageID string) error {
 	log.Printf("[INFO]: winget.exe is uninstalling the app %s\n", packageID)
 	err = cmd.Wait()
 	if err != nil {
+		if _, ok := err.(*exec.ExitError); !ok {
+			return "", "", err
+		}
 		errCode := strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(err.Error(), "exit status "))), "0X", "0x")
 		errMessage, ok := wingetcfg.ErrorCodes[errCode]
 		if !ok {
@@ -143,15 +156,15 @@ func UninstallPackage(packageID string) error {
 
 		if errCode == "0x8A150014" {
 			log.Printf("[INFO]: %s cannot be uninstalled. %s", packageID, errMessage)
-			return nil
+			return stdout.String(), stderr.String(), nil
 		}
 
-		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", errMessage)
-		return err
+		log.Printf("[ERROR]: there was an error running winget.exe: %v", errMessage)
+		return stdout.String(), stderr.String(), nil
 	}
 	log.Println("[INFO]: winget.exe has uninstalled an application")
 
-	return nil
+	return stdout.String(), stderr.String(), nil
 }
 
 func locateWinGet() (string, error) {

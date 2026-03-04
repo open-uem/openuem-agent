@@ -405,7 +405,7 @@ func (a *Agent) InstallPackageSubscribe() error {
 			return
 		}
 
-		if err := deploy.InstallPackage(action.PackageId, "", false, a.Config.Debug); err != nil {
+		if _, _, err := deploy.InstallPackage(action.PackageId, "", false, a.Config.Debug); err != nil {
 			log.Printf("[ERROR]: could not deploy package using package manager, reason: %v\n", err)
 			action.Failed = true
 			if err := a.SendDeployResult(&action); err != nil {
@@ -503,7 +503,7 @@ func (a *Agent) UninstallPackageSubscribe() error {
 			return
 		}
 
-		if err := deploy.UninstallPackage(action.PackageId); err != nil {
+		if _, _, err := deploy.UninstallPackage(action.PackageId); err != nil {
 			log.Printf("[ERROR]: could not uninstall package, reason: %v\n", err)
 			action.Failed = false
 			if err := a.SendDeployResult(&action); err != nil {

@@ -877,22 +877,11 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 		}
 
 		if !taskAlreadySuccessful || force {
-			if err := deploy.InstallPackage(packageID, version, keepUpdated, a.Config.Debug); err != nil {
-				if keepUpdated && strings.Contains(err.Error(), "0x8a15002b") {
-					if t.Executed == nil {
-						t.Executed = map[string]time.Time{
-							r.ID: time.Now(),
-						}
-					} else {
-						t.Executed[r.ID] = time.Now()
-					}
-					if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
-						log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
-						return nil, err
-					}
-				}
+			stdout, stderr, err := deploy.InstallPackage(packageID, version, keepUpdated, a.Config.Debug)
+			if err != nil {
 				return nil, err
 			}
+
 			if err := a.SendWinGetCfgDeploymentReport(packageID, packageName, "install"); err != nil {
 				log.Printf("[ERROR]: could not send WinGetCfg deployment report, reason: %v", err)
 				return nil, err
@@ -905,12 +894,23 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 					return nil, err
 				}
 			}
+
+			taskReport := openuem_nats.TaskReport{
+				Name:    r.ID,
+				StdOut:  stdout,
+				StdErr:  stderr,
+				Failed:  stderr != "",
+				EndTime: time.Now().Local().Format(time.RFC3339Nano),
+			}
+
+			return &taskReport, nil
 		}
 	} else {
 		taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
 
 		if !taskAlreadySuccessful {
-			if err := deploy.UninstallPackage(packageID); err != nil {
+			stdout, stderr, err := deploy.UninstallPackage(packageID)
+			if err != nil {
 				return nil, err
 			}
 			if err := a.SendWinGetCfgDeploymentReport(packageID, packageName, "uninstall"); err != nil {
@@ -922,6 +922,16 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 				log.Printf("[INFO]: could not set task to uninstall %s as successful in JSON control file", packageName)
 				return nil, err
 			}
+
+			taskReport := openuem_nats.TaskReport{
+				Name:    r.ID,
+				StdOut:  stdout,
+				StdErr:  stderr,
+				Failed:  stderr != "",
+				EndTime: time.Now().Local().Format(time.RFC3339Nano),
+			}
+
+			return &taskReport, nil
 		}
 	}
 
@@ -1398,7 +1408,10 @@ func (a *Agent) MSIPackageTask(r *wingetcfg.WinGetResource, taskControlPath stri
 				log.Printf("[ERROR]: could not install MSI package reason: %v", err)
 				return nil, fmt.Errorf("could not install MSI package reason: %v", err)
 			}
-			log.Printf("[INFO]: MSI package has been installed from %s", path)
+
+			if stderr == "" {
+				log.Printf("[INFO]: MSI package has been installed from %s", path)
+			}
 
 			taskReport := openuem_nats.TaskReport{
 				Name:    r.ID,
@@ -1420,7 +1433,10 @@ func (a *Agent) MSIPackageTask(r *wingetcfg.WinGetResource, taskControlPath stri
 				log.Printf("[ERROR]: could not uninstall MSI package reason: %v", err)
 				return nil, fmt.Errorf("could not uninstall MSI package reason: %v", err)
 			}
-			log.Printf("[INFO]: MSI package %s has been uninstalled", path)
+
+			if stderr == "" {
+				log.Printf("[INFO]: MSI package %s has been uninstalled", path)
+			}
 
 			taskReport := openuem_nats.TaskReport{
 				Name:    r.ID,
