@@ -405,9 +405,10 @@ func (a *Agent) InstallPackageSubscribe() error {
 			return
 		}
 
-		if err := deploy.InstallPackage(action.PackageId, "", false, a.Config.Debug); err != nil {
+		if _, stderr, err := deploy.InstallPackage(action.PackageId, "", false, a.Config.Debug); err != nil {
 			log.Printf("[ERROR]: could not deploy package using package manager, reason: %v\n", err)
 			action.Failed = true
+			action.Info = stderr
 			if err := a.SendDeployResult(&action); err != nil {
 				log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
 				if err := SaveDeploymentNotACK(action); err != nil {
@@ -453,12 +454,13 @@ func (a *Agent) UpdatePackageSubscribe() error {
 			return
 		}
 
-		if err := deploy.UpdatePackage(action.PackageId); err != nil {
+		if _, stderr, err := deploy.UpdatePackage(action.PackageId); err != nil {
 			if strings.Contains(err.Error(), strings.ToLower("0x8A15002B")) {
 				log.Println("[INFO]: could not update package using package manager, no updates found", err)
 			} else {
 				log.Printf("[ERROR]: could not update package using package manager, reason: %v\n", err)
 				action.Failed = true
+				action.Info = stderr
 				if err := a.SendDeployResult(&action); err != nil {
 					log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
 				}
@@ -503,9 +505,10 @@ func (a *Agent) UninstallPackageSubscribe() error {
 			return
 		}
 
-		if err := deploy.UninstallPackage(action.PackageId); err != nil {
+		if _, stderr, err := deploy.UninstallPackage(action.PackageId); err != nil {
 			log.Printf("[ERROR]: could not uninstall package, reason: %v\n", err)
 			action.Failed = false
+			action.Info = stderr
 			if err := a.SendDeployResult(&action); err != nil {
 				log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
 			}
@@ -730,6 +733,16 @@ func (a *Agent) SubscribeToNATSSubjects() {
 		log.Printf("[ERROR]: %v\n", err)
 	}
 
+	err = a.AgentRunTaskSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
+	err = a.RunProfileSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
 	log.Println("[INFO]: Subscribed to NATS subjects!")
 }
 
@@ -902,16 +915,9 @@ func (a *Agent) RemovePrinter() error {
 	return nil
 }
 
-func (a *Agent) SendProfileApplicationReport(profileID int, agentID string, success bool, errData string) error {
-	// Notify worker if application was succesful or not
-	deployment := openuem_nats.WingetCfgReport{
-		ProfileID: profileID,
-		AgentID:   agentID,
-		Success:   success,
-		Error:     errData,
-	}
-
-	data, err := json.Marshal(deployment)
+func (a *Agent) SendProfileReport(report *openuem_nats.ProfileReport) error {
+	// Send report for profile
+	data, err := json.Marshal(report)
 	if err != nil {
 		return err
 	}
@@ -1129,54 +1135,71 @@ func (a *Agent) RefreshNetBirdSubscribe() error {
 	return nil
 }
 
-func (a *Agent) ApplyNetBirdConfiguration(p openuem_nats.ProfileConfig, taskControl *dsc.TaskControl, taskControlPath string) error {
+func (a *Agent) ApplyNetBirdConfiguration(p openuem_nats.ProfileConfig, taskControl *dsc.TaskControl, taskControlPath string) ([]openuem_nats.TaskReport, error) {
+	taskReports := []openuem_nats.TaskReport{}
 
 	success := false
 
 	for _, t := range p.NetBirdConfig {
+		taskReport := openuem_nats.TaskReport{
+			Name:    "task_" + t.ID,
+			EndTime: time.Now().Local().Format(time.RFC3339Nano),
+		}
 		switch {
-
 		case t.Install:
 			taskAlreadySuccessful := slices.Contains(taskControl.Success, t.ID)
 			if !taskAlreadySuccessful {
 				_, err := netbird.Install()
 				if err != nil {
-					return err
+					taskReport.Failed = true
+					taskReport.StdErr = err.Error()
+				} else {
+					log.Println("[INFO]: the NetBird agent binary has been installed")
+					if err := dsc.SetTaskAsSuccessfull(t.ID, taskControlPath, taskControl); err != nil {
+						log.Printf("[ERROR]: could not save the task as successfull, reason: %v", err)
+					}
+					success = true
 				}
-				log.Println("[INFO]: the NetBird agent binary has been installed")
-				if err := dsc.SetTaskAsSuccessfull(t.ID, taskControlPath, taskControl); err != nil {
-					log.Printf("[ERROR]: could not save the task as successfull, reason: %v", err)
-				}
-				success = true
+				taskReports = append(taskReports, taskReport)
 			}
 		case t.Uninstall:
+			taskReport.Name = "Uninstall NetBird"
 			taskAlreadySuccessful := slices.Contains(taskControl.Success, t.ID)
 			if !taskAlreadySuccessful {
-				if err := netbird.Uninstall(); err != nil {
-					return err
+				err := netbird.Uninstall()
+				if err != nil {
+					taskReport.Failed = true
+					taskReport.StdErr = err.Error()
+				} else {
+					log.Println("[INFO]: the NetBird agent binary has been uninstalled")
+					if err := dsc.SetTaskAsSuccessfull(t.ID, taskControlPath, taskControl); err != nil {
+						log.Printf("[ERROR]: could not save the task as successfull, reason: %v", err)
+					}
+					success = true
 				}
-				log.Println("[INFO]: the NetBird agent binary has been uninstalled")
-				if err := dsc.SetTaskAsSuccessfull(t.ID, taskControlPath, taskControl); err != nil {
-					log.Printf("[ERROR]: could not save the task as successfull, reason: %v", err)
-				}
-				success = true
+				taskReports = append(taskReports, taskReport)
 			}
 		case t.Register:
+			taskReport.Name = "Register NetBird"
 			taskAlreadySuccessful := slices.Contains(taskControl.Success, t.ID)
 			if !taskAlreadySuccessful {
 				data, err := json.Marshal(t.RegisterInfo)
 				if err != nil {
-					return err
+					return nil, err
 				}
 
-				if _, err := netbird.Register(data); err != nil {
-					return err
+				_, err = netbird.Register(data)
+				if err != nil {
+					taskReport.Failed = true
+					taskReport.StdErr = err.Error()
+				} else {
+					log.Println("[INFO]: the NetBird agent has been registered")
+					if err := dsc.SetTaskAsSuccessfull(t.ID, taskControlPath, taskControl); err != nil {
+						log.Printf("[ERROR]: could not save the task as successfull, reason: %v", err)
+					}
+					success = true
 				}
-				log.Println("[INFO]: the NetBird agent has been registered")
-				if err := dsc.SetTaskAsSuccessfull(t.ID, taskControlPath, taskControl); err != nil {
-					log.Printf("[ERROR]: could not save the task as successfull, reason: %v", err)
-				}
-				success = true
+				taskReports = append(taskReports, taskReport)
 			}
 		}
 	}
@@ -1186,7 +1209,7 @@ func (a *Agent) ApplyNetBirdConfiguration(p openuem_nats.ProfileConfig, taskCont
 		a.RunReport()
 	}
 
-	return nil
+	return taskReports, nil
 }
 
 func (a *Agent) PingSubscribe() error {

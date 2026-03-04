@@ -162,8 +162,6 @@ func getDNSservers() string {
 		for _, v := range matches {
 			return v[1]
 		}
-	} else {
-		log.Println("[INFO]: resolvectl status failed or not found")
 	}
 
 	file, err := os.ReadFile("/etc/resolv.conf")

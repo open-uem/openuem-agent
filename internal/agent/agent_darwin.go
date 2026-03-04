@@ -447,8 +447,6 @@ func (a *Agent) GetUnixConfigureProfiles() {
 		log.Println("[DEBUG]: running task Ansible profiles job")
 	}
 
-	profiles := []openuem_nats.ProfileConfig{}
-
 	profileRequest := openuem_nats.CfgProfiles{
 		AgentID: a.Config.UUID,
 	}
@@ -475,6 +473,12 @@ func (a *Agent) GetUnixConfigureProfiles() {
 		}
 	}
 
+	a.ProcessProfileResponse(msg, false)
+}
+
+func (a *Agent) ProcessProfileResponse(msg *nats.Msg, force bool) {
+	profiles := []openuem_nats.ProfileConfig{}
+
 	if a.Config.Debug {
 		log.Println("[DEBUG]: ansiblecfg.profile request sent")
 		if msg.Data != nil {
@@ -493,8 +497,6 @@ func (a *Agent) GetUnixConfigureProfiles() {
 	if len(profiles) > 0 {
 		if err := a.InstallCommunityGeneralCollection(); err != nil {
 			log.Printf("[ERROR]: could not install ansible community general collection, reason: %v", err)
-		} else {
-			log.Println("[INFO]: ansible community general collection has been installed")
 		}
 	}
 
@@ -513,57 +515,92 @@ func (a *Agent) GetUnixConfigureProfiles() {
 	}
 
 	for _, p := range profiles {
+		profileReport := openuem_nats.ProfileReport{
+			AgentID:   a.Config.UUID,
+			ProfileID: p.ProfileID,
+			Success:   true,
+		}
+		// Ansible tasks
 		if a.Config.Debug {
 			log.Println("[DEBUG]: ansiblecfg.profile to be unmarshalled")
 		}
 
-		cfg, err := yaml.Marshal(p.AnsibleConfig)
-		if err != nil {
-			log.Printf("[ERROR]: could not marshal YAML file with Ansible configuration, reason: %v", err)
-			continue
-		}
+		errData := ""
 
-		if a.Config.Debug {
-			log.Println("[DEBUG]: we're going to apply the configuration")
-		}
+		if len(p.AnsibleConfig) > 0 {
+			cfg, err := yaml.Marshal(p.AnsibleConfig)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshal YAML file with Ansible configuration, reason: %v", err)
+				continue
+			}
 
-		errData, err := a.ApplyConfiguration(p.ProfileID, cfg, taskControl, taskControlPath)
-		if err != nil {
-			log.Println("[ERROR]: could not apply YAML configuration file with Ansible")
-			continue
+			if a.Config.Debug {
+				log.Println("[DEBUG]: we're going to apply the configuration")
+			}
+
+			tasks, err := a.ApplyConfiguration(p.ProfileID, cfg, taskControl, taskControlPath)
+			if err != nil {
+				log.Println("[ERROR]: could not apply YAML configuration file with Ansible")
+				profileReport.Error = err.Error()
+			}
+
+			for _, t := range tasks {
+				if t.Failed {
+					profileReport.Success = false
+					break
+				}
+			}
+
+			profileReport.Tasks = tasks
 		}
 
 		// Netbird tasks
-		nbErrData := a.ApplyNetBirdConfiguration(p, taskControl, taskControlPath)
-		if nbErrData != nil {
-			log.Println("[ERROR]: could not apply Netbird configuration file")
-			if errData != "" {
-				errData = strings.Join([]string{errData, nbErrData.Error()}, ",")
-			} else {
-				errData = nbErrData.Error()
+		if len(p.NetBirdConfig) > 0 {
+			tasks, err := a.ApplyNetBirdConfiguration(p, taskControl, taskControlPath)
+			if err != nil {
+				log.Println("[ERROR]: could not apply Netbird configuration file")
+
+				if errData != "" {
+					errData = strings.Join([]string{errData, err.Error()}, ",")
+				} else {
+					errData = err.Error()
+				}
 			}
+			profileReport.Error = errData
+
+			for _, t := range tasks {
+				if t.Failed {
+					profileReport.Success = false
+					break
+				}
+			}
+
+			profileReport.Tasks = append(profileReport.Tasks, tasks...)
 		}
 
 		// Report if application was successful or not
-		if err := a.SendProfileApplicationReport(p.ProfileID, a.Config.UUID, errData == "", errData); err != nil {
+		if err := a.SendProfileReport(&profileReport); err != nil {
 			log.Println("[ERROR]: could not report if profile was applied succesfully or no")
 		}
 	}
 }
 
-func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *dsc.TaskControl, taskControlPath string) (string, error) {
+func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *dsc.TaskControl, taskControlPath string) ([]openuem_nats.TaskReport, error) {
 	var cfg []ansiblecfg.AnsiblePlaybook
+
 	var playbookCmd *playbook.AnsiblePlaybookCmd
+
+	tasks := []openuem_nats.TaskReport{}
 
 	if err := yaml.Unmarshal(config, &cfg); err != nil {
 		log.Printf("[ERROR]: could not unmarshall Ansible playbook folder %v", err)
-		return "", err
+		return nil, err
 	}
 
 	ansibleFolder, err := CreatePlaybooksFolder()
 	if err != nil {
 		log.Printf("[ERROR]: could not create playbooks folder %v", err)
-		return "", err
+		return nil, err
 	}
 
 	ID := strconv.Itoa(profileID)
@@ -582,13 +619,13 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *ds
 				taskControl.ProfilesRunning[ID] = time.Now()
 			} else {
 				log.Printf("[INFO]: previous profile %s is marked as running, not relaunching, ", ID)
-				return "", nil
+				return nil, nil
 			}
 		}
 	}
 	if err := dsc.SaveTaskControl(taskControlPath, taskControl); err != nil {
 		log.Printf("[ERROR]: could not save new profile %s running, reason: %v", ID, err)
-		return "", err
+		return nil, err
 	}
 
 	defer func() {
@@ -602,31 +639,31 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *ds
 	pbFile, err := os.CreateTemp(ansibleFolder, "*.yml")
 	if err != nil {
 		log.Printf("[ERROR]: could not create playbook file %v", err)
-		return "", err
+		return nil, err
 	}
 
 	_, err = pbFile.WriteString("---\n\n")
 	if err != nil {
 		log.Printf("[ERROR]: could not write start of playbook to file %v", err)
-		return "", err
+		return nil, err
 	}
 
 	// Get current user for brew commands
 	username, err := openuem_runtime.GetLoggedInUser()
 	if err != nil {
 		log.Printf("[ERROR]: could not find the logged in user, reason %v", err)
-		return "", err
+		return nil, err
 	}
 
 	_, err = pbFile.WriteString(strings.ReplaceAll(string(config), "some_user", username))
 	if err != nil {
 		log.Printf("[ERROR]: could not write playbook file %v", err)
-		return "", err
+		return nil, err
 	}
 
 	if err := pbFile.Close(); err != nil {
 		log.Printf("[ERROR]: could not close playbook file %v", err)
-		return "", err
+		return nil, err
 	}
 
 	if !a.Config.Debug {
@@ -677,6 +714,27 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *ds
 		res, err := results.ParseJSONResultsStream(io.Reader(buff))
 		if err == nil {
 			errData = res.String()
+
+			for _, p := range res.Plays {
+				for _, t := range p.Tasks {
+					// skip the gathering facts task
+					if t.Task.Name == "Gathering Facts" {
+						continue
+					}
+
+					h, ok := t.Hosts["127.0.0.1"]
+					if ok {
+						taskReport := openuem_nats.TaskReport{
+							Name:    t.Task.Name,
+							StdOut:  h.Stdout.(string),
+							StdErr:  h.Stderr.(string),
+							Failed:  h.Failed,
+							EndTime: t.Task.Duration.End,
+						}
+						tasks = append(tasks, taskReport)
+					}
+				}
+			}
 		}
 		if errData == "" {
 			errData = generalError.Error()
@@ -685,7 +743,7 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *ds
 		log.Println("[INFO]: ansible configuration has finished successfully")
 	}
 
-	return errData, nil
+	return tasks, nil
 }
 
 func CreatePlaybooksFolder() (string, error) {
@@ -700,70 +758,90 @@ func CreatePlaybooksFolder() (string, error) {
 }
 
 func (a *Agent) InstallCommunityGeneralCollection() error {
-	var galaxyInstallCollectionCmd *galaxy.AnsibleGalaxyCollectionInstallCmd
 
-	ansibleFolder, err := CreatePlaybooksFolder()
+	galaxyCommand := ""
+	if runtime.GOARCH == "amd64" {
+		galaxyCommand = "/usr/local/bin/ansible-galaxy"
+	} else {
+		galaxyCommand = "/opt/homebrew/bin/ansible-galaxy"
+	}
+
+	// check if general collection exists
+	cmd := exec.Command(galaxyCommand, "collection", "list", "community.general")
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Printf("[ERROR]: could not create playbooks folder %v", err)
+		log.Printf("[ERROR]: could not check if community.general collection is available, reason: %v", err)
 		return err
 	}
 
-	pbFile, err := os.CreateTemp(ansibleFolder, "*.yml")
-	if err != nil {
-		log.Printf("[ERROR]: could not create playbook file %v", err)
-		return err
-	}
+	if string(out) == "" {
+		var galaxyInstallCollectionCmd *galaxy.AnsibleGalaxyCollectionInstallCmd
 
-	_, err = pbFile.WriteString("---\n\ncollections:\n- name: community.general")
-	if err != nil {
-		log.Printf("[ERROR]: could not write start of playbook to file %v", err)
-		return err
-	}
-
-	if err := pbFile.Close(); err != nil {
-		log.Printf("[ERROR]: could not close playbook file %v", err)
-		return err
-	}
-
-	defer func() {
-		if err := os.Remove(pbFile.Name()); err != nil {
-			log.Printf("[INFO]: could not remove playbook to install the general collection")
+		ansibleFolder, err := CreatePlaybooksFolder()
+		if err != nil {
+			log.Printf("[ERROR]: could not create playbooks folder %v", err)
+			return err
 		}
-	}()
 
-	if !a.Config.Debug {
+		pbFile, err := os.CreateTemp(ansibleFolder, "*.yml")
+		if err != nil {
+			log.Printf("[ERROR]: could not create playbook file %v", err)
+			return err
+		}
+
+		_, err = pbFile.WriteString("---\n\ncollections:\n- name: community.general")
+		if err != nil {
+			log.Printf("[ERROR]: could not write start of playbook to file %v", err)
+			return err
+		}
+
+		if err := pbFile.Close(); err != nil {
+			log.Printf("[ERROR]: could not close playbook file %v", err)
+			return err
+		}
+
 		defer func() {
 			if err := os.Remove(pbFile.Name()); err != nil {
-				log.Printf("[ERROR]: could not delete playbook file %v", err)
+				log.Printf("[INFO]: could not remove playbook to install the general collection")
 			}
 		}()
+
+		if !a.Config.Debug {
+			defer func() {
+				if err := os.Remove(pbFile.Name()); err != nil {
+					log.Printf("[ERROR]: could not delete playbook file %v", err)
+				}
+			}()
+		}
+
+		if runtime.GOARCH == "amd64" {
+			galaxyInstallCollectionCmd = galaxy.NewAnsibleGalaxyCollectionInstallCmd(
+				galaxy.WithGalaxyCollectionInstallOptions(&galaxy.AnsibleGalaxyCollectionInstallOptions{
+					Force:            true,
+					Upgrade:          true,
+					RequirementsFile: pbFile.Name(),
+				}),
+				galaxy.WithBinary("/usr/local/bin/ansible-galaxy"),
+			)
+		} else {
+			galaxyInstallCollectionCmd = galaxy.NewAnsibleGalaxyCollectionInstallCmd(
+				galaxy.WithGalaxyCollectionInstallOptions(&galaxy.AnsibleGalaxyCollectionInstallOptions{
+					Force:            true,
+					Upgrade:          true,
+					RequirementsFile: pbFile.Name(),
+				}),
+				galaxy.WithBinary("/opt/homebrew/bin/ansible-galaxy"),
+			)
+		}
+
+		galaxyInstallCollectionExec := execute.NewDefaultExecute(
+			execute.WithCmd(galaxyInstallCollectionCmd),
+		)
+
+		return workflow.NewWorkflowExecute(galaxyInstallCollectionExec).WithTrace().Execute(context.TODO())
 	}
 
-	if runtime.GOARCH == "amd64" {
-		galaxyInstallCollectionCmd = galaxy.NewAnsibleGalaxyCollectionInstallCmd(
-			galaxy.WithGalaxyCollectionInstallOptions(&galaxy.AnsibleGalaxyCollectionInstallOptions{
-				Force:            true,
-				Upgrade:          true,
-				RequirementsFile: pbFile.Name(),
-			}),
-			galaxy.WithBinary("/usr/local/bin/ansible-galaxy"),
-		)
-	} else {
-		galaxyInstallCollectionCmd = galaxy.NewAnsibleGalaxyCollectionInstallCmd(
-			galaxy.WithGalaxyCollectionInstallOptions(&galaxy.AnsibleGalaxyCollectionInstallOptions{
-				Force:            true,
-				Upgrade:          true,
-				RequirementsFile: pbFile.Name(),
-			}),
-			galaxy.WithBinary("/opt/homebrew/bin/ansible-galaxy"),
-		)
-	}
-
-	galaxyInstallCollectionExec := execute.NewDefaultExecute(
-		execute.WithCmd(galaxyInstallCollectionCmd),
-	)
-
-	return workflow.NewWorkflowExecute(galaxyInstallCollectionExec).WithTrace().Execute(context.TODO())
+	return nil
 }
 
 func ReadDeploymentNotACK() ([]openuem_nats.DeployAction, error) {
@@ -860,5 +938,150 @@ func SaveDeploymentNotACK(action openuem_nats.DeployAction) error {
 		return err
 	}
 
+	return nil
+}
+
+func (a *Agent) AgentRunTaskSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.ansible."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+		var profileConfig openuem_nats.ProfileConfig
+
+		// Unmarshal data
+		profileReport := openuem_nats.ProfileReport{
+			AgentID: a.Config.UUID,
+		}
+
+		if err := yaml.Unmarshal(msg.Data, &profileConfig); err != nil {
+			log.Println("[ERROR]: could not unmarshall playbook")
+			profileReport.Error = fmt.Sprintf("could not unmarshall playbook %v", err)
+
+			response, err := yaml.Marshal(profileReport)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshal response to agent.ansible request, reason: %v", err)
+				return
+			}
+
+			if err := msg.Respond(response); err != nil {
+				log.Printf("[ERROR]: could not send response to agent.ansible request, reason: %v", err)
+				return
+			}
+			return
+		}
+
+		// Run playbook
+		ansibleFolder, err := CreatePlaybooksFolder()
+		if err != nil {
+			log.Printf("[ERROR]: could not create playbooks folder %v", err)
+			profileReport.Error = fmt.Sprintf("could not create playbooks folder %v", err)
+
+			response, err := json.Marshal(profileReport)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshal response to agent.ansible request, reason: %v", err)
+				return
+			}
+
+			if err := msg.Respond(response); err != nil {
+				log.Printf("[ERROR]: could not send response to agent.ansible request, reason: %v", err)
+				return
+			}
+			return
+		}
+
+		taskControlPath := filepath.Join(ansibleFolder, "tasks.json")
+		taskControl, err := dsc.ReadTaskControlFile(taskControlPath)
+		profileReport.ProfileID = profileConfig.ProfileID
+
+		if len(profileConfig.AnsibleConfig) == 0 {
+			log.Println("[ERROR]: no ansible playbook was found in the request")
+			profileReport.Error = "no ansible playbook was found in the request"
+
+			response, err := json.Marshal(profileReport)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshal response to agent.ansible request, reason: %v", err)
+				return
+			}
+
+			if err := msg.Respond(response); err != nil {
+				log.Printf("[ERROR]: could not send response to agent.ansible request, reason: %v", err)
+				return
+			}
+			return
+		}
+
+		cfg, err := yaml.Marshal(profileConfig.AnsibleConfig)
+		if err != nil {
+			log.Printf("[ERROR]: could not marshal YAML file with Ansible configuration, reason: %v", err)
+
+			response, err := json.Marshal(profileReport)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshal response to agent.ansible request, reason: %v", err)
+				return
+			}
+
+			if err := msg.Respond(response); err != nil {
+				log.Printf("[ERROR]: could not send response to agent.ansible request, reason: %v", err)
+				return
+			}
+			return
+		}
+
+		// All is fine, we can execute the task and we'll report later
+		if err := msg.Respond(nil); err != nil {
+			log.Printf("[ERROR]: could not send the response to agent.ansible message")
+		}
+
+		tasks, err := a.ApplyConfiguration(profileConfig.ProfileID, cfg, taskControl, taskControlPath)
+		if err != nil {
+			log.Println("[ERROR]: could not apply YAML configuration file with Ansible")
+			profileReport.Error = err.Error()
+
+			// Report if application was successful or not
+			if err := a.SendProfileReport(&profileReport); err != nil {
+				log.Println("[ERROR]: could not report if profile was applied succesfully or no")
+			}
+			return
+		}
+
+		profileReport.Tasks = tasks
+		profileReport.Success = true
+		for _, t := range tasks {
+			if t.Failed {
+				profileReport.Success = false
+			}
+		}
+
+		// Report as the task has finished
+		if err := a.SendProfileReport(&profileReport); err != nil {
+			log.Println("[ERROR]: could not report if profile was applied succesfully or no")
+		}
+
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to agent ansible task execution, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) RunProfileSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.runprofile."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+		if err := msg.Respond(nil); err != nil {
+			log.Printf("[ERROR]: could not respond to console request to run a profile, reason: %v", err)
+		}
+
+		msg, err := a.NATSConnection.Request("ansiblecfg.profiles", msg.Data, 5*time.Minute)
+		if err != nil {
+			log.Printf("[ERROR]: could not send request to agent worker, reason: %v", err)
+			if err := a.Config.SetRestartRequiredFlag(); err != nil {
+				log.Printf("[ERROR]: could not set restart required flag, reason: %v\n", err)
+				return
+			}
+		}
+
+		a.ProcessProfileResponse(msg, true)
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to agent run profile subject, reason: %v", err)
+	}
 	return nil
 }

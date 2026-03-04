@@ -41,6 +41,10 @@ func (r *Report) getApplicationsInfo(debug bool) error {
 		desktopDirs = append(desktopDirs, filepath.Join(home, ".local/share/flatpak/exports/share/applications"))
 	}
 
+	if debug {
+		log.Println("[DEBUG]: getting the list of desktop files...")
+	}
+
 	// Get list of .desktop files
 	desktopFiles := []string{}
 	for _, d := range desktopDirs {
@@ -48,7 +52,15 @@ func (r *Report) getApplicationsInfo(debug bool) error {
 	}
 	desktopFiles = slices.Compact(desktopFiles)
 
+	if debug {
+		log.Printf("[DEBUG]: the list of desktop files found has been generated. %d files have been found", len(desktopFiles))
+	}
+
 	appNames := []string{}
+
+	if debug {
+		log.Println("[DEBUG]: getting which packages generate the desktop files and its information...")
+	}
 
 	// app.InstallDate not available for snap and .deb packages
 	for _, p := range desktopFiles {
@@ -81,7 +93,7 @@ func (r *Report) getApplicationsInfo(debug bool) error {
 			switch os {
 			case "debian", "ubuntu", "linuxmint", "neon":
 				if !strings.Contains(p, "flatpak/exports") && !strings.Contains(p, "snapd/desktop") {
-					myApp, err := getDpkgInfo(p)
+					myApp, err := getDpkgInfo(p, debug)
 					if err != nil {
 						continue
 					}
@@ -118,12 +130,20 @@ func (r *Report) getApplicationsInfo(debug bool) error {
 	return nil
 }
 
-func getDpkgInfo(desktopFilePath string) (*openuem_nats.Application, error) {
+func getDpkgInfo(desktopFilePath string, debug bool) (*openuem_nats.Application, error) {
 	app := openuem_nats.Application{}
+
+	if debug {
+		log.Printf("[DEBUG]: reading %s desktop file", desktopFilePath)
+	}
 
 	desktopFile, err := os.ReadFile(desktopFilePath)
 	if err != nil {
 		return nil, err
+	}
+
+	if debug {
+		log.Printf("[DEBUG]: getting app name from %s desktop file", desktopFilePath)
 	}
 
 	// Get app's name from desktop file for a more precise name as suggested by @carlesgs
@@ -134,6 +154,10 @@ func getDpkgInfo(desktopFilePath string) (*openuem_nats.Application, error) {
 		break
 	}
 
+	if debug {
+		log.Printf("[DEBUG]: using dpkg to find which package generates %s desktop file", desktopFilePath)
+	}
+
 	// Find the package name that provides .desktop file
 	command := fmt.Sprintf(`dpkg -S %s 2>/dev/null | awk '{print $1}' | cut -f 1 -d ':'  | sort --unique`, desktopFilePath)
 	out, err := exec.Command("bash", "-c", command).Output()
@@ -141,11 +165,19 @@ func getDpkgInfo(desktopFilePath string) (*openuem_nats.Application, error) {
 		return nil, errors.New("could not find deb package that creates .desktop file")
 	}
 
+	if debug {
+		log.Printf("[DEBUG]: using dpkg to find the package %s information", string(out))
+	}
+
 	// Get information from the package
 	command = fmt.Sprintf(`dpkg -s %s`, string(out))
 	out, err = exec.Command("bash", "-c", command).Output()
 	if err != nil {
 		return nil, errors.New("could not find deb package")
+	}
+
+	if debug {
+		log.Printf("[DEBUG]: getting properties from package %s information", string(out))
 	}
 
 	reg = regexp.MustCompile(`Version: \s*(.*?)\s`)

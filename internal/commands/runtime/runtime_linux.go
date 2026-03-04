@@ -113,7 +113,7 @@ func RunAsUserWithOutput(username, cmdPath string, args []string, env bool) ([]b
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Printf("[ERROR]: run as user %s found an err with this combined output: %s", username, string(out))
-		return nil, err
+		return out, err
 	}
 
 	return out, nil

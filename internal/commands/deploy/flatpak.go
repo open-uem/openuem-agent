@@ -9,60 +9,60 @@ import (
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 )
 
-func InstallPackage(packageID string, version string, keepUpdated bool, debug bool) error {
+func InstallPackage(packageID string, version string, keepUpdated bool, debug bool) (string, string, error) {
 	log.Printf("[INFO]: received a request to install package %s", packageID)
 
 	cmd := "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo"
 	if err := exec.Command("bash", "-c", cmd).Run(); err != nil {
 		log.Printf("[ERROR]: could not start flatpak remote-add command, reason: %v", err)
-		return err
+		return "", "", err
 	}
 
-	if err := runtime.RunAsUser("root", "flatpak", []string{"install", "--noninteractive", "--assumeyes", "flathub", packageID}, true); err != nil {
+	if out, err := runtime.RunAsUserWithOutput("root", "flatpak", []string{"install", "--noninteractive", "--assumeyes", "flathub", packageID}, true); err != nil {
 		log.Printf("[ERROR]: found and error with flatpak install command, reason %v", err)
-		return err
+		return "", string(out), err
 	}
 
 	log.Printf("[INFO]: flatpak has installed an application: %s", packageID)
 
-	return nil
+	return "", "", nil
 }
 
-func UpdatePackage(packageID string) error {
+func UpdatePackage(packageID string) (string, string, error) {
 	log.Printf("[INFO]: received a request to update package %s", packageID)
 
 	cmd := "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo"
 
 	if err := exec.Command("bash", "-c", cmd).Run(); err != nil {
 		log.Printf("[ERROR]: could not start flatpak remote-add command, reason: %v", err)
-		return err
+		return "", "", err
 	}
 
-	if err := runtime.RunAsUser("root", "flatpak", []string{"update", "--noninteractive", "--assumeyes", packageID}, true); err != nil {
+	if out, err := runtime.RunAsUserWithOutput("root", "flatpak", []string{"update", "--noninteractive", "--assumeyes", packageID}, true); err != nil {
 		log.Printf("[ERROR]: found and error with flatpak update command, reason %v", err)
-		return err
+		return "", string(out), err
 	}
 
 	log.Println("[INFO]: flatpak has updated an application", packageID)
 
-	return nil
+	return "", "", nil
 }
 
-func UninstallPackage(packageID string) error {
+func UninstallPackage(packageID string) (string, string, error) {
 	log.Printf("[INFO]: received a request to remove package %s using flatpak", packageID)
 
 	cmd := "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo"
 	if err := exec.Command("bash", "-c", cmd).Run(); err != nil {
 		log.Printf("[ERROR]: could not start flatpak remote-add command, reason: %v", err)
-		return err
+		return "", "", err
 	}
 
-	if err := runtime.RunAsUser("root", "flatpak", []string{"remove", "--noninteractive", "--assumeyes", packageID}, true); err != nil {
+	if out, err := runtime.RunAsUserWithOutput("root", "flatpak", []string{"remove", "--noninteractive", "--assumeyes", packageID}, true); err != nil {
 		log.Printf("[ERROR]: found and error with flatpak remove command, reason %v", err)
-		return err
+		return "", string(out), err
 	}
 
 	log.Println("[INFO]: flatpak has removed an application", packageID)
 
-	return nil
+	return "", "", nil
 }
