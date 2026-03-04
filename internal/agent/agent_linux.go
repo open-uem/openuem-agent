@@ -549,16 +549,26 @@ func (a *Agent) ProcessProfileResponse(msg *nats.Msg, force bool) {
 
 		// Netbird tasks
 		if len(p.NetBirdConfig) > 0 {
-			nbErrData := a.ApplyNetBirdConfiguration(p, taskControl, taskControlPath)
-			if nbErrData != nil {
+			tasks, err := a.ApplyNetBirdConfiguration(p, taskControl, taskControlPath)
+			if err != nil {
 				log.Println("[ERROR]: could not apply Netbird configuration file")
+
 				if errData != "" {
-					errData = strings.Join([]string{errData, nbErrData.Error()}, ",")
+					errData = strings.Join([]string{errData, err.Error()}, ",")
 				} else {
-					errData = nbErrData.Error()
+					errData = err.Error()
 				}
 			}
 			profileReport.Error = errData
+
+			for _, t := range tasks {
+				if t.Failed {
+					profileReport.Success = false
+					break
+				}
+			}
+
+			profileReport.Tasks = append(profileReport.Tasks, tasks...)
 		}
 
 		// Report if application was successful or not

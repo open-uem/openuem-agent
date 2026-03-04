@@ -416,16 +416,26 @@ func (a *Agent) ProcessProfileResponse(msg *nats.Msg, force bool) {
 
 		// Netbird tasks
 		if len(p.NetBirdConfig) > 0 {
-			nbErrData := a.ApplyNetBirdConfiguration(p, taskControl, taskControlPath)
-			if nbErrData != nil {
+			tasks, err := a.ApplyNetBirdConfiguration(p, taskControl, taskControlPath)
+			if err != nil {
 				log.Println("[ERROR]: could not apply Netbird configuration file")
+
 				if errData != "" {
-					errData = strings.Join([]string{errData, nbErrData.Error()}, ",")
+					errData = strings.Join([]string{errData, err.Error()}, ",")
 				} else {
-					errData = nbErrData.Error()
+					errData = err.Error()
 				}
 			}
 			profileReport.Error = errData
+
+			for _, t := range tasks {
+				if t.Failed {
+					profileReport.Success = false
+					break
+				}
+			}
+
+			profileReport.Tasks = append(profileReport.Tasks, tasks...)
 		}
 
 		// Report if application was successful or not
@@ -973,7 +983,7 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 					taskReport.StdOut = stdout
 					taskReport.StdErr = stderr
 					taskReport.Failed = stderr != ""
-					taskReport.EndTime = time.Now().Local().String()
+					taskReport.EndTime = time.Now().Local().Format(time.RFC3339Nano)
 				} else {
 					stdout, stderr, err := dsc.AddRegistryKey(key, forceRegistry)
 					if err != nil {
@@ -986,7 +996,7 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 					taskReport.StdOut = stdout
 					taskReport.StdErr = stderr
 					taskReport.Failed = stderr != ""
-					taskReport.EndTime = time.Now().Local().String()
+					taskReport.EndTime = time.Now().Local().Format(time.RFC3339Nano)
 				}
 
 			} else {
@@ -1004,7 +1014,7 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 				taskReport.StdOut = stdout
 				taskReport.StdErr = stderr
 				taskReport.Failed = stderr != ""
-				taskReport.EndTime = time.Now().Local().String()
+				taskReport.EndTime = time.Now().Local().Format(time.RFC3339Nano)
 
 				log.Printf("[INFO]: registry key value %s has been added", valueName)
 			}
@@ -1032,7 +1042,7 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 				taskReport.StdOut = stdout
 				taskReport.StdErr = stderr
 				taskReport.Failed = stderr != ""
-				taskReport.EndTime = time.Now().Local().String()
+				taskReport.EndTime = time.Now().Local().Format(time.RFC3339Nano)
 			} else {
 				stdout, stderr, err := dsc.RemoveRegistryKeyValue(key, valueName)
 				if err != nil {
@@ -1045,7 +1055,7 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 				taskReport.StdOut = stdout
 				taskReport.StdErr = stderr
 				taskReport.Failed = stderr != ""
-				taskReport.EndTime = time.Now().Local().String()
+				taskReport.EndTime = time.Now().Local().Format(time.RFC3339Nano)
 			}
 		}
 
@@ -1211,7 +1221,7 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath stri
 					StdOut:  stdout,
 					StdErr:  stderr,
 					Failed:  stderr != "",
-					EndTime: time.Now().Local().String(),
+					EndTime: time.Now().Local().Format(time.RFC3339Nano),
 				}
 
 				log.Printf("[INFO]: the local group %s has been added", groupName)
@@ -1236,7 +1246,7 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath stri
 						StdOut:  stdout,
 						StdErr:  stderr,
 						Failed:  stderr != "",
-						EndTime: time.Now().Local().String(),
+						EndTime: time.Now().Local().Format(time.RFC3339Nano),
 					}
 
 					if stderr != "" {
@@ -1257,7 +1267,7 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath stri
 					StdOut:  stdout,
 					StdErr:  stderr,
 					Failed:  stderr != "",
-					EndTime: time.Now().Local().String(),
+					EndTime: time.Now().Local().Format(time.RFC3339Nano),
 				}
 
 				if stderr != "" {
@@ -1285,7 +1295,7 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath stri
 					StdOut:  stdout,
 					StdErr:  stderr,
 					Failed:  stderr != "",
-					EndTime: time.Now().Local().String(),
+					EndTime: time.Now().Local().Format(time.RFC3339Nano),
 				}
 
 				if stderr != "" {
@@ -1315,7 +1325,7 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath stri
 					StdOut:  stdout,
 					StdErr:  stderr,
 					Failed:  stderr != "",
-					EndTime: time.Now().Local().String(),
+					EndTime: time.Now().Local().Format(time.RFC3339Nano),
 				}
 
 				if stderr != "" {
@@ -1341,7 +1351,7 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath stri
 				StdOut:  stdout,
 				StdErr:  stderr,
 				Failed:  stderr != "",
-				EndTime: time.Now().Local().String(),
+				EndTime: time.Now().Local().Format(time.RFC3339Nano),
 			}
 
 			log.Printf("[INFO]: the local group %s has been deleted", groupName)
@@ -1395,7 +1405,7 @@ func (a *Agent) MSIPackageTask(r *wingetcfg.WinGetResource, taskControlPath stri
 				StdOut:  stdout,
 				StdErr:  stderr,
 				Failed:  stderr != "",
-				EndTime: time.Now().Local().String(),
+				EndTime: time.Now().Local().Format(time.RFC3339Nano),
 			}
 
 			if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
@@ -1417,7 +1427,7 @@ func (a *Agent) MSIPackageTask(r *wingetcfg.WinGetResource, taskControlPath stri
 				StdOut:  stdout,
 				StdErr:  stderr,
 				Failed:  stderr != "",
-				EndTime: time.Now().Local().String(),
+				EndTime: time.Now().Local().Format(time.RFC3339Nano),
 			}
 
 			if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
@@ -1488,7 +1498,7 @@ func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath stri
 					StdOut:  stdout,
 					StdErr:  stderr,
 					Failed:  stderr != "",
-					EndTime: time.Now().Local().String(),
+					EndTime: time.Now().Local().Format(time.RFC3339Nano),
 				}
 
 				return &taskReport, nil
@@ -1512,7 +1522,7 @@ func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath stri
 			StdOut:  stdout,
 			StdErr:  stderr,
 			Failed:  stderr != "",
-			EndTime: time.Now().Local().String(),
+			EndTime: time.Now().Local().Format(time.RFC3339Nano),
 		}
 
 		return &taskReport, nil
