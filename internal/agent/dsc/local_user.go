@@ -3,13 +3,12 @@
 package dsc
 
 import (
-	"errors"
+	"bytes"
 	"fmt"
 	"os/exec"
-	"strings"
 )
 
-func CreateLocalUser(username string, password string, comment string, fullName string, disabled bool, passwordChangeNotAllowed bool, passwordNeverExpires bool, changePasswordAtLogon bool) error {
+func CreateLocalUser(username string, password string, comment string, fullName string, disabled bool, passwordChangeNotAllowed bool, passwordNeverExpires bool, changePasswordAtLogon bool) (string, string, error) {
 
 	command := fmt.Sprintf("New-LocalUser -Name '%s'", username)
 
@@ -37,25 +36,30 @@ func CreateLocalUser(username string, password string, comment string, fullName 
 		command += " -UserMayNotChangePassword"
 	}
 
-	if err := RunTaskWithLowPriority(command); err != nil {
-		errMessages := strings.Split(err.Error(), ".")
-		return errors.New(errMessages[0])
+	if _, _, err := RunTaskWithLowPriority(command); err != nil {
+		return "", "", err
 	}
 
 	if changePasswordAtLogon {
+		var stderr bytes.Buffer
+		var stdout bytes.Buffer
+
 		args := []string{"user", username, "/logonpasswordchg:yes"}
 		cmd := exec.Command("net", args...)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			errMessages := strings.Split(string(out), ".")
-			return errors.New(errMessages[0])
+		cmd.Stderr = &stderr
+		cmd.Stdout = &stdout
+
+		if err := cmd.Run(); err != nil {
+			return "", "", err
 		}
+
+		return stdout.String(), stderr.String(), nil
 	}
 
-	return nil
+	return "", "", nil
 }
 
-func DeleteLocalUser(username string) error {
+func DeleteLocalUser(username string) (string, string, error) {
 	command := fmt.Sprintf("Remove-LocalUser -Name %s", username)
 
 	return RunTaskWithLowPriority(command)

@@ -7,7 +7,7 @@ import (
 	"os/exec"
 )
 
-func CreateLocalGroup(groupName string, description string) error {
+func CreateLocalGroup(groupName string, description string) (string, string, error) {
 	command := fmt.Sprintf("New-LocalGroup -Name '%s'", groupName)
 
 	if description != "" {
@@ -17,19 +17,19 @@ func CreateLocalGroup(groupName string, description string) error {
 	return RunTaskWithLowPriority(command)
 }
 
-func RemoveLocalGroup(groupName string) error {
+func RemoveLocalGroup(groupName string) (string, string, error) {
 	command := fmt.Sprintf("Remove-LocalGroup -Name '%s'", groupName)
 
 	return RunTaskWithLowPriority(command)
 }
 
-func AddMembersToLocalGroup(groupName string, members string) error {
+func AddMembersToLocalGroup(groupName string, members string) (string, string, error) {
 	command := fmt.Sprintf("Add-LocalGroupMember -Name '%s' -Member %s", groupName, members)
 
 	return RunTaskWithLowPriority(command)
 }
 
-func RemoveMembersFromLocalGroup(groupName string, members string) error {
+func RemoveMembersFromLocalGroup(groupName string, members string) (string, string, error) {
 	command := fmt.Sprintf("Remove-LocalGroupMember -Name '%s' -Member %s", groupName, members)
 
 	return RunTaskWithLowPriority(command)

@@ -267,7 +267,7 @@ func (cfg *RustDeskConfig) ConfigRollBack() error {
 
 	configFile := ""
 	if cfg.IsFlatpak {
-		if rdUser == nil || cfg.User.Home == "" {
+		if rdUser == nil || rdUser.Home == "" {
 			log.Println("[ERROR]: Rustdesk was installed with Flatpak, but the agent haven't found which user is logged in, which is required to use this integration")
 			return errors.New("Rustdesk was installed with Flatpak, but the agent haven't found which user is logged in, which is required to use this integration")
 		}

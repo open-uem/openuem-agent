@@ -83,7 +83,7 @@ func RunAsUserWithOutput(username, cmdPath string, args []string, env bool) ([]b
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, err
+		return output, err
 	}
 
 	return output, err
