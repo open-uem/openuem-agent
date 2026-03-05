@@ -659,7 +659,7 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *ds
 		}()
 	}
 
-	log.Println("[INFO]: received a request to apply a configuration profile")
+	log.Printf("[INFO]: received a request to apply profile %d", profileID)
 
 	buff := new(bytes.Buffer)
 

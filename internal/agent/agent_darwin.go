@@ -674,9 +674,8 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *ds
 		}()
 	}
 
-	log.Println("[INFO]: received a request to apply a configuration profile")
+	log.Printf("[INFO]: received a request to apply profile %d", profileID)
 
-	errData := ""
 	buff := new(bytes.Buffer)
 
 	ansiblePlaybookOptions := &playbook.AnsiblePlaybookOptions{
@@ -708,40 +707,44 @@ func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *ds
 		),
 	)
 
-	err = exec.Execute(context.TODO())
-	if err != nil {
-		generalError := err
-		res, err := results.ParseJSONResultsStream(io.Reader(buff))
-		if err == nil {
-			errData = res.String()
+	executeErr := exec.Execute(context.TODO())
 
-			for _, p := range res.Plays {
-				for _, t := range p.Tasks {
-					// skip the gathering facts task
-					if t.Task.Name == "Gathering Facts" {
-						continue
+	// Generate the report
+	res, err := results.ParseJSONResultsStream(io.Reader(buff))
+	if err == nil {
+		for _, p := range res.Plays {
+			for _, t := range p.Tasks {
+				// skip the gathering facts task
+				if t.Task.Name == "Gathering Facts" {
+					continue
+				}
+
+				h, ok := t.Hosts["127.0.0.1"]
+				if ok {
+					taskReport := openuem_nats.TaskReport{
+						Name:    t.Task.Name,
+						Failed:  h.Failed,
+						EndTime: t.Task.Duration.End,
+					}
+					if h.Stdout != nil {
+						taskReport.StdOut = h.Stdout.(string)
 					}
 
-					h, ok := t.Hosts["127.0.0.1"]
-					if ok {
-						taskReport := openuem_nats.TaskReport{
-							Name:    t.Task.Name,
-							StdOut:  h.Stdout.(string),
-							StdErr:  h.Stderr.(string),
-							Failed:  h.Failed,
-							EndTime: t.Task.Duration.End,
-						}
-						tasks = append(tasks, taskReport)
+					if h.Stderr != nil {
+						taskReport.StdErr = h.Stderr.(string)
 					}
+					tasks = append(tasks, taskReport)
 				}
 			}
 		}
-		if errData == "" {
-			errData = generalError.Error()
-		}
 	} else {
-		log.Println("[INFO]: ansible configuration has finished successfully")
+		if executeErr != nil {
+			log.Printf("[INFO]: an error was found executing the Ansible playbook, reason: %v", err)
+			return nil, err
+		}
 	}
+
+	log.Printf("[INFO]: an Ansible playbook was run for profile %d", profileID)
 
 	return tasks, nil
 }
