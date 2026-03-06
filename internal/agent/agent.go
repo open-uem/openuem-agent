@@ -118,7 +118,7 @@ func (a *Agent) RunReport() *report.Report {
 	log.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 
 	log.Println("[INFO]: agent is running a report...")
-	r, err := report.RunReport(a.Config.UUID, a.Config.Enabled, a.Config.Debug, a.Config.VNCProxyPort, a.Config.SFTPPort, a.Config.IPAddress, a.Config.SFTPDisabled, a.Config.RemoteAssistanceDisabled, a.Config.TenantID, a.Config.SiteID)
+	r, err := report.RunReport(a.Config.UUID, a.Config.Enabled, a.Config.Debug, a.Config.VNCProxyPort, a.Config.SFTPPort, a.Config.IPAddress, a.Config.SFTPDisabled, a.Config.RemoteAssistanceDisabled, a.Config.TenantID, a.Config.SiteID, a.Config.EnrollmentToken)
 	if err != nil {
 		return nil
 	}
@@ -800,9 +800,10 @@ func (a *Agent) GetRemoteConfig() error {
 	}
 
 	remoteConfigMsg := openuem_nats.RemoteConfigRequest{
-		AgentID:  a.Config.UUID,
-		TenantID: a.Config.TenantID,
-		SiteID:   a.Config.SiteID,
+		AgentID:         a.Config.UUID,
+		TenantID:        a.Config.TenantID,
+		SiteID:          a.Config.SiteID,
+		EnrollmentToken: a.Config.EnrollmentToken,
 	}
 
 	data, err := json.Marshal(remoteConfigMsg)
