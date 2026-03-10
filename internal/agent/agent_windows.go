@@ -888,10 +888,9 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 			}
 
 			// if package must not be kept updated, mark the task as successful
-			if !keepUpdated {
+			if !keepUpdated && stderr == "" {
 				if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
 					log.Printf("[INFO]: could not set task to install %s as successful in JSON control file", packageName)
-					return nil, err
 				}
 			}
 
@@ -918,9 +917,10 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 				return nil, err
 			}
 
-			if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
-				log.Printf("[INFO]: could not set task to uninstall %s as successful in JSON control file", packageName)
-				return nil, err
+			if stderr == "" {
+				if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+					log.Printf("[INFO]: could not set task to uninstall %s as successful in JSON control file", packageName)
+				}
 			}
 
 			taskReport := openuem_nats.TaskReport{
@@ -979,7 +979,6 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 	taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
 	if !taskAlreadySuccessful || force {
 		if ensure == "Present" {
-
 			if valueName == "" {
 				if valueData != "" {
 					stdout, stderr, err := dsc.UpdateRegistryKeyDefaultValue(key, valueData)
@@ -994,6 +993,12 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 					taskReport.StdErr = stderr
 					taskReport.Failed = stderr != ""
 					taskReport.EndTime = time.Now().Local().Format(time.RFC3339Nano)
+
+					if stderr == "" {
+						if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+							log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+						}
+					}
 				} else {
 					stdout, stderr, err := dsc.AddRegistryKey(key, forceRegistry)
 					if err != nil {
@@ -1007,6 +1012,12 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 					taskReport.StdErr = stderr
 					taskReport.Failed = stderr != ""
 					taskReport.EndTime = time.Now().Local().Format(time.RFC3339Nano)
+
+					if stderr == "" {
+						if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+							log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+						}
+					}
 				}
 
 			} else {
@@ -1025,6 +1036,12 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 				taskReport.StdErr = stderr
 				taskReport.Failed = stderr != ""
 				taskReport.EndTime = time.Now().Local().Format(time.RFC3339Nano)
+
+				if stderr == "" {
+					if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+						log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+					}
+				}
 
 				log.Printf("[INFO]: registry key value %s has been added", valueName)
 			}
@@ -1053,6 +1070,12 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 				taskReport.StdErr = stderr
 				taskReport.Failed = stderr != ""
 				taskReport.EndTime = time.Now().Local().Format(time.RFC3339Nano)
+
+				if stderr == "" {
+					if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+						log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+					}
+				}
 			} else {
 				stdout, stderr, err := dsc.RemoveRegistryKeyValue(key, valueName)
 				if err != nil {
@@ -1066,11 +1089,13 @@ func (a *Agent) RegistryTask(r *wingetcfg.WinGetResource, taskControlPath string
 				taskReport.StdErr = stderr
 				taskReport.Failed = stderr != ""
 				taskReport.EndTime = time.Now().Local().Format(time.RFC3339Nano)
-			}
-		}
 
-		if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
-			log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+				if stderr == "" {
+					if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+						log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+					}
+				}
+			}
 		}
 
 		return &taskReport, nil
@@ -1155,6 +1180,12 @@ func (a *Agent) LocalUserTask(r *wingetcfg.WinGetResource, taskControlPath strin
 
 			log.Printf("[INFO]: the local user %s has been added", username)
 
+			if stderr == "" {
+				if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+					log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+				}
+			}
+
 		} else {
 			stdout, stderr, err := dsc.DeleteLocalUser(username)
 			if err != nil {
@@ -1169,10 +1200,12 @@ func (a *Agent) LocalUserTask(r *wingetcfg.WinGetResource, taskControlPath strin
 			taskReport.EndTime = time.Now().Local().String()
 
 			log.Printf("[INFO]: the local user %s has been deleted", username)
-		}
 
-		if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
-			log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+			if stderr == "" {
+				if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+					log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+				}
+			}
 		}
 
 		return &taskReport, nil
@@ -1236,8 +1269,10 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath stri
 
 				log.Printf("[INFO]: the local group %s has been added", groupName)
 
-				if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
-					log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+				if stderr == "" {
+					if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+						log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+					}
 				}
 
 				return &taskReport, nil
@@ -1280,12 +1315,10 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath stri
 					EndTime: time.Now().Local().Format(time.RFC3339Nano),
 				}
 
-				if stderr != "" {
-					return &taskReport, nil
-				}
-
-				if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
-					log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+				if stderr == "" {
+					if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+						log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+					}
 				}
 
 				return &taskReport, nil
@@ -1314,8 +1347,10 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath stri
 
 				log.Printf("[INFO]: members have been added to local group %s", groupName)
 
-				if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
-					log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+				if stderr == "" {
+					if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+						log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+					}
 				}
 
 				return &taskReport, nil
@@ -1342,8 +1377,10 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath stri
 					return &taskReport, nil
 				}
 
-				if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
-					log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+				if stderr == "" {
+					if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+						log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+					}
 				}
 
 				return &taskReport, nil
@@ -1366,8 +1403,10 @@ func (a *Agent) LocalGroupTask(r *wingetcfg.WinGetResource, taskControlPath stri
 
 			log.Printf("[INFO]: the local group %s has been deleted", groupName)
 
-			if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
-				log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+			if stderr == "" {
+				if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+					log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+				}
 			}
 
 			return &taskReport, nil
@@ -1421,8 +1460,10 @@ func (a *Agent) MSIPackageTask(r *wingetcfg.WinGetResource, taskControlPath stri
 				EndTime: time.Now().Local().Format(time.RFC3339Nano),
 			}
 
-			if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
-				log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+			if stderr == "" {
+				if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+					log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+				}
 			}
 
 			return &taskReport, nil
@@ -1446,8 +1487,10 @@ func (a *Agent) MSIPackageTask(r *wingetcfg.WinGetResource, taskControlPath stri
 				EndTime: time.Now().Local().Format(time.RFC3339Nano),
 			}
 
-			if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
-				log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+			if stderr == "" {
+				if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+					log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+				}
 			}
 
 			return &taskReport, nil
@@ -1517,13 +1560,14 @@ func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath stri
 					EndTime: time.Now().Local().Format(time.RFC3339Nano),
 				}
 
+				if stderr == "" {
+					if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+						log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+					}
+				}
+
 				return &taskReport, nil
 			}
-
-			if err := dsc.SetTaskAsSuccessfull(task.ID, taskControlPath, t); err != nil {
-				log.Printf("[INFO]: could not set task %s as successful in JSON control file", task.Name)
-			}
-
 		}
 	} else {
 		stdout, stderr, err := a.ExecutePowerShellScript(task.Script)
@@ -1539,6 +1583,12 @@ func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath stri
 			StdErr:  stderr,
 			Failed:  stderr != "",
 			EndTime: time.Now().Local().Format(time.RFC3339Nano),
+		}
+
+		if stderr == "" {
+			if err := dsc.SetTaskAsSuccessfull(r.ID, taskControlPath, t); err != nil {
+				log.Printf("[INFO]: could not set task %s as successful in JSON control file", r.ID)
+			}
 		}
 
 		return &taskReport, nil
