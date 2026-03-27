@@ -3,14 +3,16 @@
 package deploy
 
 import (
+	"fmt"
 	"log"
 	"os/exec"
 
+	"github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 )
 
-func InstallPackage(packageID string, version string, keepUpdated bool, debug bool) (string, string, error) {
-	log.Printf("[INFO]: received a request to install package %s", packageID)
+func InstallPackage(action nats.DeployAction, keepUpdated bool, debug bool) (string, string, error) {
+	log.Printf("[INFO]: received a request to install package %s", action.PackageId)
 
 	cmd := "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo"
 	if err := exec.Command("bash", "-c", cmd).Run(); err != nil {
@@ -18,18 +20,23 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 		return "", "", err
 	}
 
-	if out, err := runtime.RunAsUserWithOutput("root", "flatpak", []string{"install", "--noninteractive", "--assumeyes", "flathub", packageID}, true); err != nil {
+	packageRef := action.PackageId
+	if action.PackageBranch != "" {
+		packageRef = fmt.Sprintf("%s//%s", action.PackageId, action.PackageBranch)
+	}
+
+	if out, err := runtime.RunAsUserWithOutput("root", "flatpak", []string{"install", "--noninteractive", "--assumeyes", "flathub", packageRef}, true); err != nil {
 		log.Printf("[ERROR]: found and error with flatpak install command, reason %v", err)
 		return "", string(out), err
 	}
 
-	log.Printf("[INFO]: flatpak has installed an application: %s", packageID)
+	log.Printf("[INFO]: flatpak has installed an application: %s", packageRef)
 
 	return "", "", nil
 }
 
-func UpdatePackage(packageID string) (string, string, error) {
-	log.Printf("[INFO]: received a request to update package %s", packageID)
+func UpdatePackage(action nats.DeployAction) (string, string, error) {
+	log.Printf("[INFO]: received a request to update package %s", action.PackageId)
 
 	cmd := "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo"
 
@@ -38,18 +45,23 @@ func UpdatePackage(packageID string) (string, string, error) {
 		return "", "", err
 	}
 
-	if out, err := runtime.RunAsUserWithOutput("root", "flatpak", []string{"update", "--noninteractive", "--assumeyes", packageID}, true); err != nil {
+	packageRef := action.PackageId
+	if action.PackageBranch != "" {
+		packageRef = fmt.Sprintf("%s//%s", action.PackageId, action.PackageBranch)
+	}
+
+	if out, err := runtime.RunAsUserWithOutput("root", "flatpak", []string{"update", "--noninteractive", "--assumeyes", packageRef}, true); err != nil {
 		log.Printf("[ERROR]: found and error with flatpak update command, reason %v", err)
 		return "", string(out), err
 	}
 
-	log.Println("[INFO]: flatpak has updated an application", packageID)
+	log.Printf("[INFO]: flatpak has updated an application %s", action.PackageId)
 
 	return "", "", nil
 }
 
-func UninstallPackage(packageID string) (string, string, error) {
-	log.Printf("[INFO]: received a request to remove package %s using flatpak", packageID)
+func UninstallPackage(action nats.DeployAction) (string, string, error) {
+	log.Printf("[INFO]: received a request to remove package %s using flatpak", action.PackageId)
 
 	cmd := "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo"
 	if err := exec.Command("bash", "-c", cmd).Run(); err != nil {
@@ -57,12 +69,17 @@ func UninstallPackage(packageID string) (string, string, error) {
 		return "", "", err
 	}
 
-	if out, err := runtime.RunAsUserWithOutput("root", "flatpak", []string{"remove", "--noninteractive", "--assumeyes", packageID}, true); err != nil {
+	packageRef := action.PackageId
+	if action.PackageBranch != "" {
+		packageRef = fmt.Sprintf("%s//%s", action.PackageId, action.PackageBranch)
+	}
+
+	if out, err := runtime.RunAsUserWithOutput("root", "flatpak", []string{"remove", "--noninteractive", "--assumeyes", packageRef}, true); err != nil {
 		log.Printf("[ERROR]: found and error with flatpak remove command, reason %v", err)
 		return "", string(out), err
 	}
 
-	log.Println("[INFO]: flatpak has removed an application", packageID)
+	log.Printf("[INFO]: flatpak has removed an application %s", packageRef)
 
 	return "", "", nil
 }

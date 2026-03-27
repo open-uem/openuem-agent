@@ -20,7 +20,7 @@ require (
 	github.com/labstack/echo/v4 v4.15.1
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/nats-io/nats.go v1.49.0
-	github.com/open-uem/nats v0.11.1-0.20260306074514-8e457deeb739
+	github.com/open-uem/nats v0.11.1-0.20260327113100-98373a46adcf
 	github.com/open-uem/openuem-ansible-config v0.0.0-20260127123556-80a04b5821c5
 	github.com/open-uem/utils v0.0.0-20260306074720-edefb16dda84
 	github.com/open-uem/wingetcfg v0.0.0-20251011111407-80e823d91ea5
