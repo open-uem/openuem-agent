@@ -907,7 +907,7 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 	} else {
 		taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
 
-		if !taskAlreadySuccessful {
+		if !taskAlreadySuccessful || force {
 			stdout, stderr, err := deploy.UninstallPackage(packageID)
 			if err != nil {
 				return nil, err

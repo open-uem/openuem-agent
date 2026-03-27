@@ -30,11 +30,16 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 
 	log.Printf("[INFO]: received a request to install package %s using winget", packageID)
 
+	// Fix 194: Remove spinner, blank lines and progress bar from output
+	// Ref: https://github.com/microsoft/winget-cli/issues/3494#issuecomment-1933874691
+	removeChars := `^.+Ô.+$|^.+\█.+$|^.+\▒.+$|^\s*$|^\s*\\\s*$|^\s*\/\s*$|^\s*\|\s*$|^\s*\-\s*$`
+
+	installCommand := fmt.Sprintf("&'%s' install %s --scope machine --silent --accept-package-agreements --accept-source-agreements | Select-String -NotMatch '%s'", wgPath, packageID, removeChars)
 	if version != "" {
-		cmd = exec.Command(wgPath, "install", packageID, "--version", version, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
-	} else {
-		cmd = exec.Command(wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+		installCommand = fmt.Sprintf("&'%s' install %s --version %s --scope machine --silent --accept-package-agreements --accept-source-agreements | Select-String -NotMatch '%s'", wgPath, packageID, version, removeChars)
 	}
+
+	cmd = exec.Command("Powershell", "-command", installCommand)
 
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -91,7 +96,12 @@ func UpdatePackage(packageID string) (string, string, error) {
 		return "", "", err
 	}
 
-	cmd := exec.Command(wgPath, "upgrade", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	// Fix 194: Remove spinner, blank lines and progress bar from output
+	// Ref: https://github.com/microsoft/winget-cli/issues/3494#issuecomment-1933874691
+	removeChars := `^.+Ô.+$|^.+\█.+$|^.+\▒.+$|^\s*$|^\s*\\\s*$|^\s*\/\s*$|^\s*\|\s*$|^\s*\-\s*$`
+
+	upgradeCommand := fmt.Sprintf("&'%s' upgrade %s --scope machine --silent --accept-package-agreements --accept-source-agreements | Select-String -NotMatch '%s'", wgPath, packageID, removeChars)
+	cmd := exec.Command("Powershell", "-command", upgradeCommand)
 
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -133,7 +143,7 @@ func UninstallPackage(packageID string) (string, string, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	log.Printf("[INFO]: received a request to remove package %s using brew", packageID)
+	log.Printf("[INFO]: received a request to remove package %s using winget", packageID)
 
 	wgPath, err := locateWinGet()
 	if err != nil {
@@ -141,7 +151,13 @@ func UninstallPackage(packageID string) (string, string, error) {
 		return "", "", err
 	}
 
-	cmd := exec.Command(wgPath, "remove", packageID)
+	// Fix 194: Remove spinner, blank lines and progress bar from output
+	// Ref: https://github.com/microsoft/winget-cli/issues/3494#issuecomment-1933874691
+	removeChars := `^.+Ô.+$|^.+\█.+$|^.+\▒.+$|^\s*$|^\s*\\\s*$|^\s*\/\s*$|^\s*\|\s*$|^\s*\-\s*$`
+
+	removeCommand := fmt.Sprintf("&'%s' remove %s --all-versions | Select-String -NotMatch '%s'", wgPath, packageID, removeChars)
+	cmd := exec.Command("Powershell", "-command", removeCommand)
+
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err = cmd.Start()
