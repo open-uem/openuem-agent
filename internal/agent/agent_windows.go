@@ -862,6 +862,11 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 		keepUpdated = key.(bool)
 	}
 
+	action := openuem_nats.DeployAction{
+		PackageId:      packageID,
+		PackageVersion: version,
+	}
+
 	if ensure == "Present" {
 		taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
 
@@ -877,7 +882,7 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 		}
 
 		if !taskAlreadySuccessful || force {
-			stdout, stderr, err := deploy.InstallPackage(packageID, version, keepUpdated, a.Config.Debug)
+			stdout, stderr, err := deploy.InstallPackage(action, keepUpdated, a.Config.Debug)
 			if err != nil {
 				return nil, err
 			}
@@ -908,7 +913,7 @@ func (a *Agent) PackageManagementTask(r *wingetcfg.WinGetResource, taskControlPa
 		taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
 
 		if !taskAlreadySuccessful {
-			stdout, stderr, err := deploy.UninstallPackage(packageID)
+			stdout, stderr, err := deploy.UninstallPackage(action)
 			if err != nil {
 				return nil, err
 			}

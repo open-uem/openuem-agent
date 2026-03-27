@@ -405,7 +405,7 @@ func (a *Agent) InstallPackageSubscribe() error {
 			return
 		}
 
-		if _, stderr, err := deploy.InstallPackage(action.PackageId, "", false, a.Config.Debug); err != nil {
+		if _, stderr, err := deploy.InstallPackage(action, false, a.Config.Debug); err != nil {
 			log.Printf("[ERROR]: could not deploy package using package manager, reason: %v\n", err)
 			action.Failed = true
 			action.Info = stderr
@@ -454,7 +454,7 @@ func (a *Agent) UpdatePackageSubscribe() error {
 			return
 		}
 
-		if _, stderr, err := deploy.UpdatePackage(action.PackageId); err != nil {
+		if _, stderr, err := deploy.UpdatePackage(action); err != nil {
 			if strings.Contains(err.Error(), strings.ToLower("0x8A15002B")) {
 				log.Println("[INFO]: could not update package using package manager, no updates found", err)
 			} else {
@@ -505,7 +505,7 @@ func (a *Agent) UninstallPackageSubscribe() error {
 			return
 		}
 
-		if _, stderr, err := deploy.UninstallPackage(action.PackageId); err != nil {
+		if _, stderr, err := deploy.UninstallPackage(action); err != nil {
 			log.Printf("[ERROR]: could not uninstall package, reason: %v\n", err)
 			action.Failed = false
 			action.Info = stderr
