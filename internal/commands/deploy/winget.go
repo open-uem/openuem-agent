@@ -12,12 +12,13 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 	"github.com/open-uem/wingetcfg/wingetcfg"
 	"golang.org/x/sys/windows"
 )
 
-func InstallPackage(packageID string, version string, keepUpdated bool, debug bool) (string, string, error) {
+func InstallPackage(action nats.DeployAction, keepUpdated bool, debug bool) (string, string, error) {
 	var cmd *exec.Cmd
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -28,12 +29,12 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 		return "", "", err
 	}
 
-	log.Printf("[INFO]: received a request to install package %s using winget", packageID)
+	log.Printf("[INFO]: received a request to install package %s using winget", action.PackageId)
 
-	if version != "" {
-		cmd = exec.Command(wgPath, "install", packageID, "--version", version, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	if action.PackageVersion != "" {
+		cmd = exec.Command(wgPath, "install", action.PackageId, "--version", action.PackageVersion, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
 	} else {
-		cmd = exec.Command(wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+		cmd = exec.Command(wgPath, "install", action.PackageId, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
 	}
 
 	cmd.Stdout = &stdout
@@ -51,7 +52,7 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 	}
 
 	if debug {
-		log.Printf("[DEBUG]: winget.exe is installing an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+		log.Printf("[DEBUG]: winget.exe is installing an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", action.PackageId, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
 	}
 	err = cmd.Wait()
 	if err != nil {
@@ -67,7 +68,7 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 
 		// Package is already installed and no applicable update is found
 		if errCode == "0x8A15002B" {
-			log.Printf("[INFO]: %s cannot be updated. %s", packageID, errMessage)
+			log.Printf("[INFO]: %s cannot be updated. %s", action.PackageId, errMessage)
 			if !keepUpdated {
 				return "", "", nil
 			}
@@ -76,12 +77,12 @@ func InstallPackage(packageID string, version string, keepUpdated bool, debug bo
 		log.Printf("[ERROR]: there was an error running winget.exe: %v", errMessage)
 		return stdout.String(), stderr.String(), nil
 	}
-	log.Printf("[INFO]: winget.exe has installed an application: %s", packageID)
+	log.Printf("[INFO]: winget.exe has installed an application: %s", action.PackageId)
 
 	return stdout.String(), stderr.String(), nil
 }
 
-func UpdatePackage(packageID string) (string, string, error) {
+func UpdatePackage(action nats.DeployAction) (string, string, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
@@ -91,7 +92,7 @@ func UpdatePackage(packageID string) (string, string, error) {
 		return "", "", err
 	}
 
-	cmd := exec.Command(wgPath, "upgrade", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	cmd := exec.Command(wgPath, "upgrade", action.PackageId, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
 
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -107,7 +108,7 @@ func UpdatePackage(packageID string) (string, string, error) {
 		log.Println("[ERROR]: could not change process priority")
 	}
 
-	log.Printf("[INFO]: winget.exe is upgrading an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", packageID, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	log.Printf("[INFO]: winget.exe is upgrading an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", action.PackageId, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
 	err = cmd.Wait()
 	if err != nil {
 		if _, ok := err.(*exec.ExitError); !ok {
@@ -129,11 +130,11 @@ func UpdatePackage(packageID string) (string, string, error) {
 	return stdout.String(), stderr.String(), nil
 }
 
-func UninstallPackage(packageID string) (string, string, error) {
+func UninstallPackage(action nats.DeployAction) (string, string, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	log.Printf("[INFO]: received a request to remove package %s using brew", packageID)
+	log.Printf("[INFO]: received a request to remove package %s using winget", action.PackageId)
 
 	wgPath, err := locateWinGet()
 	if err != nil {
@@ -141,7 +142,7 @@ func UninstallPackage(packageID string) (string, string, error) {
 		return "", "", err
 	}
 
-	cmd := exec.Command(wgPath, "remove", packageID)
+	cmd := exec.Command(wgPath, "remove", action.PackageId)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err = cmd.Start()
@@ -155,7 +156,7 @@ func UninstallPackage(packageID string) (string, string, error) {
 		log.Println("[ERROR]: could not change process priority")
 	}
 
-	log.Printf("[INFO]: winget.exe is uninstalling the app %s\n", packageID)
+	log.Printf("[INFO]: winget.exe is uninstalling the app %s\n", action.PackageId)
 	err = cmd.Wait()
 	if err != nil {
 		if _, ok := err.(*exec.ExitError); !ok {
@@ -169,7 +170,7 @@ func UninstallPackage(packageID string) (string, string, error) {
 		}
 
 		if errCode == "0x8A150014" {
-			log.Printf("[INFO]: %s cannot be uninstalled. %s", packageID, errMessage)
+			log.Printf("[INFO]: %s cannot be uninstalled. %s", action.PackageId, errMessage)
 			return stdout.String(), stderr.String(), nil
 		}
 

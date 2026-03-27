@@ -16,7 +16,11 @@ import (
 )
 
 func Install() (*openuem_nats.Netbird, error) {
-	if _, _, err := deploy.InstallPackage("Netbird.Netbird", "", false, false); err != nil {
+	action := openuem_nats.DeployAction{
+		PackageId: "Netbird.Netbird",
+	}
+
+	if _, _, err := deploy.InstallPackage(action, false, false); err != nil {
 		log.Printf("[ERROR]: could not install the NetBird client, reason: %v", err)
 		return nil, err
 	}
@@ -25,7 +29,11 @@ func Install() (*openuem_nats.Netbird, error) {
 }
 
 func Uninstall() error {
-	if _, _, err := deploy.UninstallPackage("Netbird.Netbird"); err != nil {
+	action := openuem_nats.DeployAction{
+		PackageId: "Netbird.Netbird",
+	}
+
+	if _, _, err := deploy.UninstallPackage(action); err != nil {
 		log.Printf("[ERROR]: could not uninstall the NetBird client, reason: %v", err)
 		return err
 	}
