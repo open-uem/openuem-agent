@@ -15,7 +15,7 @@ import (
 	"github.com/zcalusic/sysinfo"
 )
 
-func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAddress string, sftpDisabled, remoteAssistanceDisabled bool, tenantID string, siteID string) (*Report, error) {
+func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAddress string, sftpDisabled, remoteAssistanceDisabled bool, tenantID, siteID, enrollmentToken string) (*Report, error) {
 	var si sysinfo.SysInfo
 	var wg sync.WaitGroup
 	var err error
@@ -38,6 +38,7 @@ func RunReport(agentId string, enabled, debug bool, vncProxyPort, sftpPort, ipAd
 	report.RemoteAssistanceDisabled = remoteAssistanceDisabled
 	report.Tenant = tenantID
 	report.Site = siteID
+	report.EnrollmentToken = enrollmentToken
 
 	report.Release = openuem_nats.Release{
 		Version: VERSION,
