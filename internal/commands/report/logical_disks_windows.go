@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os/exec"
 	"strings"
 
 	openuem_nats "github.com/open-uem/nats"
@@ -57,7 +58,17 @@ func (r *Report) getLogicalDisksFromWMI(debug bool) error {
 			}
 
 			// TODO - This query halts report if in sequence in go routine often works fine
+			// DriveType 2 = Removable Disk (USB, flash drive, etc.)
+			myDisk.IsRemovable = (v.DriveType == 2)
+
 			myDisk.BitLockerStatus = getBitLockerStatus(myDisk.Label)
+
+			if myDisk.BitLockerStatus == "Encrypted" {
+				if debug {
+					log.Println("[DEBUG]: bit locker recovery key has been requested for: ", myDisk.Label)
+				}
+				myDisk.BitLockerRecoveryKey = getBitLockerRecoveryKey(myDisk.Label)
+			}
 
 			r.LogicalDisks = append(r.LogicalDisks, myDisk)
 			if debug {
@@ -113,6 +124,34 @@ func getBitLockerStatus(driveLetter string) string {
 	default:
 		return "Unknown"
 	}
+}
+
+// getBitLockerRecoveryKey retrieves the BitLocker numerical recovery password for a given drive.
+// Uses PowerShell Get-BitLockerVolume which is available on Windows 10+ (Pro/Enterprise/Education).
+// The service runs as LocalSystem which has sufficient privileges for this query.
+// Only drives with ProtectionStatus == 1 (Encrypted) should be queried.
+func getBitLockerRecoveryKey(driveLetter string) string {
+	script := fmt.Sprintf(
+		`(Get-BitLockerVolume -MountPoint '%s' -ErrorAction SilentlyContinue).KeyProtector | `+
+			`Where-Object {$_.KeyProtectorType -eq 'RecoveryPassword'} | `+
+			`Select-Object -First 1 -ExpandProperty RecoveryPassword`,
+		driveLetter,
+	)
+
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script)
+	out, err := cmd.Output()
+	if err != nil {
+		log.Printf("[INFO]: could not get BitLocker recovery key via PowerShell for %s: %v", driveLetter, err)
+		return ""
+	}
+
+	key := strings.TrimSpace(string(out))
+	if key != "" {
+		log.Printf("[INFO]: BitLocker recovery key retrieved for drive %s", driveLetter)
+	} else {
+		log.Printf("[INFO]: no BitLocker recovery password found for drive %s", driveLetter)
+	}
+	return key
 }
 
 func convertBytesToUnits(size uint64) string {
