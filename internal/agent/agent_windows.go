@@ -702,11 +702,58 @@ func (a *Agent) GetServerCertificate() {
 	}
 }
 
-func (a *Agent) ExecutePowerShellScript(script string) (string, string, error) {
+// findPwshExecutable locates PowerShell 7+ (pwsh.exe). It checks PATH first, then the
+// classic MSI install location, then the MSIX/winget install location (a version-numbered
+// WindowsApps folder), since App Execution Alias stubs under a different user's PATH aren't
+// reliably resolvable from a service running as LocalSystem.
+func findPwshExecutable() (string, bool) {
+	if path, err := exec.LookPath("pwsh.exe"); err == nil {
+		return path, true
+	}
+
+	path := filepath.Join(os.Getenv("ProgramFiles"), "PowerShell", "7", "pwsh.exe")
+	if _, err := os.Stat(path); err == nil {
+		return path, true
+	}
+
+	matches, _ := filepath.Glob(filepath.Join(os.Getenv("ProgramFiles"), "WindowsApps", "Microsoft.PowerShell_*", "pwsh.exe"))
+	if len(matches) > 0 {
+		return matches[0], true
+	}
+
+	return "", false
+}
+
+// resolvePowerShellExecutable turns a task's requested engine ("powershell", "pwsh",
+// "auto" or "") into the executable to run. It returns an error only when "pwsh" was
+// requested explicitly but PowerShell 7+ is not installed on this endpoint.
+func resolvePowerShellExecutable(engine string) (string, error) {
+	switch engine {
+	case "pwsh":
+		if path, ok := findPwshExecutable(); ok {
+			return path, nil
+		}
+		return "", errors.New("PowerShell 7+ was requested but pwsh.exe was not found on this endpoint")
+	case "auto":
+		if path, ok := findPwshExecutable(); ok {
+			return path, nil
+		}
+		return "PowerShell", nil
+	default:
+		return "PowerShell", nil
+	}
+}
+
+func (a *Agent) ExecutePowerShellScript(script string, engine string) (string, string, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
 	if script != "" {
+		executable, err := resolvePowerShellExecutable(engine)
+		if err != nil {
+			return "", err.Error(), nil
+		}
+
 		file, err := os.CreateTemp(os.TempDir(), "*.ps1")
 		if err != nil {
 			log.Printf("[ERROR]: could not create temp ps1 file, reason: %v", err)
@@ -726,39 +773,20 @@ func (a *Agent) ExecutePowerShellScript(script string) (string, string, error) {
 				return "", "", fmt.Errorf("could not close temp ps1 file, reason: %v", err)
 			}
 
-			// Get current Execution-Policy
-			out, err := exec.Command("PowerShell", "-command", "Get-ExecutionPolicy -Scope CurrentUser").CombinedOutput()
-			if err != nil {
-				log.Printf("[ERROR]: could not get current Powershell execution policy, reason: %v, %s", err, string(out))
-				return "", "", fmt.Errorf("could not get current Powershell execution policy, reason: %v, %s", err, string(out))
-			}
-			currentExecutionPolicy := strings.TrimSpace(string(out))
-
-			// Set ExecutionPolicy temporarily to RemoteSigned
-			out, err = exec.Command("PowerShell", "-command", "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser").CombinedOutput()
-			if err != nil {
-				log.Printf("[ERROR]: could not set Powershell execution policy to RemoteSigned temporarily, reason: %v, %s", err, string(out))
-				return "", "", fmt.Errorf("could not set Powershell execution policy to RemoteSigned temporarily, reason: %v, %s", err, string(out))
-			}
-			defer func() {
-				// Revert back to previous ExecutionPolicy
-				out, err = exec.Command("PowerShell", "-command", fmt.Sprintf("Set-ExecutionPolicy %s -Scope CurrentUser", currentExecutionPolicy)).CombinedOutput()
-				if err != nil {
-					log.Printf("[ERROR]: could not revert the Powershell execution policy to RemoteSigned temporarily, reason: %v, %s", err, string(out))
-				}
-			}()
-
-			// Execute script
-			cmd := exec.Command("PowerShell", "-File", file.Name())
+			// Execute script, bypassing the execution policy for this invocation only.
+			// NO_COLOR disables PowerShell 7+'s ANSI-colored table output, which would
+			// otherwise leak raw escape sequences into the captured stdout/stderr text.
+			cmd := exec.Command(executable, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", file.Name())
+			cmd.Env = append(os.Environ(), "NO_COLOR=1")
 			cmd.Stderr = &stderr
 			cmd.Stdout = &stdout
 			if err := cmd.Run(); err != nil {
-				log.Printf("[ERROR]: could not execute powershell script, reason: %v, %s", err, string(out))
-				return "", "", fmt.Errorf("could not execute powershell script, reason: %v, %s", err, string(out))
+				log.Printf("[ERROR]: could not execute powershell script, reason: %v", err)
+				return "", "", fmt.Errorf("could not execute powershell script, reason: %v", err)
 			}
 
 			if a.Config.Debug {
-				log.Printf("[DEBUG]: a script should have run: PowerShell -File %s", file.Name())
+				log.Printf("[DEBUG]: a script should have run: %s -File %s", executable, file.Name())
 			}
 
 			if err := os.Remove(file.Name()); err != nil {
@@ -1511,6 +1539,7 @@ type PowerShellTask struct {
 	Name      string
 	Script    string
 	RunConfig string
+	Engine    string
 }
 
 func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath string, t *dsc.TaskControl, force bool) (*openuem_nats.TaskReport, error) {
@@ -1532,6 +1561,10 @@ func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath stri
 				} else {
 					task.RunConfig = "once"
 				}
+
+				if executable, ok := r.Settings["Executable"]; ok {
+					task.Engine = executable.(string)
+				}
 			} else {
 				log.Println("[ERROR]: could not find ID key in task's settings")
 				return nil, errors.New("could not find ID key in task's settings")
@@ -1550,7 +1583,7 @@ func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath stri
 		if !taskAlreadySuccessful || force {
 			scriptsRun := strings.Split(a.Config.ScriptsRun, ",")
 			if !slices.Contains(scriptsRun, task.ID) {
-				stdout, stderr, err := a.ExecutePowerShellScript(task.Script)
+				stdout, stderr, err := a.ExecutePowerShellScript(task.Script, task.Engine)
 				if err != nil {
 					return nil, err
 				}
@@ -1575,7 +1608,7 @@ func (a *Agent) PowershellTask(r *wingetcfg.WinGetResource, taskControlPath stri
 			}
 		}
 	} else {
-		stdout, stderr, err := a.ExecutePowerShellScript(task.Script)
+		stdout, stderr, err := a.ExecutePowerShellScript(task.Script, task.Engine)
 		if err != nil {
 			return nil, err
 		}
