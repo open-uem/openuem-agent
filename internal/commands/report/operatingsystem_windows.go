@@ -221,6 +221,8 @@ func getWindowsClientVersion(version string) *windowsVersion {
 	var windowsVersions = map[string]windowsVersion{}
 
 	// Windows 11
+	windowsVersions["10.0.26300"] = windowsVersion{name: "Windows 11", version: "26H2"}
+	windowsVersions["10.0.28000"] = windowsVersion{name: "Windows 11", version: "26H1"}
 	windowsVersions["10.0.26200"] = windowsVersion{name: "Windows 11", version: "25H2"}
 	windowsVersions["10.0.26100"] = windowsVersion{name: "Windows 11", version: "24H2"}
 	windowsVersions["10.0.22631"] = windowsVersion{name: "Windows 11", version: "23H2"}
