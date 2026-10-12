@@ -2,7 +2,9 @@ package report
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"runtime/debug"
 	"time"
 
 	wu "github.com/ceshihao/windowsupdate"
@@ -89,7 +91,7 @@ func (r *Report) getWindowsUpdateStatusWithCancelContext() error {
 
 	errChan := make(chan error, 1)
 	go func() {
-		errChan <- r.newIAutomaticUpdates()
+		errChan <- withRecover(func() error { return r.newIAutomaticUpdates() })
 	}()
 
 	select {
@@ -111,7 +113,7 @@ func (r *Report) getWindowsUpdateDatesWithCancelContext() error {
 
 	errChan := make(chan error, 1)
 	go func() {
-		errChan <- r.newIAutomaticUpdate2()
+		errChan <- withRecover(func() error { return r.newIAutomaticUpdate2() })
 	}()
 
 	select {
@@ -132,7 +134,7 @@ func (r *Report) getPendingUpdatesWithCancelContext() error {
 
 	errChan := make(chan error, 1)
 	go func() {
-		errChan <- r.getPendingUpdates()
+		errChan <- withRecover(func() error { return r.getPendingUpdates() })
 	}()
 
 	select {
@@ -145,22 +147,48 @@ func (r *Report) getPendingUpdatesWithCancelContext() error {
 
 func (r *Report) getPendingUpdates() error {
 	// Get information about pending updates. THIS QUERY IS SLOW
-	// Ref: https://github.com/ceshihao/windowsupdate/blob/master/examples/query_update_history/main.go
-	session, err := wu.NewUpdateSession()
+	// Only the number of updates is needed, so the result is read directly with oleutil
+	// instead of ceshihao/windowsupdate, which parses every property of every update and
+	// panics on unexpected VARIANT types (seen on Windows Servers with pending updates)
+	unknown, err := oleutil.CreateObject("Microsoft.Update.Session")
 	if err != nil {
 		return err
 	}
-	searcher, err := session.CreateUpdateSearcher()
+	defer unknown.Release()
+
+	session, err := unknown.QueryInterface(ole.IID_IDispatch)
+	if err != nil {
+		return err
+	}
+	defer session.Release()
+
+	searcherVariant, err := oleutil.CallMethod(session, "CreateUpdateSearcher")
+	if err != nil {
+		return err
+	}
+	searcher := searcherVariant.ToIDispatch()
+	defer searcher.Release()
+
+	resultVariant, err := oleutil.CallMethod(searcher, "Search", "IsAssigned=1 and IsHidden=0 and IsInstalled=0 and Type='Software'")
+	if err != nil {
+		return err
+	}
+	result := resultVariant.ToIDispatch()
+	defer result.Release()
+
+	updatesVariant, err := oleutil.GetProperty(result, "Updates")
+	if err != nil {
+		return err
+	}
+	updates := updatesVariant.ToIDispatch()
+	defer updates.Release()
+
+	countVariant, err := oleutil.GetProperty(updates, "Count")
 	if err != nil {
 		return err
 	}
 
-	// TODO There is an exception for Windows 10 (HP laptop)
-	result, err := searcher.Search("IsAssigned=1 and IsHidden=0 and IsInstalled=0 and Type='Software'")
-	if err != nil {
-		return err
-	}
-	r.SystemUpdate.PendingUpdates = len(result.Updates) > 0
+	r.SystemUpdate.PendingUpdates = countVariant.Val > 0
 	return nil
 }
 
@@ -174,7 +202,7 @@ func (r *Report) getUpdatesHistoryWithCancelContext() error {
 
 	errChan := make(chan error, 1)
 	go func() {
-		errChan <- r.getUpdatesHistory()
+		errChan <- withRecover(func() error { return r.getUpdatesHistory() })
 	}()
 
 	select {
@@ -203,7 +231,7 @@ func (r *Report) getUpdatesHistory() error {
 
 	updates := []openuem_nats.Update{}
 	for _, entry := range result {
-		if entry.ClientApplicationID == "MoUpdateOrchestrator" {
+		if entry.ClientApplicationID == "MoUpdateOrchestrator" && entry.Date != nil {
 			update := openuem_nats.Update{
 				Title:      entry.Title,
 				Date:       *entry.Date,
@@ -215,6 +243,18 @@ func (r *Report) getUpdatesHistory() error {
 	r.Updates = updates
 
 	return nil
+}
+
+// withRecover prevents a panic in the Windows Update COM calls (run in their own goroutine)
+// from crashing the whole agent service
+func withRecover(f func() error) (err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			log.Printf("[ERROR]: recovered from panic in windows update query: %v\n%s", rec, debug.Stack())
+			err = fmt.Errorf("panic in windows update query: %v", rec)
+		}
+	}()
+	return f()
 }
 
 func getAutomaticUpdatesStatus(notificationLevel int32) string {
