@@ -19,6 +19,9 @@ func (r *Report) logLogicalDisks() {
 			diskFS := fmt.Sprintf("Disk %s filesystem", myDisk.Label)
 			fmt.Printf("%-40s |  %s \n", diskFS, myDisk.Filesystem)
 			fmt.Printf("%-40s |  %s \n", "Bitlocker Status", myDisk.BitLockerStatus)
+			if myDisk.BitLockerRecoveryKey != "" {
+				fmt.Printf("%-40s |  %s \n", "Bitlocker Recovery Key", myDisk.BitLockerRecoveryKey)
+			}
 
 			if len(r.LogicalDisks) > 1 && i+1 != len(r.LogicalDisks) {
 				fmt.Printf("---------------------------------------------------------------------------------------------------------------------\n")
