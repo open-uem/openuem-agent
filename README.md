@@ -2,6 +2,9 @@
 
 This repository contains the source code for the OpenUEM Agent
 
+For unattended Windows deployments, see the
+[installation checklist](docs/windows-unattended-install.md).
+
 Agents are responsible for gathering and reporting information about the endpoints to OpenUEM. Agents are also responsible for providing an SFTP server and a VNC proxy.
 
 Agents send its reports to Agents workers using NATS messages. Agents workers will store the information in the database
