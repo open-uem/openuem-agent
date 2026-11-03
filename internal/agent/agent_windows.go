@@ -753,8 +753,10 @@ func (a *Agent) ExecutePowerShellScript(script string) (string, string, error) {
 			cmd.Stderr = &stderr
 			cmd.Stdout = &stdout
 			if err := cmd.Run(); err != nil {
-				log.Printf("[ERROR]: could not execute powershell script, reason: %v, %s", err, string(out))
-				return "", "", fmt.Errorf("could not execute powershell script, reason: %v, %s", err, string(out))
+				// Show what the script wrote, which usually explains why it failed
+				output := strings.TrimSpace(stderr.String() + "\n" + stdout.String())
+				log.Printf("[ERROR]: could not execute powershell script, reason: %v, %s", err, output)
+				return "", "", fmt.Errorf("could not execute powershell script, reason: %v, %s", err, output)
 			}
 
 			if a.Config.Debug {
@@ -1446,6 +1448,17 @@ func (a *Agent) MSIPackageTask(r *wingetcfg.WinGetResource, taskControlPath stri
 	taskAlreadySuccessful := slices.Contains(t.Success, r.ID)
 
 	if !taskAlreadySuccessful || force {
+		// Packages uploaded to the console are downloaded with the agent certificate
+		if isAgentFileURL(path) {
+			localPath, err := a.downloadAgentFile(path)
+			if err != nil {
+				log.Printf("[ERROR]: could not download the MSI package, reason: %v", err)
+				return nil, fmt.Errorf("could not download the MSI package, reason: %v", err)
+			}
+			defer os.Remove(localPath)
+			path = localPath
+		}
+
 		if ensure == "Present" {
 			stdout, stderr, err := dsc.InstallMSIPackage(path, arguments, logPath)
 			if err != nil {

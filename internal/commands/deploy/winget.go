@@ -4,6 +4,7 @@ package deploy
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -87,9 +88,16 @@ func InstallPackage(action nats.DeployAction, keepUpdated bool, debug bool) (str
 	return stdout.String(), stderr.String(), nil
 }
 
+// UpdatePackage upgrades a package using winget. Machine-scoped packages are upgraded
+// as SYSTEM, while user-scoped packages are upgraded in the session of every logged-in user.
 func UpdatePackage(action nats.DeployAction) (string, string, error) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	if !IsValidPackageID(action.PackageId) {
+		return "", "", fmt.Errorf("invalid package id %q", action.PackageId)
+	}
+
+	if action.PackageScope == nats.PackageScopeUser {
+		return updateUserPackage(action.PackageId)
+	}
 
 	wgPath, err := locateWinGet()
 	if err != nil {
@@ -97,47 +105,31 @@ func UpdatePackage(action nats.DeployAction) (string, string, error) {
 		return "", "", err
 	}
 
-	// Fix 194: Remove spinner, blank lines and progress bar from output
-	// Ref: https://github.com/microsoft/winget-cli/issues/3494#issuecomment-1933874691
-	removeChars := `^.+Ô.+$|^.+\█.+$|^.+\▒.+$|^\s*$|^\s*\\\s*$|^\s*\/\s*$|^\s*\|\s*$|^\s*\-\s*$`
+	log.Printf("[INFO]: winget.exe is upgrading the app %s\n", action.PackageId)
+	output, err := runWinGet(wingetUpgradeTimeout, wgPath, wingetUpgradeArgs(action.PackageId, nats.PackageScopeMachine)...)
 
-	upgradeCommand := fmt.Sprintf("&'%s' upgrade %s --scope machine --silent --accept-package-agreements --accept-source-agreements | Select-String -NotMatch '%s'", wgPath, action.PackageId, removeChars)
-	cmd := exec.Command("Powershell", "-command", upgradeCommand)
-
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err = cmd.Start()
-	if err != nil {
-		log.Printf("[ERROR]: could not start winget.exe command %v", err)
-		return "", "", err
-	}
-
-	err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
-	if err != nil {
-		log.Println("[ERROR]: could not change process priority")
-	}
-
-	log.Printf("[INFO]: winget.exe is upgrading an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", action.PackageId, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
-	err = cmd.Wait()
-	if err != nil {
-		if _, ok := err.(*exec.ExitError); !ok {
-			log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", err)
-			return "", "", err
+	// When no scope is requested, e.g. the package is updated on several computers from
+	// the console, the package may have been installed for the logged-in users instead
+	if errors.Is(err, errWinGetNoPackagesFound) {
+		if action.PackageScope == "" {
+			stdout, info, err := updateUserPackage(action.PackageId)
+			if errors.Is(err, errNoLoggedInUsers) || errors.Is(err, errUserWinGetNotFound) {
+				return output, "", ErrPackageNotInstalled
+			}
+			return stdout, info, err
 		}
-
-		errCode := strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(err.Error(), "exit status "))), "0X", "0x")
-		errMessage, ok := wingetcfg.ErrorCodes[errCode]
-		if !ok {
-			errMessage = err.Error()
-		}
-
-		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", errMessage)
-		return stdout.String(), stderr.String(), nil
+		return output, "", ErrPackageNotInstalled
 	}
-	log.Println("[INFO]: winget.exe has upgraded an application", wgPath)
 
-	return stdout.String(), stderr.String(), nil
+	if err != nil {
+		if !errors.Is(err, ErrNoApplicableUpdate) {
+			log.Printf("[ERROR]: winget.exe could not upgrade %s, reason: %v", action.PackageId, err)
+		}
+		return output, outputTail(output, 20), err
+	}
+
+	log.Printf("[INFO]: winget.exe has upgraded the app %s", action.PackageId)
+	return output, "", nil
 }
 
 func UninstallPackage(action nats.DeployAction) (string, string, error) {
