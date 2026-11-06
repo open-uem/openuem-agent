@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -44,6 +45,7 @@ type Agent struct {
 	SFTPServer             *sftp.SFTP
 	JetstreamContextCancel context.CancelFunc
 	WingetConfigureJob     gocron.Job
+	updates                *updateRunTracker
 }
 
 type JSONActions struct {
@@ -83,6 +85,8 @@ func New() Agent {
 	if err != nil {
 		log.Fatalf("[FATAL]: could not read sftp certificate")
 	}
+
+	agent.updates = newUpdateRunTracker()
 
 	return agent
 }
@@ -454,16 +458,19 @@ func (a *Agent) UpdatePackageSubscribe() error {
 			return
 		}
 
-		if _, stderr, err := deploy.UpdatePackage(action); err != nil {
-			if strings.Contains(err.Error(), strings.ToLower("0x8A15002B")) {
-				log.Println("[INFO]: could not update package using package manager, no updates found", err)
-			} else {
-				log.Printf("[ERROR]: could not update package using package manager, reason: %v\n", err)
-				action.Failed = true
-				action.Info = stderr
-				if err := a.SendDeployResult(&action); err != nil {
-					log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
-				}
+		packageUpdateLock.Lock()
+		_, stderr, err := deploy.UpdatePackage(action)
+		packageUpdateLock.Unlock()
+
+		// A package that is already up to date is reported as successfully updated
+		if errors.Is(err, deploy.ErrNoApplicableUpdate) || errors.Is(err, deploy.ErrPackageNotInstalled) {
+			log.Printf("[INFO]: package %s was not updated, reason: %v", action.PackageId, err)
+		} else if err != nil {
+			log.Printf("[ERROR]: could not update package using package manager, reason: %v\n", err)
+			action.Failed = true
+			action.Info = stderr
+			if err := a.SendDeployResult(&action); err != nil {
+				log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
 			}
 			return
 		}
@@ -663,6 +670,21 @@ func (a *Agent) SubscribeToNATSSubjects() {
 		log.Printf("[ERROR]: %v\n", err)
 	}
 
+	err = a.ListPackageUpdatesSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
+	err = a.UpdatePackagesSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
+	err = a.WinGetSourceSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
 	err = a.NewConfigSubscribe()
 	if err != nil {
 		log.Printf("[ERROR]: %v\n", err)
@@ -769,6 +791,7 @@ func (a *Agent) CreateAgentJetStreamConsumer() {
 			"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID,
 			"agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID,
 			"agent.update.updater." + a.Config.UUID, "agent.rollback.updater." + a.Config.UUID,
+			"agent.update.packages." + a.Config.UUID,
 		},
 	}
 
@@ -856,6 +879,10 @@ func (a *Agent) JetStreamAgentHandler(msg jetstream.Msg) {
 
 	if msg.Subject() == "agent.certificate."+a.Config.UUID {
 		a.AgentCertificateHandler(msg)
+	}
+
+	if msg.Subject() == "agent.update.packages."+a.Config.UUID {
+		a.QueuedUpdatePackagesHandler(msg)
 	}
 }
 

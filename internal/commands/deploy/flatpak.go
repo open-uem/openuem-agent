@@ -3,13 +3,17 @@
 package deploy
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os/exec"
+	"time"
 
 	"github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 )
+
+const flatpakListTimeout = 3 * time.Minute
 
 func InstallPackage(action nats.DeployAction, keepUpdated bool, debug bool) (string, string, error) {
 	log.Printf("[INFO]: received a request to install package %s", action.PackageId)
@@ -50,7 +54,18 @@ func UpdatePackage(action nats.DeployAction) (string, string, error) {
 		packageRef = fmt.Sprintf("%s//%s", action.PackageId, action.PackageBranch)
 	}
 
-	if out, err := runtime.RunAsUserWithOutput("root", "flatpak", []string{"update", "--noninteractive", "--assumeyes", packageRef}, true); err != nil {
+	username := "root"
+	args := []string{"update", "--noninteractive", "--assumeyes", packageRef}
+	if action.PackageScope == nats.PackageScopeUser {
+		loggedInUser, err := runtime.GetLoggedInUser()
+		if err != nil || loggedInUser == "" {
+			return "", "", errors.New("user-scoped packages can only be updated while their user is logged in")
+		}
+		username = loggedInUser
+		args = []string{"update", "--user", "--noninteractive", "--assumeyes", packageRef}
+	}
+
+	if out, err := runtime.RunAsUserWithOutput(username, "flatpak", args, true); err != nil {
 		log.Printf("[ERROR]: found and error with flatpak update command, reason %v", err)
 		return "", string(out), err
 	}
@@ -82,4 +97,47 @@ func UninstallPackage(action nats.DeployAction) (string, string, error) {
 	log.Printf("[INFO]: flatpak has removed an application %s", packageRef)
 
 	return "", "", nil
+}
+
+// ListAvailableUpdates returns the flatpak apps with an available update, both from the
+// system installation and from the installation of the logged-in user
+func ListAvailableUpdates() ([]nats.AvailableUpdate, error) {
+	if _, err := exec.LookPath("flatpak"); err != nil {
+		return []nats.AvailableUpdate{}, nil
+	}
+
+	updates, err := listFlatpakUpdates("root", "--system", nats.PackageScopeMachine)
+	if err != nil {
+		return nil, err
+	}
+
+	username, err := runtime.GetLoggedInUser()
+	if err != nil || username == "" {
+		return updates, nil
+	}
+
+	userUpdates, err := listFlatpakUpdates(username, "--user", nats.PackageScopeUser)
+	if err != nil {
+		log.Printf("[ERROR]: could not list flatpak updates for user %s, reason: %v", username, err)
+		return updates, nil
+	}
+	for i := range userUpdates {
+		userUpdates[i].Users = []string{username}
+	}
+
+	return append(updates, userUpdates...), nil
+}
+
+func listFlatpakUpdates(username, installation, scope string) ([]nats.AvailableUpdate, error) {
+	remoteUpdates, err := runtime.RunAsUserWithOutputAndTimeout(username, "flatpak", append([]string{"remote-ls", installation, "--updates"}, FlatpakUpdateColumns...), true, flatpakListTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("could not list flatpak updates, reason: %v", err)
+	}
+
+	installed, err := runtime.RunAsUserWithOutputAndTimeout(username, "flatpak", append([]string{"list", installation}, FlatpakInstalledColumns...), true, flatpakListTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("could not list flatpak apps, reason: %v", err)
+	}
+
+	return ParseFlatpakUpdates(string(remoteUpdates), string(installed), scope), nil
 }
