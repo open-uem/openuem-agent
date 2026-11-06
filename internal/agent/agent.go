@@ -680,6 +680,11 @@ func (a *Agent) SubscribeToNATSSubjects() {
 		log.Printf("[ERROR]: %v\n", err)
 	}
 
+	err = a.WinGetSourceSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
 	err = a.NewConfigSubscribe()
 	if err != nil {
 		log.Printf("[ERROR]: %v\n", err)
