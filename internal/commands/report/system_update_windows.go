@@ -187,8 +187,26 @@ func (r *Report) getPendingUpdates() error {
 	if err != nil {
 		return err
 	}
+	count := int(countVariant.Val)
 
-	r.SystemUpdate.PendingUpdates = countVariant.Val > 0
+	r.SystemUpdate.PendingUpdates = count > 0
+
+	pending := make([]openuem_nats.PendingUpdate, 0, count)
+	for i := 0; i < count; i++ {
+		itemVariant, err := oleutil.GetProperty(updates, "Item", i)
+		if err != nil {
+			continue
+		}
+		item := itemVariant.ToIDispatch()
+		if item == nil {
+			continue
+		}
+		pending = append(pending, pendingUpdateFromDispatch(item))
+		item.Release()
+		itemVariant.Clear()
+	}
+	r.PendingUpdates = pending
+
 	return nil
 }
 

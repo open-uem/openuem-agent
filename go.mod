@@ -78,3 +78,5 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
+
+replace github.com/open-uem/nats => github.com/Devority/nats v0.11.1-0.20261107104602-18f2842635ea
