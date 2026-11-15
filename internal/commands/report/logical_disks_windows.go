@@ -95,6 +95,12 @@ func getBitLockerStatus(driveLetter string) string {
 	ctx := context.Background()
 	err := WMIQueryWithContext(ctx, qBitLocker, &response, namespace)
 	if err != nil {
+		// The MicrosoftVolumeEncryption namespace is only present when the
+		// BitLocker feature is installed (not e.g. on Windows Server Core by default)
+		if strings.Contains(err.Error(), "Invalid namespace") {
+			log.Printf("[INFO]: bitlocker WMI namespace is not available, BitLocker feature is probably not installed")
+			return "Unknown"
+		}
 		log.Printf("[ERROR]: could not get bitlocker status from WMI Win32_EncryptableVolume: %v", err)
 		return "Unknown"
 	}
