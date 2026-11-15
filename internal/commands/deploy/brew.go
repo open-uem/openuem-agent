@@ -3,6 +3,7 @@
 package deploy
 
 import (
+	"fmt"
 	"log"
 	"runtime"
 	"strings"
@@ -36,7 +37,7 @@ func InstallPackage(action nats.DeployAction, keepUpdated bool, debug bool) (str
 	username, err := openuem_runtime.GetLoggedInUser()
 	if err != nil {
 		log.Printf("[ERROR]: could not find the logged in user, reason %v", err)
-		return "", "", err
+		return "", "", fmt.Errorf("%w: %v", ErrNoLoggedInUser, err)
 	}
 
 	out, err := openuem_runtime.RunAsUserWithOutput(username, brewPath, args, false)
@@ -75,7 +76,7 @@ func UpdatePackage(action nats.DeployAction) (string, string, error) {
 	username, err := openuem_runtime.GetLoggedInUser()
 	if err != nil {
 		log.Printf("[ERROR]: could not find the logged in user, reason %v", err)
-		return "", "", err
+		return "", "", fmt.Errorf("%w: %v", ErrNoLoggedInUser, err)
 	}
 
 	out, err := openuem_runtime.RunAsUserWithOutput(username, brewPath, args, false)
@@ -114,7 +115,7 @@ func UninstallPackage(action nats.DeployAction) (string, string, error) {
 	username, err := openuem_runtime.GetLoggedInUser()
 	if err != nil {
 		log.Printf("[ERROR]: could not find the logged in user, reason %v", err)
-		return "", "", err
+		return "", "", fmt.Errorf("%w: %v", ErrNoLoggedInUser, err)
 	}
 
 	out, err := openuem_runtime.RunAsUserWithOutput(username, brewPath, args, false)

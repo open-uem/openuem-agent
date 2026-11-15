@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -260,6 +263,144 @@ func (a *Agent) PendingACKTask() {
 	if len(actions) > 0 {
 		log.Println("[INFO]: updated pending deployment ack in pending_acks.json file")
 	}
+
+	a.PendingDeploymentsTask()
+}
+
+// PendingDeploymentsTask runs the deployments that could not be executed
+// before because no user was logged in (e.g., brew tasks on macOS)
+func (a *Agent) PendingDeploymentsTask() {
+	actions, err := ReadDeploymentsWaitingForUser()
+	if err != nil {
+		log.Printf("[ERROR]: could not read deployments waiting for user, reason: %s\n", err.Error())
+		return
+	}
+
+	if len(actions) == 0 {
+		return
+	}
+
+	remaining := []openuem_nats.DeployAction{}
+	for i, action := range actions {
+		var stderr string
+		var err error
+
+		switch action.Action {
+		case "install":
+			_, stderr, err = deploy.InstallPackage(action, false, a.Config.Debug)
+		case "update":
+			_, stderr, err = deploy.UpdatePackage(action)
+		case "uninstall":
+			_, stderr, err = deploy.UninstallPackage(action)
+		default:
+			log.Printf("[ERROR]: unknown deployment action %s for package %s, removing it from the queue", action.Action, action.PackageId)
+			continue
+		}
+
+		if errors.Is(err, deploy.ErrNoLoggedInUser) {
+			// Still no user logged in: keep this and the rest of the queue
+			log.Printf("[INFO]: %d deployment(s) waiting for a user to log in", len(actions)-i)
+			remaining = append(remaining, actions[i:]...)
+			break
+		}
+
+		if err != nil {
+			if action.Action == "update" && strings.Contains(err.Error(), strings.ToLower("0x8A15002B")) {
+				log.Println("[INFO]: could not update package using package manager, no updates found", err)
+				continue
+			}
+			log.Printf("[ERROR]: could not run pending deployment for package %s, reason: %v\n", action.PackageId, err)
+			action.Failed = action.Action != "uninstall"
+			action.Info = stderr
+			if err := a.SendDeployResult(&action); err != nil {
+				log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
+				if err := SaveDeploymentNotACK(action); err != nil {
+					log.Println("[ERROR]: could not save deployment pending ack to JSON file", err)
+				}
+			}
+			continue
+		}
+
+		action.When = time.Now()
+		action.Failed = false
+		if err := a.SendDeployResult(&action); err != nil {
+			log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
+			if err := SaveDeploymentNotACK(action); err != nil {
+				log.Println("[ERROR]: could not save deployment pending ack to JSON file", err)
+			}
+		}
+	}
+
+	if err := SaveDeploymentsWaitingForUser(remaining); err != nil {
+		log.Printf("[ERROR]: could not save deployments waiting for user, reason: %s\n", err.Error())
+		return
+	}
+
+	// Send a report to update the installed apps
+	if len(remaining) != len(actions) {
+		r := a.RunReport()
+		if r == nil {
+			return
+		}
+		if err := a.SendReport(r); err != nil {
+			log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
+		}
+	}
+}
+
+func ReadDeploymentsWaitingForUser() ([]openuem_nats.DeployAction, error) {
+	cwd, err := Getwd()
+	if err != nil {
+		return nil, err
+	}
+
+	filename := filepath.Join(cwd, "pending_deployments.json")
+	byteValue, err := os.ReadFile(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []openuem_nats.DeployAction{}, nil
+		}
+		return nil, err
+	}
+
+	jActions := JSONActions{}
+	if err := json.Unmarshal(byteValue, &jActions); err != nil {
+		return nil, err
+	}
+
+	return jActions.Actions, nil
+}
+
+func SaveDeploymentsWaitingForUser(actions []openuem_nats.DeployAction) error {
+	cwd, err := Getwd()
+	if err != nil {
+		return err
+	}
+
+	jActions := JSONActions{Actions: actions}
+
+	byteValue, err := json.MarshalIndent(jActions, "", " ")
+	if err != nil {
+		return err
+	}
+
+	filename := filepath.Join(cwd, "pending_deployments.json")
+	return os.WriteFile(filename, byteValue, 0644)
+}
+
+func SaveDeploymentWaitingForUser(action openuem_nats.DeployAction) error {
+	actions, err := ReadDeploymentsWaitingForUser()
+	if err != nil {
+		return err
+	}
+
+	for _, a := range actions {
+		if a.PackageId == action.PackageId && a.Action == action.Action {
+			return nil
+		}
+	}
+
+	return SaveDeploymentsWaitingForUser(append(actions, action))
 }
 
 func (a *Agent) RescheduleReportRunTask() {
@@ -406,6 +547,13 @@ func (a *Agent) InstallPackageSubscribe() error {
 		}
 
 		if _, stderr, err := deploy.InstallPackage(action, false, a.Config.Debug); err != nil {
+			if errors.Is(err, deploy.ErrNoLoggedInUser) {
+				log.Printf("[INFO]: install of package %s will run once a user logs in", action.PackageId)
+				if err := SaveDeploymentWaitingForUser(action); err != nil {
+					log.Println("[ERROR]: could not save deployment waiting for user to JSON file", err)
+				}
+				return
+			}
 			log.Printf("[ERROR]: could not deploy package using package manager, reason: %v\n", err)
 			action.Failed = true
 			action.Info = stderr
@@ -455,6 +603,13 @@ func (a *Agent) UpdatePackageSubscribe() error {
 		}
 
 		if _, stderr, err := deploy.UpdatePackage(action); err != nil {
+			if errors.Is(err, deploy.ErrNoLoggedInUser) {
+				log.Printf("[INFO]: update of package %s will run once a user logs in", action.PackageId)
+				if err := SaveDeploymentWaitingForUser(action); err != nil {
+					log.Println("[ERROR]: could not save deployment waiting for user to JSON file", err)
+				}
+				return
+			}
 			if strings.Contains(err.Error(), strings.ToLower("0x8A15002B")) {
 				log.Println("[INFO]: could not update package using package manager, no updates found", err)
 			} else {
@@ -506,6 +661,13 @@ func (a *Agent) UninstallPackageSubscribe() error {
 		}
 
 		if _, stderr, err := deploy.UninstallPackage(action); err != nil {
+			if errors.Is(err, deploy.ErrNoLoggedInUser) {
+				log.Printf("[INFO]: uninstall of package %s will run once a user logs in", action.PackageId)
+				if err := SaveDeploymentWaitingForUser(action); err != nil {
+					log.Println("[ERROR]: could not save deployment waiting for user to JSON file", err)
+				}
+				return
+			}
 			log.Printf("[ERROR]: could not uninstall package, reason: %v\n", err)
 			action.Failed = false
 			action.Info = stderr
