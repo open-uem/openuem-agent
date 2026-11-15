@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -14,10 +15,17 @@ import (
 
 type networkAdapterInfo struct {
 	Index               uint32
+	InterfaceIndex      uint32
 	MACAddress          string
 	Name                string
 	NetConnectionStatus uint16
 	Speed               uint64
+	PNPDeviceID         string
+}
+
+type defaultRouteInfo struct {
+	InterfaceIndex uint32
+	Metric1        int32
 }
 
 type networkAdapterConfiguration struct {
@@ -53,17 +61,22 @@ func (r *Report) getNetworkAdaptersFromWMI() error {
 	var networkInfoDst []networkAdapterInfo
 
 	namespace := `root\cimv2`
-	qNetwork := "SELECT Index, MACAddress, Name, NetConnectionStatus, Speed FROM Win32_NetworkAdapter"
+	qNetwork := "SELECT Index, InterfaceIndex, MACAddress, Name, NetConnectionStatus, Speed, PNPDeviceID FROM Win32_NetworkAdapter"
 
 	ctx := context.Background()
 	err := WMIQueryWithContext(ctx, qNetwork, &networkInfoDst, namespace)
 	if err != nil {
 		return err
 	}
+	connectedAdapters := []struct {
+		index   uint32
+		adapter openuem_nats.NetworkAdapter
+	}{}
 	for _, v := range networkInfoDst {
 		myNetworkAdapter := openuem_nats.NetworkAdapter{}
 
 		if v.NetConnectionStatus == 2 {
+			interfaceIndex := v.InterfaceIndex
 			var networkAdapterDst []networkAdapterConfiguration
 
 			speed := v.Speed / 1_000_000
@@ -76,6 +89,9 @@ func (r *Report) getNetworkAdaptersFromWMI() error {
 			myNetworkAdapter.Speed = fmt.Sprintf("%d %s", speed, speedInUnits)
 			myNetworkAdapter.Name = v.Name
 			myNetworkAdapter.MACAddress = v.MACAddress
+			// Virtual adapters (VPN tunnels, hypervisors, etc.) are created under
+			// the device tree ROOT or SWD branches instead of a hardware bus.
+			myNetworkAdapter.Virtual = strings.HasPrefix(v.PNPDeviceID, `ROOT\`) || strings.HasPrefix(v.PNPDeviceID, `SWD\`)
 
 			// This query would not be acceptable in general as it could lead to sql injection, but we're using a where condition using a
 			// index value retrieved by WMI it's not user generated input
@@ -109,8 +125,42 @@ func (r *Report) getNetworkAdaptersFromWMI() error {
 				myNetworkAdapter.DHCPLeaseExpired = v.DHCPLeaseExpires.Local()
 			}
 
-			r.NetworkAdapters = append(r.NetworkAdapters, myNetworkAdapter)
+			connectedAdapters = append(connectedAdapters, struct {
+				index   uint32
+				adapter openuem_nats.NetworkAdapter
+			}{index: interfaceIndex, adapter: myNetworkAdapter})
 		}
+	}
+
+	// Order adapters so the interface owning the best default route (lowest
+	// metric) comes first. The report uses the first connected adapter that has
+	// a gateway, and WMI order is arbitrary — virtual adapters (VPNs, tunnels)
+	// used to win over the physical NIC that actually serves the default route.
+	metricByInterface := map[uint32]int32{}
+	var defaultRoutesDst []defaultRouteInfo
+	qRoutes := "SELECT InterfaceIndex, Metric1 FROM Win32_IP4RouteTable WHERE Destination = '0.0.0.0' AND Mask = '0.0.0.0'"
+	if err := WMIQueryWithContext(ctx, qRoutes, &defaultRoutesDst, namespace); err == nil {
+		for _, route := range defaultRoutesDst {
+			if metric, ok := metricByInterface[route.InterfaceIndex]; !ok || route.Metric1 < metric {
+				metricByInterface[route.InterfaceIndex] = route.Metric1
+			}
+		}
+	}
+
+	sort.SliceStable(connectedAdapters, func(i, j int) bool {
+		metricI, okI := metricByInterface[connectedAdapters[i].index]
+		metricJ, okJ := metricByInterface[connectedAdapters[j].index]
+		if okI != okJ {
+			return okI
+		}
+		if okI && okJ {
+			return metricI < metricJ
+		}
+		return false
+	})
+
+	for _, ca := range connectedAdapters {
+		r.NetworkAdapters = append(r.NetworkAdapters, ca.adapter)
 	}
 
 	return nil
