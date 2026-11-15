@@ -231,7 +231,7 @@ func locateWinGet() (string, error) {
 func updateWinGetSource(wgPath string) {
 	// https://github.com/open-uem/openuem-agent/issues/23
 	// Refresh sources before a winget operation; best effort.
-	out, err := exec.Command(wgPath, "source", "update", "--accept-source-agreements", "--disable-interactivity").CombinedOutput()
+	out, err := exec.Command(wgPath, "source", "update", "--disable-interactivity").CombinedOutput()
 	if err != nil {
 		log.Printf("[WARN]: winget source update failed, continuing anyway: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
