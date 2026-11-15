@@ -338,14 +338,19 @@ func (a *Agent) GetWingetConfigureProfiles() {
 		log.Printf("[ERROR]: could not send request to agent worker, reason: %v", err)
 		if err := a.Config.SetRestartRequiredFlag(); err != nil {
 			log.Printf("[ERROR]: could not set restart required flag, reason: %v\n", err)
-			return
 		}
+		return
 	}
 
 	a.ProcessProfileResponse(msg, false)
 }
 
 func (a *Agent) ProcessProfileResponse(msg *nats.Msg, force bool) {
+	if msg == nil {
+		log.Println("[ERROR]: no profile response received from agent worker")
+		return
+	}
+
 	profiles := []openuem_nats.ProfileConfig{}
 
 	if a.Config.Debug {
@@ -1872,8 +1877,8 @@ func (a *Agent) RunProfileSubscribe() error {
 			log.Printf("[ERROR]: could not send request to agent worker, reason: %v", err)
 			if err := a.Config.SetRestartRequiredFlag(); err != nil {
 				log.Printf("[ERROR]: could not set restart required flag, reason: %v\n", err)
-				return
 			}
+			return
 		}
 
 		a.ProcessProfileResponse(msg, true)
