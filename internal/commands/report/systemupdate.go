@@ -18,4 +18,7 @@ func (r *Report) logSystemUpdate() {
 		fmt.Printf("%-40s |  %v \n", "Last updates search date", r.SystemUpdate.LastSearch)
 	}
 	fmt.Printf("%-40s |  %t \n", "Pending updates", r.SystemUpdate.PendingUpdates)
+	if len(r.PendingUpdates) > 0 {
+		fmt.Printf("%-40s |  %s \n", "Pending updates detail", PendingUpdatesDetailString(r.PendingUpdates))
+	}
 }
