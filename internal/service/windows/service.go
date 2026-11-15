@@ -22,7 +22,7 @@ func NewService(l *logger.OpenUEMLogger) *OpenUEMService {
 }
 
 func (s *OpenUEMService) Execute(args []string, r <-chan svc.ChangeRequest, changes chan<- svc.Status) (ssec bool, errno uint32) {
-	const cmdsAccepted = svc.AcceptStop | svc.AcceptShutdown
+	const cmdsAccepted = svc.AcceptStop | svc.AcceptShutdown | svc.AcceptPowerEvent
 	changes <- svc.Status{State: svc.StartPending}
 	changes <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
 
@@ -47,9 +47,12 @@ loop:
 				s.Logger.Close()
 				a.Stop()
 				break loop
+			case svc.PowerEvent:
+				log.Printf("[INFO]: service has received a power event, type %d", c.EventType)
+				changes <- c.CurrentStatus
 			default:
-				log.Println("[WARN]: unexpected control request")
-				return true, 1
+				log.Printf("[WARN]: unexpected control request %d", c.Cmd)
+				changes <- c.CurrentStatus
 			}
 		}
 	}
