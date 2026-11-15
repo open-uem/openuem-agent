@@ -40,6 +40,12 @@ func InstallPackage(action nats.DeployAction, keepUpdated bool, debug bool) (str
 	}
 
 	out, err := openuem_runtime.RunAsUserWithOutput(username, brewPath, args, false)
+	if err != nil && !isCask && strings.Contains(string(out), "cask") {
+		// #176: "brew install bitwarden" fails when the package is a cask;
+		// retry once with --cask instead of reporting failure
+		log.Printf("[INFO]: %s looks like a cask, retrying install with --cask", action.PackageId)
+		out, err = openuem_runtime.RunAsUserWithOutput(username, brewPath, []string{"install", "--cask", action.PackageId}, false)
+	}
 	if err != nil {
 		log.Printf("[ERROR]: found and error with brew install command, reason %s", string(out))
 		return "", string(out), err
