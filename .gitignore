@@ -6,6 +6,7 @@ openuem.json
 certificates
 agent-test
 pending_acks.json
+pending_deployments.json
 openuem-messenger
 pin.templ
 openuem-agent
