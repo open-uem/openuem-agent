@@ -156,7 +156,7 @@ func UninstallPackage(action nats.DeployAction) (string, string, error) {
 	// Ref: https://github.com/microsoft/winget-cli/issues/3494#issuecomment-1933874691
 	removeChars := `^.+Ô.+$|^.+\█.+$|^.+\▒.+$|^\s*$|^\s*\\\s*$|^\s*\/\s*$|^\s*\|\s*$|^\s*\-\s*$`
 
-	removeCommand := fmt.Sprintf("&'%s' remove %s --all-versions | Select-String -NotMatch '%s'", wgPath, action.PackageId, removeChars)
+	removeCommand := fmt.Sprintf("&'%s' remove %s --all-versions --silent --accept-source-agreements | Select-String -NotMatch '%s'", wgPath, action.PackageId, removeChars)
 	cmd := exec.Command("Powershell", "-command", removeCommand)
 
 	cmd.Stdout = &stdout
