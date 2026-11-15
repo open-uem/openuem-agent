@@ -5,9 +5,11 @@ package report
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"strings"
+	"time"
 )
 
 type antivirusProduct struct {
@@ -17,16 +19,51 @@ type antivirusProduct struct {
 	PathToSignedReportingExe string
 }
 
+// MSFT_MpComputerStatus is exposed by the Windows Defender WMI provider,
+// which is also available on Windows Server (Desktop Experience and Core)
+// where the root\SecurityCenter2 namespace does not exist.
+type mpComputerStatus struct {
+	AMServiceEnabled              bool
+	AntivirusEnabled              bool
+	RealTimeProtectionEnabled     bool
+	AntivirusSignatureLastUpdated time.Time
+}
+
 func (r *Report) getAntivirusInfo(debug bool) error {
 	if debug {
 		log.Println("[DEBUG]: antivirus info has been requested")
 	}
 	if err := r.getAntivirusFromWMI(); err != nil {
 		log.Printf("[ERROR]: could not get antivirus information from WMI AntiVirusProduct: %v", err)
-		return err
-	} else {
-		log.Printf("[INFO]: antivirus information has been retrieved from WMI AntiVirusProduct")
+		if err := r.getAntivirusFromDefender(); err != nil {
+			log.Printf("[ERROR]: could not get antivirus information from WMI MSFT_MpComputerStatus: %v", err)
+			return err
+		}
+		log.Printf("[INFO]: antivirus information has been retrieved from WMI MSFT_MpComputerStatus")
+		return nil
 	}
+	log.Printf("[INFO]: antivirus information has been retrieved from WMI AntiVirusProduct")
+	return nil
+}
+
+func (r *Report) getAntivirusFromDefender() error {
+	var dst []mpComputerStatus
+
+	namespace := `root\Microsoft\Windows\Defender`
+	q := "SELECT AMServiceEnabled, AntivirusEnabled, RealTimeProtectionEnabled, AntivirusSignatureLastUpdated FROM MSFT_MpComputerStatus"
+	if err := WMIQueryWithContext(context.Background(), q, &dst, namespace); err != nil {
+		return err
+	}
+
+	if len(dst) == 0 {
+		return fmt.Errorf("MSFT_MpComputerStatus returned no rows")
+	}
+
+	status := dst[0]
+	r.Antivirus.Name = "Microsoft Defender Antivirus"
+	r.Antivirus.IsActive = status.AMServiceEnabled && status.AntivirusEnabled && status.RealTimeProtectionEnabled
+	r.Antivirus.IsUpdated = time.Since(status.AntivirusSignatureLastUpdated) <= 7*24*time.Hour
+
 	return nil
 }
 
