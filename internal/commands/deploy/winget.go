@@ -28,6 +28,7 @@ func InstallPackage(action nats.DeployAction, keepUpdated bool, debug bool) (str
 		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
 		return "", "", err
 	}
+	updateWinGetSource(wgPath)
 
 	log.Printf("[INFO]: received a request to install package %s using winget", action.PackageId)
 
@@ -96,6 +97,7 @@ func UpdatePackage(action nats.DeployAction) (string, string, error) {
 		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
 		return "", "", err
 	}
+	updateWinGetSource(wgPath)
 
 	// Fix 194: Remove spinner, blank lines and progress bar from output
 	// Ref: https://github.com/microsoft/winget-cli/issues/3494#issuecomment-1933874691
@@ -151,6 +153,7 @@ func UninstallPackage(action nats.DeployAction) (string, string, error) {
 		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
 		return "", "", err
 	}
+	updateWinGetSource(wgPath)
 
 	// Fix 194: Remove spinner, blank lines and progress bar from output
 	// Ref: https://github.com/microsoft/winget-cli/issues/3494#issuecomment-1933874691
@@ -222,6 +225,16 @@ func locateWinGet() (string, error) {
 	}
 
 	return wgPath, nil
+}
+
+
+func updateWinGetSource(wgPath string) {
+	// https://github.com/open-uem/openuem-agent/issues/23
+	// Refresh sources before a winget operation; best effort.
+	out, err := exec.Command(wgPath, "source", "update", "--accept-source-agreements", "--disable-interactivity").CombinedOutput()
+	if err != nil {
+		log.Printf("[WARN]: winget source update failed, continuing anyway: %v (%s)", err, strings.TrimSpace(string(out)))
+	}
 }
 
 func GetExplicitelyDeletedPackages(deployments []string, installed string) []string {
