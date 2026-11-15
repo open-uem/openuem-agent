@@ -53,6 +53,11 @@ func (r *Report) getAptInformation() error {
 	// Check if unattended is running
 	r.SystemUpdate.Status = checkUpdatesStatus()
 
+	// Linux Mint uses its own update automation instead of unattended-upgrades
+	if r.SystemUpdate.Status == nats.NOT_CONFIGURED && r.OS == "linuxmint" {
+		r.SystemUpdate.Status = checkMintUpdatesStatus()
+	}
+
 	// Check if gnome software updates is set
 	if r.SystemUpdate.Status == nats.NOT_CONFIGURED && IsGnomeDesktop() && IsGnomeSoftwareUpdatesEnabled() {
 		r.SystemUpdate.Status = nats.NOTIFY_SCHEDULED_INSTALLATION
@@ -164,6 +169,20 @@ func checkUpdatesStatus() string {
 	if unattendedUpgrade != "" &&
 		strings.Contains(unattendedUpgrade, "APT::Periodic::Unattended-Upgrade") &&
 		!strings.Contains(unattendedUpgrade, `APT::Periodic::Unattended-Upgrade "0";`) {
+		return nats.NOTIFY_SCHEDULED_INSTALLATION
+	}
+
+	return nats.NOT_CONFIGURED
+}
+
+func checkMintUpdatesStatus() string {
+	out, err := exec.Command("systemctl", "is-enabled", "mintupdate-automation-upgrade.timer").Output()
+	if err == nil && strings.TrimSpace(string(out)) == "enabled" {
+		return nats.NOTIFY_SCHEDULED_INSTALLATION
+	}
+
+	out, err = exec.Command("systemctl", "is-active", "mintupdate-automation-upgrade.timer").Output()
+	if err == nil && strings.TrimSpace(string(out)) == "active" {
 		return nats.NOTIFY_SCHEDULED_INSTALLATION
 	}
 
