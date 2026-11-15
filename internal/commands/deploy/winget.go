@@ -233,7 +233,12 @@ func updateWinGetSource(wgPath string) {
 	// Refresh sources before a winget operation; best effort.
 	out, err := exec.Command(wgPath, "source", "update", "--disable-interactivity").CombinedOutput()
 	if err != nil {
-		log.Printf("[WARN]: winget source update failed, continuing anyway: %v (%s)", err, strings.TrimSpace(string(out)))
+		// #188: a corrupted/mismatched source certificate survives a plain update;
+		// `source reset --force` restores the default sources (winget-cli#5366)
+		log.Printf("[WARN]: winget source update failed (%v: %s), trying source reset", err, strings.TrimSpace(string(out)))
+		if resetOut, resetErr := exec.Command(wgPath, "source", "reset", "--force", "--disable-interactivity").CombinedOutput(); resetErr != nil {
+			log.Printf("[WARN]: winget source reset failed, continuing anyway: %v (%s)", resetErr, strings.TrimSpace(string(resetOut)))
+		}
 	}
 }
 
