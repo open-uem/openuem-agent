@@ -197,12 +197,12 @@ func (r *Report) getPendingUpdates() error {
 		if err != nil {
 			continue
 		}
-		item := itemVariant.ToIDispatch()
+		item := variantToDispatch(itemVariant)
 		if item == nil {
+			itemVariant.Clear()
 			continue
 		}
 		pending = append(pending, pendingUpdateFromDispatch(item))
-		item.Release()
 		itemVariant.Clear()
 	}
 	r.PendingUpdates = pending

@@ -4,6 +4,8 @@ package report
 
 import (
 	"fmt"
+	"log"
+	"runtime/debug"
 	"strconv"
 	"strings"
 
@@ -12,19 +14,40 @@ import (
 	openuem_nats "github.com/open-uem/nats"
 )
 
+// variantToDispatch returns the IDispatch held by the VARIANT, or nil when the
+// value is not a dispatch object. ToIDispatch alone cannot be used: it reuses
+// the VARIANT value unconditionally, so a VT_UNKNOWN/VT_EMPTY result would hand
+// back a pointer that is not an IDispatch and crash on the next COM call.
+func variantToDispatch(v *ole.VARIANT) *ole.IDispatch {
+	if v == nil || v.VT != ole.VT_DISPATCH {
+		return nil
+	}
+	return v.ToIDispatch()
+}
+
 // pendingUpdateFromDispatch reads the details of a single update from an
 // IUpdate IDispatch. The ceshihao/windowsupdate wrapper is not used because it
 // parses every property and panics on unexpected VARIANT types (seen on
 // Windows Servers with pending updates).
-func pendingUpdateFromDispatch(item *ole.IDispatch) openuem_nats.PendingUpdate {
-	u := openuem_nats.PendingUpdate{}
+//
+// Ownership rule: every VARIANT returned by oleutil is released via Clear(),
+// never via Release() on the extracted dispatch — releasing both frees the COM
+// object twice and corrupts the heap (service crash on report end).
+func pendingUpdateFromDispatch(item *ole.IDispatch) (u openuem_nats.PendingUpdate) {
+	// A single malformed update must not abort the whole report.
+	defer func() {
+		if rec := recover(); rec != nil {
+			log.Printf("[ERROR]: recovered from panic parsing pending update: %v\n%s", rec, debug.Stack())
+		}
+	}()
 
 	if v, err := oleutil.GetProperty(item, "Title"); err == nil {
 		u.Title = v.ToString()
+		v.Clear()
 	}
 
 	if v, err := oleutil.GetProperty(item, "KBArticleIDs"); err == nil {
-		kbs := v.ToIDispatch()
+		kbs := variantToDispatch(v)
 		if kbs != nil {
 			if c, err := oleutil.GetProperty(kbs, "Count"); err == nil {
 				ids := []string{}
@@ -42,13 +65,15 @@ func pendingUpdateFromDispatch(item *ole.IDispatch) openuem_nats.PendingUpdate {
 					}
 				}
 				u.KBArticleIDs = strings.Join(ids, ",")
+				c.Clear()
 			}
-			kbs.Release()
 		}
+		v.Clear()
 	}
 
 	if v, err := oleutil.GetProperty(item, "IsDownloaded"); err == nil {
 		u.IsDownloaded = v.Val != 0
+		v.Clear()
 	}
 
 	return u
