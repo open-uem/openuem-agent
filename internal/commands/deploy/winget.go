@@ -209,7 +209,7 @@ func UninstallPackage(action nats.DeployAction) (string, string, error) {
 // listInstalledPackageIDs returns the package Ids column from `winget list` for
 // entries matching query, using the header line to locate the column.
 func listInstalledPackageIDs(wgPath, query, removeChars string) []string {
-	listCommand := fmt.Sprintf("&'%s' list %s --accept-source-agreements | Select-String -NotMatch '%s'", wgPath, query, removeChars)
+	listCommand := fmt.Sprintf("&'%s' list \"%s\" --accept-source-agreements | Select-String -NotMatch '%s'", wgPath, query, removeChars)
 	out, err := exec.Command("Powershell", "-command", listCommand).Output()
 	if err != nil {
 		return nil
@@ -233,7 +233,8 @@ func listInstalledPackageIDs(wgPath, query, removeChars string) []string {
 			continue
 		}
 		id := strings.Fields(line[idCol:])
-		if len(id) > 0 && strings.Contains(id[0], ".") {
+		// skip MSIX entries (pseudo-ids like MSIX\Vendor.App_...) and dedupe
+		if len(id) > 0 && strings.Contains(id[0], ".") && !strings.Contains(id[0], "\\") && !slices.Contains(ids, id[0]) {
 			ids = append(ids, id[0])
 		}
 	}
