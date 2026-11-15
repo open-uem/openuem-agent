@@ -4,6 +4,7 @@ package report
 
 import (
 	"log"
+	"os"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -21,10 +22,17 @@ func (r *Report) getOperatingSystemInfo(debug bool) error {
 		log.Println("[DEBUG]: operating system info has been requested")
 	}
 
+	// #206: prefer the distribution's own NAME (e.g. Kubuntu, Xubuntu) over the
+	// vendor, which resolves to the base distribution (Ubuntu) for derivates.
+	distro := osReleaseValue("NAME")
+	if distro == "" {
+		distro = si.OS.Vendor
+	}
+
 	if si.OS.Release == "" {
-		r.OperatingSystem.Version = si.OS.Vendor + " " + si.OS.Version
+		r.OperatingSystem.Version = distro + " " + si.OS.Version
 	} else {
-		r.OperatingSystem.Version = si.OS.Vendor + " " + si.OS.Release
+		r.OperatingSystem.Version = distro + " " + si.OS.Release
 	}
 
 	if r.OperatingSystem.Version == "" {
@@ -67,6 +75,26 @@ func (r *Report) getOperatingSystemInfo(debug bool) error {
 		log.Printf("[INFO]: linux username has been retrieved from Linux")
 	}
 	return nil
+}
+
+
+// osReleaseValue returns a value from /etc/os-release (or /usr/lib/os-release),
+// unquoting it if needed.
+func osReleaseValue(key string) string {
+	for _, path := range []string{"/etc/os-release", "/usr/lib/os-release"} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			k, v, ok := strings.Cut(line, "=")
+			if !ok || k != key {
+				continue
+			}
+			return strings.Trim(v, `"`)
+		}
+	}
+	return ""
 }
 
 func (r *Report) getUsername() error {
