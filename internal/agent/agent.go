@@ -514,7 +514,8 @@ func (a *Agent) UninstallPackageSubscribe() error {
 
 		if _, stderr, err := deploy.UninstallPackage(action); err != nil {
 			log.Printf("[ERROR]: could not uninstall package, reason: %v\n", err)
-			action.Failed = false
+			action.When = time.Now()
+			action.Failed = true
 			action.Info = stderr
 			if err := a.SendDeployResult(&action); err != nil {
 				log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
