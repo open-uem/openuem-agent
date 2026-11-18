@@ -38,7 +38,20 @@ func TestWinGetSourceNeedsRegistration(t *testing.T) {
 	require.NoError(t, writeWinGetSource(path, cfg))
 	assert.False(t, winGetSourceNeedsRegistration(path, cfg), "registered as trusted source")
 
+	// The file is readable by local users, so it doesn't keep the URL with the agent's
+	// token, only a hash to notice changes
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"name":"OpenUEM","url":"https://console.example.com:1323/winget/agent/token","trustca":true,"trusted":true}`, string(data))
+	assert.NotContains(t, string(data), "token")
+	assert.NotContains(t, string(data), "console.example.com")
+}
+
+func TestValidWinGetSourceConfig(t *testing.T) {
+	url := "https://console.example.com:1323/winget/agent/token"
+	assert.True(t, validWinGetSourceConfig(openuem_nats.WinGetSourceConfig{Name: "OpenUEM", URL: url}))
+	// Only the console's own source: a message must not replace winget's sources
+	for _, name := range []string{"winget", "msstore", "Other", ""} {
+		assert.False(t, validWinGetSourceConfig(openuem_nats.WinGetSourceConfig{Name: name, URL: url}), name)
+	}
+	assert.False(t, validWinGetSourceConfig(openuem_nats.WinGetSourceConfig{Name: "OpenUEM", URL: "http://console.example.com/winget"}))
 }

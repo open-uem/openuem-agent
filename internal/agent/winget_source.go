@@ -1,12 +1,15 @@
 package agent
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/nats-io/nats.go"
@@ -30,7 +33,7 @@ func (a *Agent) WinGetSourceSubscribe() error {
 		}
 
 		cfg := openuem_nats.WinGetSourceConfig{}
-		if err := json.Unmarshal(msg.Data, &cfg); err != nil || cfg.Name == "" || cfg.URL == "" {
+		if err := json.Unmarshal(msg.Data, &cfg); err != nil || !validWinGetSourceConfig(cfg) {
 			respondUpdatePackages(msg, "invalid winget source")
 			return
 		}
@@ -75,18 +78,34 @@ func winGetSourcePath() string {
 	return filepath.Join(dir, winGetSourceFilename)
 }
 
-// registeredWinGetSource is the source saved after a registration. Trusted is false in
-// files written before sources were added as trusted, so those are registered again.
+// winGetSourceName is the only source the console can register. The source is added as
+// trusted for SYSTEM, so a message must not be able to replace winget's own sources.
+const winGetSourceName = "OpenUEM"
+
+// validWinGetSourceConfig checks a registration request from the console
+func validWinGetSourceConfig(cfg openuem_nats.WinGetSourceConfig) bool {
+	return cfg.Name == winGetSourceName && strings.HasPrefix(cfg.URL, "https://")
+}
+
+// registeredWinGetSource is the source saved after a registration. The file is readable
+// by local users (it's next to the agent), so only a hash of the source is kept: its URL
+// contains the agent's token. Trusted is false in files written before sources were
+// added as trusted, so those are registered again.
 type registeredWinGetSource struct {
-	openuem_nats.WinGetSourceConfig
-	Trusted bool `json:"trusted"`
+	Source  string `json:"source"`
+	Trusted bool   `json:"trusted"`
+}
+
+func winGetSourceHash(cfg openuem_nats.WinGetSourceConfig) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%t", cfg.Name, cfg.URL, cfg.TrustCA)))
+	return hex.EncodeToString(sum[:])
 }
 
 // winGetSourceNeedsRegistration reports whether winget has to run: nothing was registered
 // yet, the console sent another source, or the source was registered as untrusted.
 func winGetSourceNeedsRegistration(path string, cfg openuem_nats.WinGetSourceConfig) bool {
 	registered, err := readWinGetSource(path)
-	return err != nil || registered.WinGetSourceConfig != cfg || !registered.Trusted
+	return err != nil || registered.Source != winGetSourceHash(cfg) || !registered.Trusted
 }
 
 func readWinGetSource(path string) (registeredWinGetSource, error) {
@@ -99,10 +118,9 @@ func readWinGetSource(path string) (registeredWinGetSource, error) {
 	return registered, err
 }
 
-// writeWinGetSource saves the registered source. The file is only readable by the agent's
-// account, as the URL contains the agent's token.
+// writeWinGetSource saves the registered source
 func writeWinGetSource(path string, cfg openuem_nats.WinGetSourceConfig) error {
-	data, err := json.Marshal(registeredWinGetSource{WinGetSourceConfig: cfg, Trusted: true})
+	data, err := json.Marshal(registeredWinGetSource{Source: winGetSourceHash(cfg), Trusted: true})
 	if err != nil {
 		return err
 	}

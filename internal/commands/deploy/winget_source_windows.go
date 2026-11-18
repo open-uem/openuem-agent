@@ -4,6 +4,7 @@ package deploy
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -24,7 +25,7 @@ func RegisterWinGetSource(name, sourceURL, caCertPath string, trustCA bool) erro
 	}
 
 	if trustCA {
-		if out, err := exec.Command("certutil.exe", "-addstore", "-f", "Root", caCertPath).CombinedOutput(); err != nil {
+		if out, err := exec.Command(systemTool("certutil.exe"), "-addstore", "-f", "Root", caCertPath).CombinedOutput(); err != nil {
 			return fmt.Errorf("could not trust the CA certificate, reason: %v, %s", err, strings.TrimSpace(string(out)))
 		}
 	}
@@ -76,9 +77,41 @@ func wingetLogExcerpt(since time.Time) (string, []string) {
 		return "", nil
 	}
 
-	data, err := os.ReadFile(newest)
+	data, err := readTail(newest, 1<<20)
 	if err != nil {
 		return newest, nil
 	}
 	return newest, FilterWinGetLog(string(data), 15)
+}
+
+// systemTool returns the path of a program in System32, so the service's PATH isn't searched
+func systemTool(name string) string {
+	root := os.Getenv("SystemRoot")
+	if root == "" {
+		root = `C:\Windows`
+	}
+	return filepath.Join(root, "System32", name)
+}
+
+// readTail reads at most the last max bytes of a file
+func readTail(path string, max int64) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	offset := info.Size() - max
+	if offset < 0 {
+		offset = 0
+	}
+	data := make([]byte, info.Size()-offset)
+	_, err = f.ReadAt(data, offset)
+	if err == io.EOF {
+		err = nil
+	}
+	return data, err
 }
