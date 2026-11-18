@@ -3,7 +3,6 @@
 package runtime
 
 import (
-	"bytes"
 	"context"
 	"os/exec"
 	"strings"
@@ -103,9 +102,11 @@ func (s UserSession) Run(timeout time.Duration, cmdPath string, args ...string) 
 		CreationFlags: windows.CREATE_NO_WINDOW | windows.BELOW_NORMAL_PRIORITY_CLASS,
 	}
 
-	var output bytes.Buffer
-	cmd.Stdout = &output
-	cmd.Stderr = &output
+	// The user can replace the program (e.g. the winget alias), so its output is capped
+	output := &CappedBuffer{Max: MaxCommandOutput}
+	cmd.Stdout = output
+	cmd.Stderr = output
+	cmd.WaitDelay = 30 * time.Second
 
 	err := cmd.Run()
 	return output.Bytes(), err

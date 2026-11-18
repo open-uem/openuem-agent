@@ -198,8 +198,14 @@ func runWinGet(timeout time.Duration, wgPath string, args ...string) (string, er
 		CreationFlags: windows.CREATE_NO_WINDOW | windows.BELOW_NORMAL_PRIORITY_CLASS,
 	}
 
-	output, err := cmd.CombinedOutput()
-	return string(output), wingetError(err)
+	// An installer started by winget may keep the output pipe open after winget was
+	// killed on timeout; WaitDelay stops waiting for it
+	cmd.WaitDelay = 30 * time.Second
+	output := &runtime.CappedBuffer{Max: runtime.MaxCommandOutput}
+	cmd.Stdout = output
+	cmd.Stderr = output
+	err := cmd.Run()
+	return output.String(), wingetError(err)
 }
 
 // wingetError translates winget's exit codes into readable errors
@@ -247,8 +253,10 @@ func ignoreNoUpdatesError(err error) error {
 
 // userWinGetPath returns the path to the winget.exe app execution alias of a user
 func userWinGetPath(s runtime.UserSession) string {
+	// The user controls the environment of the session: a network path would make the
+	// agent, as SYSTEM, access the share with the computer's account
 	localAppData := s.Getenv("LOCALAPPDATA")
-	if localAppData == "" {
+	if !isLocalDrivePath(localAppData) {
 		return ""
 	}
 
