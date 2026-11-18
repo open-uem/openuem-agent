@@ -50,10 +50,8 @@ func (a *Agent) registerWinGetSource(cfg openuem_nats.WinGetSourceConfig) {
 	defer winGetSourceLock.Unlock()
 
 	path := winGetSourcePath()
-	if path != "" {
-		if registered, err := readWinGetSource(path); err == nil && registered == cfg {
-			return
-		}
+	if path != "" && !winGetSourceNeedsRegistration(path, cfg) {
+		return
 	}
 
 	if err := deploy.RegisterWinGetSource(cfg.Name, cfg.URL, a.Config.CACert, cfg.TrustCA); err != nil {
@@ -77,20 +75,34 @@ func winGetSourcePath() string {
 	return filepath.Join(dir, winGetSourceFilename)
 }
 
-func readWinGetSource(path string) (openuem_nats.WinGetSourceConfig, error) {
-	cfg := openuem_nats.WinGetSourceConfig{}
+// registeredWinGetSource is the source saved after a registration. Trusted is false in
+// files written before sources were added as trusted, so those are registered again.
+type registeredWinGetSource struct {
+	openuem_nats.WinGetSourceConfig
+	Trusted bool `json:"trusted"`
+}
+
+// winGetSourceNeedsRegistration reports whether winget has to run: nothing was registered
+// yet, the console sent another source, or the source was registered as untrusted.
+func winGetSourceNeedsRegistration(path string, cfg openuem_nats.WinGetSourceConfig) bool {
+	registered, err := readWinGetSource(path)
+	return err != nil || registered.WinGetSourceConfig != cfg || !registered.Trusted
+}
+
+func readWinGetSource(path string) (registeredWinGetSource, error) {
+	registered := registeredWinGetSource{}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return cfg, err
+		return registered, err
 	}
-	err = json.Unmarshal(data, &cfg)
-	return cfg, err
+	err = json.Unmarshal(data, &registered)
+	return registered, err
 }
 
 // writeWinGetSource saves the registered source. The file is only readable by the agent's
 // account, as the URL contains the agent's token.
 func writeWinGetSource(path string, cfg openuem_nats.WinGetSourceConfig) error {
-	data, err := json.Marshal(cfg)
+	data, err := json.Marshal(registeredWinGetSource{WinGetSourceConfig: cfg, Trusted: true})
 	if err != nil {
 		return err
 	}

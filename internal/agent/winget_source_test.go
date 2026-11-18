@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -17,11 +18,27 @@ func TestWinGetSourceFile(t *testing.T) {
 	cfg := openuem_nats.WinGetSourceConfig{Name: "OpenUEM", URL: "https://console.example.com:1324/winget/agent/token", TrustCA: true}
 	require.NoError(t, writeWinGetSource(path, cfg))
 
-	registered, err := readWinGetSource(path)
-	require.NoError(t, err)
-	assert.Equal(t, cfg, registered)
+	assert.False(t, winGetSourceNeedsRegistration(path, cfg), "nothing changed")
 
 	changed := cfg
 	changed.URL = "https://other.example.com:1324/winget/agent/token"
-	assert.NotEqual(t, changed, registered, "a changed URL is registered again")
+	assert.True(t, winGetSourceNeedsRegistration(path, changed), "a changed URL is registered again")
+}
+
+func TestWinGetSourceNeedsRegistration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), winGetSourceFilename)
+	cfg := openuem_nats.WinGetSourceConfig{Name: "OpenUEM", URL: "https://console.example.com:1323/winget/agent/token", TrustCA: true}
+	assert.True(t, winGetSourceNeedsRegistration(path, cfg), "nothing registered yet")
+
+	// Sources registered before the source was trusted are registered again, so winget
+	// can install their packages as SYSTEM
+	require.NoError(t, os.WriteFile(path, []byte(`{"name":"OpenUEM","url":"https://console.example.com:1323/winget/agent/token","trustca":true}`), 0o600))
+	assert.True(t, winGetSourceNeedsRegistration(path, cfg), "registered as untrusted source")
+
+	require.NoError(t, writeWinGetSource(path, cfg))
+	assert.False(t, winGetSourceNeedsRegistration(path, cfg), "registered as trusted source")
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"name":"OpenUEM","url":"https://console.example.com:1323/winget/agent/token","trustca":true,"trusted":true}`, string(data))
 }

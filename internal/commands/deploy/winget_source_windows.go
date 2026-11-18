@@ -16,7 +16,7 @@ const wingetSourceTimeout = 5 * time.Minute
 
 // RegisterWinGetSource registers a WinGet REST source for SYSTEM's winget, which the agent
 // uses to install, update and uninstall packages. An existing source with the same name is
-// replaced. With trustCA, the CA certificate is added to the machine's trusted roots first,
+// replaced. The source is added as trusted (see wingetSourceAddArgs). With trustCA, the CA certificate is added to the machine's trusted roots first,
 // as winget only accepts sources with a trusted certificate.
 func RegisterWinGetSource(name, sourceURL, caCertPath string, trustCA bool) error {
 	if !strings.HasPrefix(sourceURL, "https://") || !IsValidPackageID(name) {
@@ -38,8 +38,7 @@ func RegisterWinGetSource(name, sourceURL, caCertPath string, trustCA bool) erro
 	_, _ = runWinGet(wingetSourceTimeout, wgPath, "source", "remove", "--name", name, "--disable-interactivity")
 
 	started := time.Now()
-	output, err := runWinGet(wingetSourceTimeout, wgPath, "source", "add", "--name", name, "--arg", sourceURL,
-		"--type", "Microsoft.Rest", "--accept-source-agreements", "--disable-interactivity", "--verbose-logs")
+	output, err := runWinGet(wingetSourceTimeout, wgPath, wingetSourceAddArgs(name, sourceURL)...)
 	if err != nil {
 		reason := fmt.Sprintf("could not add the winget source, reason: %v, %s", err, outputTail(output, 10))
 		if logFile, lines := wingetLogExcerpt(started); len(lines) > 0 {
