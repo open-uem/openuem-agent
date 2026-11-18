@@ -15,6 +15,11 @@ import (
 )
 
 func InstallPackage(action nats.DeployAction, keepUpdated bool, debug bool) (string, string, error) {
+	// The id is passed as an argument: one starting with "-" would be an option
+	if !IsValidPackageID(action.PackageId) {
+		return "", "", fmt.Errorf("invalid package id %q", action.PackageId)
+	}
+
 	var args []string
 
 	isCask := false
@@ -54,6 +59,11 @@ func InstallPackage(action nats.DeployAction, keepUpdated bool, debug bool) (str
 }
 
 func UpdatePackage(action nats.DeployAction) (string, string, error) {
+	// The id is passed as an argument: one starting with "-" would be an option
+	if !IsValidPackageID(action.PackageId) {
+		return "", "", fmt.Errorf("invalid package id %q", action.PackageId)
+	}
+
 	var args []string
 
 	isCask := false
@@ -93,6 +103,11 @@ func UpdatePackage(action nats.DeployAction) (string, string, error) {
 }
 
 func UninstallPackage(action nats.DeployAction) (string, string, error) {
+	// The id is passed as an argument: one starting with "-" would be an option
+	if !IsValidPackageID(action.PackageId) {
+		return "", "", fmt.Errorf("invalid package id %q", action.PackageId)
+	}
+
 	var args []string
 
 	isCask := false

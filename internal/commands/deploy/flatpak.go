@@ -16,6 +16,11 @@ import (
 const flatpakListTimeout = 3 * time.Minute
 
 func InstallPackage(action nats.DeployAction, keepUpdated bool, debug bool) (string, string, error) {
+	// The id is passed as an argument: one starting with "-" would be an option
+	if !IsValidPackageID(action.PackageId) {
+		return "", "", fmt.Errorf("invalid package id %q", action.PackageId)
+	}
+
 	log.Printf("[INFO]: received a request to install package %s", action.PackageId)
 
 	cmd := "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo"
@@ -40,6 +45,11 @@ func InstallPackage(action nats.DeployAction, keepUpdated bool, debug bool) (str
 }
 
 func UpdatePackage(action nats.DeployAction) (string, string, error) {
+	// The id is passed as an argument: one starting with "-" would be an option
+	if !IsValidPackageID(action.PackageId) {
+		return "", "", fmt.Errorf("invalid package id %q", action.PackageId)
+	}
+
 	log.Printf("[INFO]: received a request to update package %s", action.PackageId)
 
 	cmd := "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo"
@@ -76,6 +86,11 @@ func UpdatePackage(action nats.DeployAction) (string, string, error) {
 }
 
 func UninstallPackage(action nats.DeployAction) (string, string, error) {
+	// The id is passed as an argument: one starting with "-" would be an option
+	if !IsValidPackageID(action.PackageId) {
+		return "", "", fmt.Errorf("invalid package id %q", action.PackageId)
+	}
+
 	log.Printf("[INFO]: received a request to remove package %s using flatpak", action.PackageId)
 
 	cmd := "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo"
