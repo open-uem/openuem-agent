@@ -31,6 +31,12 @@ const (
 
 var wingetListArgs = []string{"upgrade", "--accept-source-agreements", "--disable-interactivity"}
 
+// wingetUserListArgs only list packages installed for the user. Without the scope, a
+// user's winget also lists machine-wide programs, and one that the user's sources match
+// with another package than SYSTEM's (e.g. a package of the console's repository, which
+// is only registered for SYSTEM) would be reported, and updated, as a user's package.
+var wingetUserListArgs = []string{"upgrade", "--scope", "user", "--accept-source-agreements", "--disable-interactivity"}
+
 func wingetUpgradeArgs(packageID, scope string) []string {
 	args := []string{"upgrade", "--id", packageID, "--exact", "--silent", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"}
 	// A user session can only update packages installed for that user, so the
@@ -88,7 +94,7 @@ func ListAvailableUpdates() ([]nats.AvailableUpdate, error) {
 			continue
 		}
 
-		output, err := s.Run(wingetListTimeout, wgUserPath, wingetListArgs...)
+		output, err := s.Run(wingetListTimeout, wgUserPath, wingetUserListArgs...)
 		if err = ignoreNoUpdatesError(wingetError(err)); err != nil {
 			log.Printf("[ERROR]: could not list updates for user %s, reason: %v", s.Username, err)
 			if !isExitError(err) {
