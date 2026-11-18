@@ -226,14 +226,6 @@ func (a *Agent) QueuedUpdatePackagesHandler(msg jetstream.Msg) {
 		return
 	}
 
-	// A run that started after the request covers it, e.g. when the update was requested
-	// several times while the computer was offline
-	if lastRun := a.updates.lastRun(); lastRun != nil && !request.RequestedAt.IsZero() && lastRun.Started.After(request.RequestedAt) {
-		log.Printf("[INFO]: ignoring the update run requested on %s, a later run already started", request.RequestedAt.Format(time.RFC3339))
-		ackQueuedMessage(msg)
-		return
-	}
-
 	if !a.updates.start(len(request.Packages)) {
 		log.Println("[INFO]: an update run is already in progress, the queued update run will be retried later")
 		if err := msg.NakWithDelay(queuedUpdateRequestRetryDelay); err != nil {
