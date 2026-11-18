@@ -6,10 +6,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -193,27 +191,7 @@ func UninstallPackage(action nats.DeployAction) (string, string, error) {
 func locateWinGet() (string, error) {
 	// We must find the location for winget.exe for local system user
 	// Ref: https://github.com/microsoft/winget-cli/discussions/962#discussioncomment-1561274
-	desktopAppInstallerPath := ""
-	if err := filepath.WalkDir("C:\\Program Files\\WindowsApps", func(path string, d fs.DirEntry, err error) error {
-		if d.IsDir() && strings.HasPrefix(d.Name(), "Microsoft.DesktopAppInstaller_") && strings.HasSuffix(d.Name(), "_x64__8wekyb3d8bbwe") {
-			desktopAppInstallerPath = path
-		}
-		return nil
-	}); err != nil {
-		return "", err
-	}
-
-	if desktopAppInstallerPath == "" {
-		return "", fmt.Errorf("desktopAppInstaller path not found")
-	}
-
-	// We must locate winget.exe
-	wgPath, err := exec.LookPath(filepath.Join(desktopAppInstallerPath, "winget.exe"))
-	if err != nil {
-		return "", err
-	}
-
-	return wgPath, nil
+	return newestWinGetPath("C:\\Program Files\\WindowsApps")
 }
 
 func GetExplicitelyDeletedPackages(deployments []string, installed string) []string {
