@@ -28,6 +28,7 @@ require (
 	github.com/pkg/sftp v1.13.10
 	github.com/safchain/ethtool v0.7.0
 	github.com/shirou/gopsutil/v3 v3.24.5
+	github.com/stretchr/testify v1.11.1
 	github.com/zcalusic/sysinfo v1.1.3
 	golang.org/x/crypto v0.48.0
 	golang.org/x/net v0.51.0
@@ -64,7 +65,6 @@ require (
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/shoenig/go-m1cpu v0.1.7 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
@@ -78,3 +78,5 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
+
+replace github.com/open-uem/nats => github.com/devilAPI/nats v0.0.0-20261106070022-b3a4794d5abe

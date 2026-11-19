@@ -3,15 +3,23 @@
 package deploy
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/open-uem/nats"
 	openuem_runtime "github.com/open-uem/openuem-agent/internal/commands/runtime"
 )
 
 func InstallPackage(action nats.DeployAction, keepUpdated bool, debug bool) (string, string, error) {
+	// The id is passed as an argument: one starting with "-" would be an option
+	if !IsValidPackageID(action.PackageId) {
+		return "", "", fmt.Errorf("invalid package id %q", action.PackageId)
+	}
+
 	var args []string
 
 	isCask := false
@@ -51,6 +59,11 @@ func InstallPackage(action nats.DeployAction, keepUpdated bool, debug bool) (str
 }
 
 func UpdatePackage(action nats.DeployAction) (string, string, error) {
+	// The id is passed as an argument: one starting with "-" would be an option
+	if !IsValidPackageID(action.PackageId) {
+		return "", "", fmt.Errorf("invalid package id %q", action.PackageId)
+	}
+
 	var args []string
 
 	isCask := false
@@ -90,6 +103,11 @@ func UpdatePackage(action nats.DeployAction) (string, string, error) {
 }
 
 func UninstallPackage(action nats.DeployAction) (string, string, error) {
+	// The id is passed as an argument: one starting with "-" would be an option
+	if !IsValidPackageID(action.PackageId) {
+		return "", "", fmt.Errorf("invalid package id %q", action.PackageId)
+	}
+
 	var args []string
 
 	isCask := false
@@ -134,4 +152,29 @@ func getBrewPath() string {
 		brewPath = "/usr/local/bin/brew"
 	}
 	return brewPath
+}
+
+const brewListTimeout = 3 * time.Minute
+
+// ListAvailableUpdates returns the Homebrew formulae and casks with an available update.
+// Homebrew is run as the logged-in user, as it refuses to run as root.
+func ListAvailableUpdates() ([]nats.AvailableUpdate, error) {
+	username, err := openuem_runtime.GetLoggedInUser()
+	if err != nil || username == "" {
+		return nil, errors.New("Homebrew updates can only be checked while a user is logged in")
+	}
+
+	brewPath := getBrewPath()
+
+	// Refresh Homebrew's package metadata, outdated packages can still be listed if it fails
+	if out, err := openuem_runtime.RunAsUserWithOutputAndTimeout(username, brewPath, []string{"update", "--quiet"}, false, brewListTimeout); err != nil {
+		log.Printf("[WARN]: could not update Homebrew, reason: %v, %s", err, string(out))
+	}
+
+	out, err := openuem_runtime.RunAsUserWithOutputAndTimeout(username, brewPath, []string{"outdated", "--json=v2"}, false, brewListTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("could not list outdated Homebrew packages, reason: %v", err)
+	}
+
+	return ParseBrewOutdated(out)
 }

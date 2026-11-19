@@ -753,8 +753,10 @@ func (a *Agent) ExecutePowerShellScript(script string) (string, string, error) {
 			cmd.Stderr = &stderr
 			cmd.Stdout = &stdout
 			if err := cmd.Run(); err != nil {
-				log.Printf("[ERROR]: could not execute powershell script, reason: %v, %s", err, string(out))
-				return "", "", fmt.Errorf("could not execute powershell script, reason: %v, %s", err, string(out))
+				// Show what the script wrote, which usually explains why it failed
+				output := strings.TrimSpace(stderr.String() + "\n" + stdout.String())
+				log.Printf("[ERROR]: could not execute powershell script, reason: %v, %s", err, output)
+				return "", "", fmt.Errorf("could not execute powershell script, reason: %v, %s", err, output)
 			}
 
 			if a.Config.Debug {
