@@ -37,17 +37,6 @@ type Config struct {
 	WebSocketPort            string
 }
 
-// normalizeTenantSite validates the tenant/site pair of the agent's configuration. A site
-// always belongs to an organization, so a site without a tenant is dropped. A tenant
-// without a site is kept: at registration the computer is assigned to that organization's
-// default site.
-func normalizeTenantSite(tenantID, siteID string) (string, string) {
-	if siteID != "" && tenantID == "" {
-		return "", ""
-	}
-	return tenantID, siteID
-}
-
 func (a *Agent) ReadConfig() error {
 	// Get conf file
 	configFile := openuem_utils.GetAgentConfigFile()
@@ -268,15 +257,6 @@ func (a *Agent) ReadConfig() error {
 	key, err = cfg.Section("Agent").GetKey("SiteID")
 	if err == nil {
 		a.Config.SiteID = key.String()
-	}
-
-	siteID := a.Config.SiteID
-	a.Config.TenantID, a.Config.SiteID = normalizeTenantSite(a.Config.TenantID, a.Config.SiteID)
-	if siteID != "" && a.Config.SiteID == "" {
-		log.Printf("[WARN]: SiteID %q ignored: a site always needs its organization (TenantID)", siteID)
-	}
-	if a.Config.TenantID != "" && a.Config.SiteID == "" {
-		log.Printf("[INFO]: organization %s without site: at registration the computer is assigned to the organization's default site", a.Config.TenantID)
 	}
 
 	key, err = cfg.Section("Agent").GetKey("ScriptsRun")
