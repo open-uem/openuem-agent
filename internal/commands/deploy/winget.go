@@ -190,12 +190,76 @@ func UninstallPackage(action nats.DeployAction) (string, string, error) {
 			return stdout.String(), stderr.String(), nil
 		}
 
+		// #432: the query can match several installed packages (e.g. Microsoft 365
+		// language packs share the name). Enumerate matching installed entries via
+		// `winget list` and remove each by its exact id.
+		if ids := listInstalledPackageIDs(wgPath, action.PackageId, removeChars); len(ids) > 1 {
+			return uninstallEachPackageID(wgPath, ids, removeChars)
+		}
+
 		log.Printf("[ERROR]: there was an error running winget.exe: %v", errMessage)
 		return stdout.String(), stderr.String(), nil
 	}
 	log.Println("[INFO]: winget.exe has uninstalled an application")
 
 	return stdout.String(), stderr.String(), nil
+}
+
+
+// listInstalledPackageIDs returns the package Ids column from `winget list` for
+// entries matching query, using the header line to locate the column.
+func listInstalledPackageIDs(wgPath, query, removeChars string) []string {
+	listCommand := fmt.Sprintf("&'%s' list \"%s\" --accept-source-agreements | Select-String -NotMatch '%s'", wgPath, query, removeChars)
+	out, err := exec.Command("Powershell", "-command", listCommand).Output()
+	if err != nil {
+		return nil
+	}
+	lines := strings.Split(string(out), "\n")
+	idCol := -1
+	var ids []string
+	for _, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "---") {
+			continue
+		}
+		if idCol < 0 {
+			idx := strings.Index(line, "Id")
+			if idx >= 0 && strings.Contains(line, "Name") {
+				idCol = idx
+			}
+			continue
+		}
+		line = strings.TrimRight(line, "\r")
+		if len(line) <= idCol {
+			continue
+		}
+		id := strings.Fields(line[idCol:])
+		// skip MSIX entries (pseudo-ids like MSIX\Vendor.App_...) and dedupe
+		if len(id) > 0 && strings.Contains(id[0], ".") && !strings.Contains(id[0], "\\") && !slices.Contains(ids, id[0]) {
+			ids = append(ids, id[0])
+		}
+	}
+	return ids
+}
+
+// uninstallEachPackageID removes every installed package id individually using
+// --id --exact so winget cannot hit the multiple-matches ambiguity.
+func uninstallEachPackageID(wgPath string, ids []string, removeChars string) (string, string, error) {
+	var outBuf, errBuf bytes.Buffer
+	for _, id := range ids {
+		removeCommand := fmt.Sprintf("&'%s' remove --id %s --exact --all-versions --silent --accept-source-agreements | Select-String -NotMatch '%s'", wgPath, id, removeChars)
+		log.Printf("[INFO]: removing %s using winget", id)
+		cmd := exec.Command("Powershell", "-command", removeCommand)
+		var so, se bytes.Buffer
+		cmd.Stdout = &so
+		cmd.Stderr = &se
+		runErr := cmd.Run()
+		outBuf.WriteString(so.String())
+		errBuf.WriteString(se.String())
+		if runErr != nil {
+			errBuf.WriteString(fmt.Sprintf("failed to remove %s: %v\n", id, runErr))
+		}
+	}
+	return outBuf.String(), errBuf.String(), nil
 }
 
 func locateWinGet() (string, error) {
